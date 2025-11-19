@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
 import 'widgets/sidebar.dart';
+import 'widgets/dashboard_header.dart';
+import 'widgets/recent_projects.dart';
+import 'widgets/activity_widget.dart';
+import 'widgets/task_summary_widget.dart';
+import 'widgets/task_today_widget.dart';
+import 'widgets/active_workers_widget.dart';
 
 class PMDashboardPage extends StatelessWidget {
   const PMDashboardPage({super.key});
@@ -17,6 +23,9 @@ class PMDashboardPage extends StatelessWidget {
           Expanded(
             child: Column(
               children: [
+                // Header fixed at top
+                const DashboardHeader(),
+
                 // Main content area
                 Expanded(
                   child: SingleChildScrollView(
@@ -24,14 +33,40 @@ class PMDashboardPage extends StatelessWidget {
                       padding: const EdgeInsets.all(24),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text(
-                            'HELLO SHEESH',
-                            style: TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF0C1935),
-                            ),
+                        children: [
+                          // Recent Projects
+                          const RecentProjects(),
+                          const SizedBox(height: 24),
+
+                          // Activity and Task Summary row
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Expanded(
+                                flex: 2,
+                                child: ActivityWidget(),
+                              ),
+                              SizedBox(width: 24),
+                              Expanded(
+                                child: TaskSummaryWidget(),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+
+                          // Task Today and Active Workers row
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Expanded(
+                                flex: 2,
+                                child: TaskTodayWidget(),
+                              ),
+                              SizedBox(width: 24),
+                              Expanded(
+                                child: ActiveWorkersWidget(),
+                              ),
+                            ],
                           ),
                         ],
                       ),
