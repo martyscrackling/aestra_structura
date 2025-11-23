@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'widgets/sidebar.dart';
 import 'widgets/dashboard_header.dart';
+import 'modals/add_client_modal.dart';
+import 'client_profile_page.dart';
 
 class ClientsPage extends StatelessWidget {
   const ClientsPage({super.key});
@@ -30,7 +32,10 @@ class ClientsPage extends StatelessWidget {
                 const DashboardHeader(title: 'Clients'),
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 24,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -70,10 +75,7 @@ class _ClientsHeader extends StatelessWidget {
             SizedBox(height: 4),
             Text(
               'Stay in touch with every partner and account.',
-              style: TextStyle(
-                fontSize: 14,
-                color: Color(0xFF6B7280),
-              ),
+              style: TextStyle(fontSize: 14, color: Color(0xFF6B7280)),
             ),
           ],
         ),
@@ -88,7 +90,12 @@ class _ClientsHeader extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
-            onPressed: () {},
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => const AddClientModal(),
+              );
+            },
             icon: const Icon(Icons.add, size: 18, color: Colors.black),
             label: const Text(
               'Add Client',
@@ -128,11 +135,12 @@ class _ActiveClientsSection extends StatelessWidget {
             final columnCount = constraints.maxWidth > 1300
                 ? 4
                 : constraints.maxWidth > 1000
-                    ? 3
-                    : constraints.maxWidth > 700
-                        ? 2
-                        : 1;
-            final cardWidth = (constraints.maxWidth - (columnCount - 1) * 16) / columnCount;
+                ? 3
+                : constraints.maxWidth > 700
+                ? 2
+                : 1;
+            final cardWidth =
+                (constraints.maxWidth - (columnCount - 1) * 16) / columnCount;
 
             return Wrap(
               spacing: 16,
@@ -210,12 +218,19 @@ class ClientCard extends StatelessWidget {
           const SizedBox(height: 16),
           Row(
             children: [
-              const Icon(Icons.location_on_outlined, size: 16, color: Color(0xFFFF7A18)),
+              const Icon(
+                Icons.location_on_outlined,
+                size: 16,
+                color: Color(0xFFFF7A18),
+              ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   info.location,
-                  style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF6B7280),
+                  ),
                 ),
               ),
             ],
@@ -223,12 +238,19 @@ class ClientCard extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              const Icon(Icons.email_outlined, size: 16, color: Color(0xFFFF7A18)),
+              const Icon(
+                Icons.email_outlined,
+                size: 16,
+                color: Color(0xFFFF7A18),
+              ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   info.email,
-                  style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF6B7280),
+                  ),
                 ),
               ),
             ],
@@ -236,7 +258,11 @@ class ClientCard extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              const Icon(Icons.phone_outlined, size: 16, color: Color(0xFFFF7A18)),
+              const Icon(
+                Icons.phone_outlined,
+                size: 16,
+                color: Color(0xFFFF7A18),
+              ),
               const SizedBox(width: 6),
               Text(
                 info.phone,
@@ -249,7 +275,15 @@ class ClientCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               OutlinedButton(
-                onPressed: () {},
+                onPressed: () {
+                  Navigator.of(context).push(
+                    PageRouteBuilder(
+                      pageBuilder: (context, animation, secondaryAnimation) =>
+                          ClientProfilePage(client: info),
+                      transitionDuration: Duration.zero,
+                    ),
+                  );
+                },
                 style: OutlinedButton.styleFrom(
                   foregroundColor: const Color(0xFFFF7A18),
                   side: const BorderSide(color: Color(0xFFFFE0D3)),

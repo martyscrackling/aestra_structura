@@ -45,9 +45,9 @@ class _NotificationMenu extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       onSelected: (value) {
         if (value == 1) {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const NotificationPage()),
-          );
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const NotificationPage()));
         }
       },
       itemBuilder: (context) => [
@@ -159,10 +159,7 @@ class _NotificationTile extends StatelessWidget {
           width: 8,
           height: 8,
           margin: const EdgeInsets.only(top: 4),
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 10),
         Expanded(
@@ -180,10 +177,7 @@ class _NotificationTile extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 time,
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: Color(0xFF6B7280),
-                ),
+                style: const TextStyle(fontSize: 11, color: Color(0xFF6B7280)),
               ),
             ],
           ),
@@ -201,19 +195,19 @@ class _ProfileMenu extends StatelessWidget {
   void _handleAction(BuildContext context, _ProfileAction action) {
     switch (action) {
       case _ProfileAction.settings:
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const SettingsPage()),
-        );
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => SettingsPage()));
         break;
       case _ProfileAction.notifications:
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const NotificationPage()),
-        );
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const NotificationPage()));
         break;
       case _ProfileAction.logout:
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Logging out...')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Logging out...')));
         break;
     }
   }
@@ -232,7 +226,10 @@ class _ProfileMenu extends StatelessWidget {
         ),
         PopupMenuItem(
           value: _ProfileAction.notifications,
-          child: _MenuRow(icon: Icons.notifications_none_outlined, label: 'Notifications'),
+          child: _MenuRow(
+            icon: Icons.notifications_none_outlined,
+            label: 'Notifications',
+          ),
         ),
         const PopupMenuDivider(),
         PopupMenuItem(
@@ -264,13 +261,7 @@ class _ProfileMenu extends StatelessWidget {
                   color: Color(0xFF0C1935),
                 ),
               ),
-              Text(
-                'Admin',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.grey,
-                ),
-              ),
+              Text('Admin', style: TextStyle(fontSize: 11, color: Colors.grey)),
             ],
           ),
           Icon(Icons.keyboard_arrow_down, color: Colors.grey[600], size: 20),
@@ -293,7 +284,9 @@ class _MenuRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = isDestructive ? const Color(0xFFF43F5E) : const Color(0xFF0C1935);
+    final color = isDestructive
+        ? const Color(0xFFF43F5E)
+        : const Color(0xFF0C1935);
     return Row(
       children: [
         Icon(icon, size: 18, color: color),

@@ -10,7 +10,7 @@ import '../notification_page.dart';
 
 class Sidebar extends StatefulWidget {
   final String currentPage;
-  
+
   const Sidebar({super.key, this.currentPage = 'Dashboard'});
 
   @override
@@ -36,16 +36,16 @@ class _SidebarState extends State<Sidebar> {
         page = const ClientsPage();
         break;
       case 'Reports':
-        page = const ReportsPage();
+        page = ReportsPage();
         break;
       case 'Inventory':
-        page = const InventoryPage();
+        page = InventoryPage();
         break;
       case 'Notifications':
         page = const NotificationPage();
         break;
       case 'Settings':
-        page = const SettingsPage();
+        page = SettingsPage();
         break;
       default:
         return;
@@ -83,7 +83,10 @@ class _SidebarState extends State<Sidebar> {
     return Container(
       width: sidebarWidth,
       color: const Color(0xFF0C1935),
-      padding: EdgeInsets.symmetric(vertical: verticalPadding, horizontal: horizontalPadding),
+      padding: EdgeInsets.symmetric(
+        vertical: verticalPadding,
+        horizontal: horizontalPadding,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -123,9 +126,12 @@ class _SidebarState extends State<Sidebar> {
                 bool isActive = item["label"] == widget.currentPage;
                 bool isHovered = hoveredItem == item["label"];
                 return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: tileVerticalPadding),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: tileVerticalPadding,
+                  ),
                   child: MouseRegion(
-                    onEnter: (_) => setState(() => hoveredItem = item["label"] as String),
+                    onEnter: (_) =>
+                        setState(() => hoveredItem = item["label"] as String),
                     onExit: (_) => setState(() => hoveredItem = null),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 180),
@@ -133,24 +139,32 @@ class _SidebarState extends State<Sidebar> {
                         color: isActive
                             ? const Color(0xFFE8F3FF)
                             : isHovered
-                                ? Colors.white10
-                                : Colors.transparent,
+                            ? Colors.white10
+                            : Colors.transparent,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: ListTile(
                         dense: true,
                         minVerticalPadding: 0,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 6),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                        ),
                         leading: Icon(
                           item["icon"] as IconData,
-                          color: isActive ? const Color(0xFF1396E9) : Colors.white70,
+                          color: isActive
+                              ? const Color(0xFF1396E9)
+                              : Colors.white70,
                           size: iconSize,
                         ),
                         title: Text(
                           item["label"] as String,
                           style: TextStyle(
-                            color: isActive ? const Color(0xFF1396E9) : Colors.white70,
-                            fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
+                            color: isActive
+                                ? const Color(0xFF1396E9)
+                                : Colors.white70,
+                            fontWeight: isActive
+                                ? FontWeight.w700
+                                : FontWeight.w400,
                             fontSize: fontSize,
                           ),
                         ),
@@ -176,13 +190,16 @@ class _SidebarState extends State<Sidebar> {
                 onTap: () => _navigateToPage(context, 'Settings'),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     color: widget.currentPage == 'Settings'
                         ? const Color(0xFFE8F3FF)
                         : hoveredItem == "Settings"
-                            ? Colors.white10
-                            : Colors.transparent,
+                        ? Colors.white10
+                        : Colors.transparent,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(

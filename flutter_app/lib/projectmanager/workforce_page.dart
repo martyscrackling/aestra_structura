@@ -1,22 +1,29 @@
 import 'package:flutter/material.dart';
 import 'widgets/sidebar.dart';
 import 'widgets/dashboard_header.dart';
+import 'modals/add_worker_modal.dart';
+import 'worker_profile_page.dart';
 
 class WorkforcePage extends StatelessWidget {
   const WorkforcePage({super.key});
 
   static final List<WorkerStat> _workerStats = [
-    WorkerStat(label: 'Supervisor', icon: Icons.supervised_user_circle_outlined, count: 32),
+    WorkerStat(
+      label: 'Supervisor',
+      icon: Icons.supervised_user_circle_outlined,
+      count: 32,
+    ),
     WorkerStat(label: 'Painter', icon: Icons.format_paint_outlined, count: 32),
-    WorkerStat(label: 'Electrician', icon: Icons.electrical_services_outlined, count: 32),
+    WorkerStat(
+      label: 'Electrician',
+      icon: Icons.electrical_services_outlined,
+      count: 32,
+    ),
     WorkerStat(label: 'Mason', icon: Icons.grass, count: 32),
   ];
 
   static final List<WorkerGroup> _groups = [
-    WorkerGroup(
-      title: 'Active Supervisors',
-      workers: _buildSampleWorkers(),
-    ),
+    WorkerGroup(title: 'Active Supervisors', workers: _buildSampleWorkers()),
     WorkerGroup(
       title: 'Active Mason',
       workers: _buildSampleWorkers(role: 'Mason'),
@@ -57,16 +64,21 @@ class WorkforcePage extends StatelessWidget {
                 const DashboardHeader(title: 'Workforce'),
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 24,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _buildTotals(),
                         const SizedBox(height: 24),
-                        ..._groups.map((group) => Padding(
-                              padding: const EdgeInsets.only(bottom: 32),
-                              child: WorkerGroupSection(group: group),
-                            )),
+                        ..._groups.map(
+                          (group) => Padding(
+                            padding: const EdgeInsets.only(bottom: 32),
+                            child: WorkerGroupSection(group: group),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -153,13 +165,110 @@ class WorkerGroupSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          group.title,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF0C1935),
-          ),
+        Row(
+          children: [
+            Text(
+              group.title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF0C1935),
+              ),
+            ),
+            const Spacer(),
+            // Add new button
+            SizedBox(
+              height: 36,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => AddWorkerModal(
+                      workerType: group.title.replaceAll('Active ', ''),
+                    ),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF7A18),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                icon: const Icon(Icons.add, size: 16, color: Colors.white),
+                label: const Text(
+                  'Add new',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Search button
+            SizedBox(
+              height: 36,
+              width: 200,
+              child: TextField(
+                decoration: InputDecoration(
+                  hintText: 'Search...',
+                  hintStyle: const TextStyle(fontSize: 13),
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  filled: true,
+                  fillColor: Colors.white,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey[300]!),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey[300]!),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Filter button
+            SizedBox(
+              height: 36,
+              child: OutlinedButton(
+                onPressed: () {},
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  side: BorderSide(color: Colors.grey[300]!),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: Row(
+                  children: const [
+                    Icon(Icons.tune, size: 16, color: Color(0xFF0C1935)),
+                    SizedBox(width: 6),
+                    Text(
+                      'All',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF0C1935),
+                      ),
+                    ),
+                    SizedBox(width: 4),
+                    Icon(
+                      Icons.arrow_drop_down,
+                      size: 18,
+                      color: Color(0xFF0C1935),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 16),
         LayoutBuilder(
@@ -167,11 +276,12 @@ class WorkerGroupSection extends StatelessWidget {
             final columnCount = constraints.maxWidth > 1300
                 ? 4
                 : constraints.maxWidth > 1000
-                    ? 3
-                    : constraints.maxWidth > 700
-                        ? 2
-                        : 1;
-            final cardWidth = (constraints.maxWidth - (columnCount - 1) * 16) / columnCount;
+                ? 3
+                : constraints.maxWidth > 700
+                ? 2
+                : 1;
+            final cardWidth =
+                (constraints.maxWidth - (columnCount - 1) * 16) / columnCount;
 
             return Wrap(
               spacing: 16,
@@ -283,7 +393,15 @@ class WorkerProfileCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(30),
                 ),
               ),
-              onPressed: () {},
+              onPressed: () {
+                Navigator.of(context).push(
+                  PageRouteBuilder(
+                    pageBuilder: (context, animation, secondaryAnimation) =>
+                        WorkerProfilePage(worker: worker),
+                    transitionDuration: Duration.zero,
+                  ),
+                );
+              },
               child: const Text(
                 'View profile',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
@@ -309,10 +427,7 @@ class WorkerStat {
 }
 
 class WorkerGroup {
-  const WorkerGroup({
-    required this.title,
-    required this.workers,
-  });
+  const WorkerGroup({required this.title, required this.workers});
 
   final String title;
   final List<WorkerInfo> workers;

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'widgets/sidebar.dart';
 import 'widgets/dashboard_header.dart';
+import 'modals/create_project_modal.dart';
+import 'project_details_page.dart';
 
 class ProjectsPage extends StatelessWidget {
   const ProjectsPage({super.key});
@@ -15,6 +17,7 @@ class ProjectsPage extends StatelessWidget {
       progress: 0.55,
       crewCount: 15,
       image: 'assets/images/engineer.jpg',
+      budget: '5,500,000',
     ),
     ProjectOverviewData(
       title: "Richmond's House",
@@ -25,6 +28,7 @@ class ProjectsPage extends StatelessWidget {
       progress: 0.30,
       crewCount: 12,
       image: 'assets/images/engineer.jpg',
+      budget: '2,800,000',
     ),
     ProjectOverviewData(
       title: 'Diversion Road',
@@ -35,6 +39,7 @@ class ProjectsPage extends StatelessWidget {
       progress: 0.89,
       crewCount: 20,
       image: 'assets/images/engineer.jpg',
+      budget: '8,750,000',
     ),
     ProjectOverviewData(
       title: 'Bulacan Flood Control',
@@ -45,6 +50,7 @@ class ProjectsPage extends StatelessWidget {
       progress: 1,
       crewCount: 32,
       image: 'assets/images/engineer.jpg',
+      budget: '12,000,000',
     ),
   ];
 
@@ -61,8 +67,10 @@ class ProjectsPage extends StatelessWidget {
                 const DashboardHeader(title: 'Projects'),
                 Expanded(
                   child: SingleChildScrollView(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 24,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -73,11 +81,12 @@ class ProjectsPage extends StatelessWidget {
                             final columnCount = constraints.maxWidth > 1400
                                 ? 4
                                 : constraints.maxWidth > 1100
-                                    ? 3
-                                    : constraints.maxWidth > 800
-                                        ? 2
-                                        : 1;
-                            final cardWidth = (constraints.maxWidth -
+                                ? 3
+                                : constraints.maxWidth > 800
+                                ? 2
+                                : 1;
+                            final cardWidth =
+                                (constraints.maxWidth -
                                     (columnCount - 1) * 20) /
                                 columnCount;
 
@@ -132,10 +141,7 @@ class _ProjectsHeader extends StatelessWidget {
             SizedBox(height: 4),
             Text(
               'Monitor construction progress across all active sites.',
-              style: TextStyle(
-                fontSize: 14,
-                color: Color(0xFF6B7280),
-              ),
+              style: TextStyle(fontSize: 14, color: Color(0xFF6B7280)),
             ),
           ],
         ),
@@ -150,7 +156,12 @@ class _ProjectsHeader extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
-            onPressed: () {},
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => const CreateProjectModal(),
+              );
+            },
             icon: const Icon(Icons.add, size: 18, color: Colors.black),
             label: const Text(
               'Create Project',
@@ -261,8 +272,10 @@ class ProjectOverviewCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: data.progress >= 1
                         ? const Color(0xFFE5F8ED)
@@ -300,8 +313,11 @@ class ProjectOverviewCard extends StatelessWidget {
                 const SizedBox(height: 14),
                 Row(
                   children: [
-                    const Icon(Icons.calendar_today_outlined,
-                        size: 14, color: Color(0xFFA0AEC0)),
+                    const Icon(
+                      Icons.calendar_today_outlined,
+                      size: 14,
+                      color: Color(0xFFA0AEC0),
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       '${data.startDate}   •   ${data.endDate}',
@@ -351,7 +367,22 @@ class ProjectOverviewCard extends StatelessWidget {
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton(
-                    onPressed: () {},
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        PageRouteBuilder(
+                          pageBuilder:
+                              (context, animation, secondaryAnimation) =>
+                                  ProjectDetailsPage(
+                                    projectTitle: data.title,
+                                    projectLocation: data.location,
+                                    projectImage: data.image,
+                                    progress: data.progress,
+                                    budget: data.budget,
+                                  ),
+                          transitionDuration: Duration.zero,
+                        ),
+                      );
+                    },
                     style: OutlinedButton.styleFrom(
                       side: BorderSide(
                         color: data.progress >= 1
@@ -493,6 +524,7 @@ class ProjectOverviewData {
     required this.progress,
     required this.crewCount,
     required this.image,
+    this.budget,
   });
 
   final String title;
@@ -503,4 +535,5 @@ class ProjectOverviewData {
   final double progress;
   final int crewCount;
   final String image;
+  final String? budget;
 }

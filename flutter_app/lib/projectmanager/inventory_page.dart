@@ -1,50 +1,124 @@
 import 'package:flutter/material.dart';
 import 'widgets/sidebar.dart';
 import 'widgets/dashboard_header.dart';
+import 'modals/tool_details_modal.dart';
+import 'modals/add_inventory_item_modal.dart';
+import 'modals/manage_usage_modal.dart';
 
-class InventoryPage extends StatelessWidget {
-  const InventoryPage({super.key});
+class ToolItem {
+  final String id;
+  final String name;
+  final String category;
+  final String status;
+  final String? photoAsset; // optional asset path
 
-  static final List<ProjectInventory> _projects = [
-    ProjectInventory(
-      name: 'Super Highway',
-      code: 'PRJ-001',
-      location: 'Divisoria, Zamboanga City',
-      progress: 0.55,
-      materials: [
-        MaterialItem(name: 'Rebar Steel', category: 'Steel', quantity: 120, unit: 'tons', status: MaterialStatus.low),
-        MaterialItem(name: 'Concrete Mix A', category: 'Concrete', quantity: 240, unit: 'bags', status: MaterialStatus.inStock),
-        MaterialItem(name: 'Traffic Barriers', category: 'Equipment', quantity: 32, unit: 'sets', status: MaterialStatus.out),
-      ],
+  ToolItem({
+    required this.id,
+    required this.name,
+    required this.category,
+    required this.status,
+    this.photoAsset,
+  });
+}
+
+class ActiveUsage {
+  final ToolItem tool;
+  final List<String> users;
+  final String usageStatus; // e.g. "In Use", "Checked Out"
+
+  ActiveUsage({
+    required this.tool,
+    required this.users,
+    required this.usageStatus,
+  });
+}
+
+class InventoryPage extends StatefulWidget {
+  InventoryPage({super.key});
+
+  @override
+  State<InventoryPage> createState() => _InventoryPageState();
+}
+
+class _InventoryPageState extends State<InventoryPage> {
+  final Color primary = const Color(0xFFFF7A18);
+  final Color neutral = const Color(0xFFF4F6F9);
+
+  // Example data
+  final List<ToolItem> _items = [
+    ToolItem(
+      id: 't1',
+      name: 'Concrete Mixer',
+      category: 'Machinery',
+      status: 'Available',
+      photoAsset: null,
     ),
-    ProjectInventory(
-      name: "Richmond's House",
-      code: 'PRJ-014',
-      location: 'Sta. Maria, Zamboanga City',
-      progress: 0.30,
-      materials: [
-        MaterialItem(name: 'Ceramic Tiles', category: 'Finishing', quantity: 160, unit: 'boxes', status: MaterialStatus.inStock),
-        MaterialItem(name: 'Plywood Boards', category: 'Lumber', quantity: 45, unit: 'sheets', status: MaterialStatus.low),
-        MaterialItem(name: 'Electrical Wire', category: 'Electrical', quantity: 600, unit: 'meters', status: MaterialStatus.inStock),
-      ],
+    ToolItem(
+      id: 't2',
+      name: 'Electric Drill',
+      category: 'Hand Tool',
+      status: 'Maintenance',
+      photoAsset: null,
     ),
-    ProjectInventory(
-      name: 'Diversion Road',
-      code: 'PRJ-022',
-      location: 'Luyahan, Zamboanga City',
-      progress: 0.89,
-      materials: [
-        MaterialItem(name: 'Asphalt Mix', category: 'Road Works', quantity: 540, unit: 'tons', status: MaterialStatus.inStock),
-        MaterialItem(name: 'Safety Cones', category: 'Safety', quantity: 220, unit: 'pcs', status: MaterialStatus.inStock),
-        MaterialItem(name: 'Diesel Fuel', category: 'Fuel', quantity: 2.5, unit: 'kL', status: MaterialStatus.low),
-      ],
+    ToolItem(
+      id: 't3',
+      name: 'Safety Harness',
+      category: 'PPE',
+      status: 'Available',
+      photoAsset: null,
+    ),
+    ToolItem(
+      id: 't4',
+      name: 'Excavator ZX200',
+      category: 'Machinery',
+      status: 'Available',
+      photoAsset: null,
+    ),
+    ToolItem(
+      id: 't5',
+      name: 'Laser Level',
+      category: 'Measurement',
+      status: 'Checked Out',
+      photoAsset: null,
     ),
   ];
 
+  late List<ActiveUsage> _active;
+
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _active = [
+      ActiveUsage(
+        tool: _items[4],
+        users: ['Carlos Reyes'],
+        usageStatus: 'In Use',
+      ),
+      ActiveUsage(
+        tool: _items[1],
+        users: ['Jane Smith', 'John Doe'],
+        usageStatus: 'Checked Out',
+      ),
+    ];
+  }
+
+  List<ToolItem> get _filtered => _items.where((t) {
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) return true;
+    return t.name.toLowerCase().contains(q) ||
+        t.category.toLowerCase().contains(q) ||
+        t.status.toLowerCase().contains(q);
+  }).toList();
+
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final isWide = width > 1100;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F9),
+      backgroundColor: neutral,
       body: Row(
         children: [
           const Sidebar(currentPage: 'Inventory'),
@@ -52,23 +126,143 @@ class InventoryPage extends StatelessWidget {
             child: Column(
               children: [
                 const DashboardHeader(title: 'Inventory'),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const _InventoryHeader(),
-                        const SizedBox(height: 24),
-                        _SummaryCards(projects: _projects),
-                        const SizedBox(height: 24),
-                        ..._projects.map(
-                          (project) => Padding(
-                            padding: const EdgeInsets.only(bottom: 24),
-                            child: ProjectInventoryCard(project: project),
+                const SizedBox(height: 18),
+                // Search and Add button row
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Row(
+                    children: [
+                      const Spacer(),
+                      // Search field (compact)
+                      SizedBox(
+                        width: isWide ? 360 : 200,
+                        child: TextField(
+                          onChanged: (v) => setState(() => _query = v),
+                          decoration: InputDecoration(
+                            hintText: 'Search tools, category, status',
+                            isDense: true,
+                            prefixIcon: const Icon(Icons.search, size: 20),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey[100],
                           ),
                         ),
-                      ],
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          final result = await showDialog(
+                            context: context,
+                            builder: (ctx) => const AddInventoryItemModal(),
+                          );
+                          if (result != null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Added: ${result['name']}'),
+                              ),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.add, color: Colors.white),
+                        label: const Text(
+                          'Add Item',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 18),
+
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Grid of all items
+                          Text(
+                            'All Tools & Machines',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.grey[800],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          LayoutBuilder(
+                            builder: (context, c) {
+                              final maxWidth = c.maxWidth;
+                              final crossAxis =
+                                  maxWidth ~/ 260; // each card ~260px
+                              final crossAxisCount = crossAxis.clamp(1, 4);
+                              return GridView.builder(
+                                physics: const NeverScrollableScrollPhysics(),
+                                shrinkWrap: true,
+                                gridDelegate:
+                                    SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: crossAxisCount,
+                                      mainAxisExtent: 220,
+                                      crossAxisSpacing: 12,
+                                      mainAxisSpacing: 12,
+                                    ),
+                                itemCount: _filtered.length,
+                                itemBuilder: (context, i) {
+                                  final t = _filtered[i];
+                                  return _toolCard(t);
+                                },
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 22),
+
+                          // Active / In-use section
+                          Row(
+                            children: [
+                              const Expanded(
+                                child: Text(
+                                  'Currently In Use',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                '${_active.length} active',
+                                style: const TextStyle(color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          _active.isEmpty
+                              ? Container(
+                                  padding: const EdgeInsets.all(18),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Text(
+                                    'No active tools currently',
+                                  ),
+                                )
+                              : Wrap(
+                                  spacing: 12,
+                                  runSpacing: 12,
+                                  children: _active
+                                      .map((a) => _activeCard(a, context))
+                                      .toList(),
+                                ),
+                          const SizedBox(height: 28),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -79,398 +273,199 @@ class InventoryPage extends StatelessWidget {
       ),
     );
   }
-}
 
-class _InventoryHeader extends StatelessWidget {
-  const _InventoryHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
-            Text(
-              'Materials Inventory',
-              style: TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF0C1935),
-              ),
-            ),
-            SizedBox(height: 6),
-            Text(
-              'Track, order, and audit materials for every active project.',
-              style: TextStyle(fontSize: 14, color: Color(0xFF6B7280)),
-            ),
-          ],
-        ),
-        const Spacer(),
-        SizedBox(
-          height: 44,
-          child: ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF7A18),
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            onPressed: () {},
-            icon: const Icon(Icons.add, color: Colors.black),
-            label: const Text(
-              'Add Material',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: Colors.black,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _SummaryCards extends StatelessWidget {
-  const _SummaryCards({required this.projects});
-
-  final List<ProjectInventory> projects;
-
-  @override
-  Widget build(BuildContext context) {
-    final totalItems = projects.fold<int>(0, (sum, p) => sum + p.materials.length);
-    final lowStock = projects.fold<int>(
-      0,
-      (sum, p) => sum + p.materials.where((m) => m.status == MaterialStatus.low).length,
-    );
-    final outStock = projects.fold<int>(
-      0,
-      (sum, p) => sum + p.materials.where((m) => m.status == MaterialStatus.out).length,
-    );
-
-    final cards = [
-      _SummaryItem(label: 'Active Projects', value: projects.length, icon: Icons.domain_outlined),
-      _SummaryItem(label: 'Materials Tracked', value: totalItems, icon: Icons.inventory_2_outlined),
-      _SummaryItem(label: 'Low Stock', value: lowStock, icon: Icons.warning_amber_outlined, highlightColor: const Color(0xFFFFF5E6)),
-      _SummaryItem(label: 'Out of Stock', value: outStock, icon: Icons.error_outline, highlightColor: const Color(0xFFFFEEF0)),
-    ];
-
-    return Wrap(
-      spacing: 16,
-      runSpacing: 16,
-      children: cards
-          .map(
-            (card) => Container(
-              width: 200,
-              padding: const EdgeInsets.all(18),
+  Widget _toolCard(ToolItem t) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () => _showToolDetails(t),
+        borderRadius: BorderRadius.circular(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // image area
+            Container(
+              height: 120,
               decoration: BoxDecoration(
-                color: card.highlightColor ?? Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(12),
+                ),
+                color: Colors.grey[100],
               ),
+              child: t.photoAsset != null
+                  ? ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(12),
+                      ),
+                      child: Image.asset(t.photoAsset!, fit: BoxFit.cover),
+                    )
+                  : Center(
+                      child: Icon(
+                        Icons.construction,
+                        size: 48,
+                        color: Colors.grey[400],
+                      ),
+                    ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(card.icon, color: const Color(0xFFFF7A18)),
-                  const SizedBox(height: 14),
                   Text(
-                    card.label,
-                    style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+                    t.name,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 6),
-                  Text(
-                    card.value.toString(),
-                    style: const TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF0C1935),
-                    ),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          t.category,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      _statusChip(t.status),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: () => _showToolDetails(t),
+                        icon: const Icon(Icons.more_horiz),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
-          )
-          .toList(),
+          ],
+        ),
+      ),
     );
   }
-}
 
-class ProjectInventoryCard extends StatelessWidget {
-  const ProjectInventoryCard({super.key, required this.project});
-
-  final ProjectInventory project;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _statusChip(String status) {
+    final color = status.toLowerCase() == 'available'
+        ? Colors.green
+        : (status.toLowerCase() == 'maintenance'
+              ? Colors.orange
+              : Colors.redAccent);
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(8),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      child: Text(
+        status,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w700,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+
+  Widget _activeCard(ActiveUsage a, BuildContext ctx) {
+    return SizedBox(
+      width: 320,
+      child: Card(
+        elevation: 3,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // small photo
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: a.tool.photoAsset != null
+                    ? Image.asset(a.tool.photoAsset!, fit: BoxFit.cover)
+                    : const Icon(Icons.build, size: 36, color: Colors.grey),
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      project.name,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF0C1935),
-                      ),
+                      a.tool.name,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
                     Text(
-                      '${project.location}  •  ${project.code}',
-                      style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+                      'Used by: ${a.users.join(', ')}',
+                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        _statusChip(a.usageStatus),
+                        const SizedBox(width: 8),
+                        TextButton(
+                          onPressed: () async {
+                            final result = await showDialog(
+                              context: context,
+                              builder: (ctx) =>
+                                  ManageUsageModal(activeUsage: a),
+                            );
+                            if (result != null) {
+                              if (result['action'] == 'return') {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      '${a.tool.name} returned successfully',
+                                    ),
+                                  ),
+                                );
+                              } else if (result['action'] == 'update') {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Usage updated successfully'),
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                          child: const Text(
+                            'Manage',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
-              SizedBox(
-                height: 38,
-                child: OutlinedButton.icon(
-                  onPressed: () {},
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFFFF7A18),
-                    side: const BorderSide(color: Color(0xFFFFE0D3)),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text(
-                    'Add material',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ),
             ],
           ),
-          const SizedBox(height: 12),
-          LinearProgressIndicator(
-            value: project.progress,
-            minHeight: 6,
-            backgroundColor: const Color(0xFFF1F5F9),
-            valueColor: AlwaysStoppedAnimation(
-              project.progress >= 0.8 ? const Color(0xFF22C55E) : const Color(0xFFFF7A18),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Progress ${(project.progress * 100).round()}%',
-            style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
-          ),
-          const SizedBox(height: 20),
-          _MaterialTable(materials: project.materials),
-        ],
-      ),
-    );
-  }
-}
-
-class _MaterialTable extends StatelessWidget {
-  const _MaterialTable({required this.materials});
-
-  final List<MaterialItem> materials;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF9FAFB),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-            ),
-            child: Row(
-              children: const [
-                Expanded(flex: 3, child: Text('Material', style: _tableHeaderStyle)),
-                Expanded(flex: 2, child: Text('Category', style: _tableHeaderStyle)),
-                Expanded(child: Text('Qty', style: _tableHeaderStyle)),
-                Expanded(child: Text('Unit', style: _tableHeaderStyle)),
-                Expanded(child: Text('Status', style: _tableHeaderStyle)),
-                SizedBox(width: 80, child: Text('Actions', style: _tableHeaderStyle)),
-              ],
-            ),
-          ),
-          ...materials.map(
-            (material) => Container(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-              decoration: const BoxDecoration(
-                border: Border(
-                  top: BorderSide(color: Color(0xFFE5E7EB)),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    flex: 3,
-                    child: Text(
-                      material.name,
-                      style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF0C1935)),
-                    ),
-                  ),
-                  Expanded(
-                    flex: 2,
-                    child: Text(material.category, style: const TextStyle(color: Color(0xFF6B7280))),
-                  ),
-                  Expanded(child: Text(material.quantity.toString(), style: const TextStyle(color: Color(0xFF0C1935)))),
-                  Expanded(child: Text(material.unit, style: const TextStyle(color: Color(0xFF6B7280)))),
-                  Expanded(child: _StatusChip(status: material.status)),
-                  SizedBox(
-                    width: 80,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.edit, size: 18, color: Color(0xFF2563EB)),
-                          onPressed: () {},
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, size: 18, color: Color(0xFFF43F5E)),
-                          onPressed: () {},
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.status});
-
-  final MaterialStatus status;
-
-  @override
-  Widget build(BuildContext context) {
-    Color bg;
-    Color text;
-    String label;
-
-    switch (status) {
-      case MaterialStatus.inStock:
-        bg = const Color(0xFFE8F8F0);
-        text = const Color(0xFF0F9D58);
-        label = 'In Stock';
-        break;
-      case MaterialStatus.low:
-        bg = const Color(0xFFFFF5E6);
-        text = const Color(0xFFFF7A18);
-        label = 'Low Stock';
-        break;
-      case MaterialStatus.out:
-        bg = const Color(0xFFFFEEF0);
-        text = const Color(0xFFE11D48);
-        label = 'Out';
-        break;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: text,
         ),
       ),
     );
   }
+
+  void _showToolDetails(ToolItem t) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => ToolDetailsModal(tool: t),
+    );
+  }
 }
-
-class _SummaryItem {
-  _SummaryItem({
-    required this.label,
-    required this.value,
-    required this.icon,
-    this.highlightColor,
-  });
-
-  final String label;
-  final int value;
-  final IconData icon;
-  final Color? highlightColor;
-}
-
-class ProjectInventory {
-  const ProjectInventory({
-    required this.name,
-    required this.code,
-    required this.location,
-    required this.progress,
-    required this.materials,
-  });
-
-  final String name;
-  final String code;
-  final String location;
-  final double progress;
-  final List<MaterialItem> materials;
-}
-
-class MaterialItem {
-  const MaterialItem({
-    required this.name,
-    required this.category,
-    required this.quantity,
-    required this.unit,
-    required this.status,
-  });
-
-  final String name;
-  final String category;
-  final num quantity;
-  final String unit;
-  final MaterialStatus status;
-}
-
-enum MaterialStatus { inStock, low, out }
-
-const TextStyle _tableHeaderStyle = TextStyle(
-  fontSize: 12,
-  fontWeight: FontWeight.w700,
-  color: Color(0xFF94A3B8),
-  letterSpacing: 0.5,
-);

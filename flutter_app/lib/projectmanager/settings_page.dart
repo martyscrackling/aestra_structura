@@ -4,7 +4,7 @@ import 'widgets/sidebar.dart';
 import 'widgets/dashboard_header.dart';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key});
+  SettingsPage({super.key});
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -28,7 +28,10 @@ class _SettingsPageState extends State<SettingsPage> {
                 const DashboardHeader(title: 'Settings'),
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 24,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -43,15 +46,24 @@ class _SettingsPageState extends State<SettingsPage> {
                             children: const [
                               SizedBox(
                                 width: 260,
-                                child: _SettingsTextField(label: 'Full Name', value: 'AESTRA Admin'),
+                                child: _SettingsTextField(
+                                  label: 'Full Name',
+                                  value: 'AESTRA Admin',
+                                ),
                               ),
                               SizedBox(
                                 width: 260,
-                                child: _SettingsTextField(label: 'Email', value: 'admin@structura.com'),
+                                child: _SettingsTextField(
+                                  label: 'Email',
+                                  value: 'admin@structura.com',
+                                ),
                               ),
                               SizedBox(
                                 width: 260,
-                                child: _SettingsTextField(label: 'Company', value: 'Structura'),
+                                child: _SettingsTextField(
+                                  label: 'Company',
+                                  value: 'Structura',
+                                ),
                               ),
                             ],
                           ),
@@ -64,21 +76,27 @@ class _SettingsPageState extends State<SettingsPage> {
                             children: [
                               _SwitchTile(
                                 label: 'Email updates',
-                                subtitle: 'Receive a digest when project milestones change',
+                                subtitle:
+                                    'Receive a digest when project milestones change',
                                 value: emailUpdates,
-                                onChanged: (value) => setState(() => emailUpdates = value),
+                                onChanged: (value) =>
+                                    setState(() => emailUpdates = value),
                               ),
                               _SwitchTile(
                                 label: 'SMS alerts',
-                                subtitle: 'Send urgent site notices to my phone',
+                                subtitle:
+                                    'Send urgent site notices to my phone',
                                 value: smsAlerts,
-                                onChanged: (value) => setState(() => smsAlerts = value),
+                                onChanged: (value) =>
+                                    setState(() => smsAlerts = value),
                               ),
                               _SwitchTile(
                                 label: 'Auto assign tasks',
-                                subtitle: 'Automatically assign workers based on availability',
+                                subtitle:
+                                    'Automatically assign workers based on availability',
                                 value: autoAssignments,
-                                onChanged: (value) => setState(() => autoAssignments = value),
+                                onChanged: (value) =>
+                                    setState(() => autoAssignments = value),
                               ),
                             ],
                           ),
@@ -91,10 +109,12 @@ class _SettingsPageState extends State<SettingsPage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: const [
                                       Text(
                                         'Password',
@@ -118,7 +138,10 @@ class _SettingsPageState extends State<SettingsPage> {
                                     onPressed: () {},
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: const Color(0xFFFF7A18),
-                                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 18,
+                                        vertical: 12,
+                                      ),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(10),
                                       ),
@@ -135,10 +158,12 @@ class _SettingsPageState extends State<SettingsPage> {
                               ),
                               const Divider(height: 32),
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: const [
                                       Text(
                                         'Two-factor authentication',
@@ -162,14 +187,18 @@ class _SettingsPageState extends State<SettingsPage> {
                                     onPressed: () {},
                                     style: OutlinedButton.styleFrom(
                                       foregroundColor: const Color(0xFF0C1935),
-                                      side: const BorderSide(color: Color(0xFFE5E7EB)),
+                                      side: const BorderSide(
+                                        color: Color(0xFFE5E7EB),
+                                      ),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(10),
                                       ),
                                     ),
                                     child: const Text(
                                       'Enable',
-                                      style: TextStyle(fontWeight: FontWeight.w600),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -207,14 +236,18 @@ class _SettingsPageState extends State<SettingsPage> {
                                   onPressed: () {},
                                   style: OutlinedButton.styleFrom(
                                     foregroundColor: const Color(0xFFF43F5E),
-                                    side: const BorderSide(color: Color(0xFFFECACA)),
+                                    side: const BorderSide(
+                                      color: Color(0xFFFECACA),
+                                    ),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                   ),
                                   child: const Text(
                                     'Deactivate',
-                                    style: TextStyle(fontWeight: FontWeight.w600),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -256,10 +289,7 @@ class _SettingsIntro extends StatelessWidget {
             SizedBox(height: 6),
             Text(
               'Manage account details, preferences, and security.',
-              style: TextStyle(
-                fontSize: 14,
-                color: Color(0xFF6B7280),
-              ),
+              style: TextStyle(fontSize: 14, color: Color(0xFF6B7280)),
             ),
           ],
         ),
@@ -349,10 +379,7 @@ class SettingsCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             description,
-            style: const TextStyle(
-              fontSize: 13,
-              color: Color(0xFF6B7280),
-            ),
+            style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
           ),
           const SizedBox(height: 16),
           child,
@@ -363,15 +390,10 @@ class SettingsCard extends StatelessWidget {
 }
 
 class _SettingsTextField extends StatelessWidget {
-  const _SettingsTextField({
-    required this.label,
-    required this.value,
-    this.obscure = false,
-  });
+  const _SettingsTextField({required this.label, required this.value});
 
   final String label;
   final String value;
-  final bool obscure;
 
   @override
   Widget build(BuildContext context) {
@@ -389,7 +411,6 @@ class _SettingsTextField extends StatelessWidget {
         const SizedBox(height: 6),
         TextFormField(
           initialValue: value,
-          obscureText: obscure,
           readOnly: true,
           decoration: InputDecoration(
             filled: true,
@@ -434,13 +455,9 @@ class _SwitchTile extends StatelessWidget {
       ),
       subtitle: Text(
         subtitle,
-        style: const TextStyle(
-          fontSize: 12,
-          color: Color(0xFF6B7280),
-        ),
+        style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
       ),
       activeColor: const Color(0xFFFF7A18),
     );
   }
 }
-
