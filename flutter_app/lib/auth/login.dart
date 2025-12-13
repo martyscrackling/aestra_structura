@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'signup.dart';
-import '../projectmanager/pm_dashboard.dart';
+import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
+import '../services/auth_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -12,6 +13,22 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   bool _obscurePassword = true;
   bool _rememberMe = false;
+  late TextEditingController _emailController;
+  late TextEditingController _passwordController;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailController = TextEditingController();
+    _passwordController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +49,7 @@ class _LoginPageState extends State<LoginPage> {
               color: Colors.transparent,
               child: InkWell(
                 borderRadius: BorderRadius.circular(30),
-                onTap: () => Navigator.pop(context),
+                onTap: () => context.pop(),
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
@@ -153,6 +170,7 @@ class _LoginPageState extends State<LoginPage> {
 
         // Email Field
         _buildTextField(
+          controller: _emailController,
           label: 'Email Address',
           icon: Icons.email_outlined,
           keyboardType: TextInputType.emailAddress,
@@ -161,6 +179,7 @@ class _LoginPageState extends State<LoginPage> {
 
         // Password Field
         _buildTextField(
+          controller: _passwordController,
           label: 'Password',
           icon: Icons.lock_outline,
           obscureText: _obscurePassword,
@@ -249,35 +268,81 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
             onPressed: () async {
+              final email = _emailController.text.trim();
+              final password = _passwordController.text.trim();
+
+              if (email.isEmpty || password.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter email and password'),
+                    backgroundColor: Color(0xFFFF6B2C),
+                  ),
+                );
+                return;
+              }
+
               // Show loading dialog
-              showDialog(
-                context: context,
-                barrierDismissible: false, // prevent closing by tapping outside
-                builder: (context) => Center(
-                  child: Container(
-                    width: 100,
-                    height: 100,
-                    
-                    padding: const EdgeInsets.all(20),
-                    child: const CircularProgressIndicator(
-                      color: Color(0xFFFF6B2C),
-                      strokeWidth: 4,
+              if (mounted) {
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => Center(
+                    child: Container(
+                      width: 100,
+                      height: 100,
+                      padding: const EdgeInsets.all(20),
+                      child: const CircularProgressIndicator(
+                        color: Color(0xFFFF6B2C),
+                        strokeWidth: 4,
+                      ),
                     ),
                   ),
-                ),
-              );
+                );
+              }
 
-              // Simulate loading time (e.g., verifying credentials)
-              await Future.delayed(const Duration(seconds: 2));
+              try {
+                final authService = context.read<AuthService>();
+                final loginSuccess = await authService.login(email, password);
 
-              // Close loading dialog
-              Navigator.pop(context);
+                if (mounted) {
+                  Navigator.pop(context); // Close loading dialog
 
-              // Navigate to dashboard
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const PMDashboard()),
-              );
+                  if (loginSuccess) {
+                    // Get the user type to determine navigation
+                    final userType = authService.currentUser?['type'];
+                    print('Login successful. User type: $userType');
+
+                    if (userType == 'supervisor') {
+                      // Navigate to Supervisor Dashboard
+                      context.go('/supervisor');
+                    } else if (userType == 'client') {
+                      // Navigate to Client Dashboard
+                      context.go('/client');
+                    } else {
+                      // Navigate to Project Manager Dashboard (default)
+                      context.go('/dashboard');
+                    }
+                  } else {
+                    // Login failed
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Invalid email or password'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              } catch (e) {
+                if (mounted) {
+                  Navigator.pop(context); // Close loading dialog
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Login failed: ${e.toString()}'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
             },
 
             child: const Text(
@@ -322,10 +387,7 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
             GestureDetector(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const SignUpPage()),
-              ),
+              onTap: () => context.go('/signup'),
               child: const Text(
                 "Sign Up",
                 style: TextStyle(
@@ -344,6 +406,7 @@ class _LoginPageState extends State<LoginPage> {
   Widget _buildTextField({
     required String label,
     required IconData icon,
+    TextEditingController? controller,
     bool obscureText = false,
     TextInputType? keyboardType,
     Widget? suffixIcon,
@@ -360,6 +423,7 @@ class _LoginPageState extends State<LoginPage> {
         ],
       ),
       child: TextField(
+        controller: controller,
         obscureText: obscureText,
         keyboardType: keyboardType,
         style: const TextStyle(fontSize: 16),

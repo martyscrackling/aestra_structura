@@ -37,7 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'structuraApp.apps.StructuraappConfig'
+    'structuraApp',
     'rest_framework',
     'corsheaders',
 
@@ -84,9 +84,16 @@ WSGI_APPLICATION = 'structura_backend.wsgi.application'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "HOST": "db.prokngxytawscbszbnxc.supabase.co",
+        "PORT": "5432",
+        "USER": "postgres",
+        "PASSWORD": "$Zamboanga_123",
+        "NAME": "postgres",
+        "OPTIONS": {
+            "sslmode": "require",
+        },
     }
 }
 

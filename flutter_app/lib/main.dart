@@ -1,7 +1,38 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:flutter_web_plugins/flutter_web_plugins.dart';
+import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth/login.dart';
+import 'auth/signup.dart';
+import 'auth/infos.dart';
+import 'projectmanager/dashboard_page.dart';
+import 'projectmanager/projects_page.dart';
+import 'projectmanager/workforce_page.dart';
+import 'projectmanager/clients_page.dart';
+import 'projectmanager/reports_page.dart';
+import 'projectmanager/inventory_page.dart';
+import 'projectmanager/settings_page.dart';
+import 'supervisor/dashboard_page.dart' as supervisor;
+import 'client/cl_dashboard.dart' as client;
+import 'license/plan.dart';
+import 'services/auth_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Supabase.initialize(
+    url: 'xxx',
+    anonKey: 'xxx',
+    debug: true, // optional
+  );
+
+  setUrlStrategy(PathUrlStrategy());
+
+  // Initialize auth ONCE before app starts
+  final authService = AuthService();
+  await authService.initializeAuth();
+
   runApp(const StructuraApp());
 }
 
@@ -10,10 +41,95 @@ class StructuraApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Structura',
-      debugShowCheckedModeBanner: false,
-      home: const HomePage(),
+    final GoRouter router = GoRouter(
+      initialLocation: '/',
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (context, state) => const HomePage(),
+          name: 'home',
+        ),
+        GoRoute(
+          path: '/login',
+          builder: (context, state) => const LoginPage(),
+          name: 'login',
+        ),
+        GoRoute(
+          path: '/signup',
+          builder: (context, state) => const SignUpPage(),
+          name: 'signup',
+        ),
+        GoRoute(
+          path: '/infos',
+          builder: (context, state) => const InfosPage(),
+          name: 'infos',
+        ),
+        GoRoute(
+          path: '/dashboard',
+          builder: (context, state) => const PMDashboardPage(),
+          name: 'dashboard',
+        ),
+        GoRoute(
+          path: '/license',
+          builder: (context, state) => const LicenseActivationPage(),
+          name: 'license',
+        ),
+        GoRoute(
+          path: '/projects',
+          builder: (context, state) => const ProjectsPage(),
+          name: 'projects',
+        ),
+        GoRoute(
+          path: '/workforce',
+          builder: (context, state) => const WorkforcePage(),
+          name: 'workforce',
+        ),
+        GoRoute(
+          path: '/clients',
+          builder: (context, state) => const ClientsPage(),
+          name: 'clients',
+        ),
+        GoRoute(
+          path: '/reports',
+          builder: (context, state) => ReportsPage(),
+          name: 'reports',
+        ),
+        GoRoute(
+          path: '/inventory',
+          builder: (context, state) => InventoryPage(),
+          name: 'inventory',
+        ),
+        GoRoute(
+          path: '/settings',
+          builder: (context, state) => SettingsPage(),
+          name: 'settings',
+        ),
+        GoRoute(
+          path: '/supervisor',
+          builder: (context, state) =>
+              const supervisor.SupervisorDashboardPage(),
+          name: 'supervisor',
+        ),
+        GoRoute(
+          path: '/client',
+          builder: (context, state) =>
+              const client.ClDashboardPage(),
+          name: 'client',
+        ),
+      ],
+    );
+
+    return ChangeNotifierProvider(
+      create: (context) {
+        final authService = AuthService();
+        authService.initializeAuth();
+        return authService;
+      },
+      child: MaterialApp.router(
+        title: 'Structura',
+        debugShowCheckedModeBanner: false,
+        routerConfig: router,
+      ),
     );
   }
 }

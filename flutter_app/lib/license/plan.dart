@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 void main() {
   runApp(const MyApp());
@@ -96,7 +97,7 @@ class LicenseActivationPage extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 60),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 400),
-                child: _buildContent(isMobile: false),
+                child: _buildContent(context: context, isMobile: false),
               ),
             ),
           ),
@@ -122,7 +123,11 @@ class LicenseActivationPage extends StatelessWidget {
             ),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 500),
-              child: _buildContent(isMobile: true, screenWidth: screenWidth),
+              child: _buildContent(
+                context: context,
+                isMobile: true,
+                screenWidth: screenWidth,
+              ),
             ),
           ),
         ),
@@ -130,7 +135,11 @@ class LicenseActivationPage extends StatelessWidget {
     );
   }
 
-  Widget _buildContent({bool isMobile = false, double screenWidth = 800}) {
+  Widget _buildContent({
+    required BuildContext context,
+    bool isMobile = false,
+    double screenWidth = 800,
+  }) {
     double titleFont = isMobile ? (screenWidth < 360 ? 24 : 28) : 38;
     double priceFont = isMobile ? (screenWidth < 360 ? 52 : 60) : 64;
     double spacing = isMobile ? (screenWidth < 360 ? 16 : 20) : 20;
@@ -163,7 +172,7 @@ class LicenseActivationPage extends StatelessWidget {
 
         SizedBox(height: spacing),
         Text(
-          "₱100",
+          "₱5000",
           style: TextStyle(
             fontSize: priceFont,
             fontWeight: FontWeight.w900,
@@ -223,7 +232,9 @@ class LicenseActivationPage extends StatelessWidget {
           width: double.infinity,
           height: screenWidth < 360 ? 48 : 50,
           child: ElevatedButton(
-            onPressed: () {},
+            onPressed: () {
+              context.go('/dashboard');
+            },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFFF6B2C),
               padding: EdgeInsets.symmetric(
@@ -237,7 +248,7 @@ class LicenseActivationPage extends StatelessWidget {
             child: FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
-                "Activate your License now",
+                "Start your 14 days trial",
                 style: TextStyle(
                   fontSize: buttonFont,
                   fontWeight: FontWeight.bold,
