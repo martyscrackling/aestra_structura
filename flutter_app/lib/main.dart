@@ -22,8 +22,9 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Supabase.initialize(
-    url: 'xxx',
-    anonKey: 'xxx',
+    url: 'https://prokngxytawscbszbnxc.supabase.co',
+    anonKey:
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InByb2tuZ3h5dGF3c2Nic3pibnhjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5OTU1NTcsImV4cCI6MjA3OTU3MTU1N30.ck9YleNWzRM6uMK7w33xfgp_4KmnCjpmVMWsA3aBc74',
     debug: true, // optional
   );
 
@@ -112,8 +113,7 @@ class StructuraApp extends StatelessWidget {
         ),
         GoRoute(
           path: '/client',
-          builder: (context, state) =>
-              const client.ClDashboardPage(),
+          builder: (context, state) => const client.ClDashboardPage(),
           name: 'client',
         ),
       ],
