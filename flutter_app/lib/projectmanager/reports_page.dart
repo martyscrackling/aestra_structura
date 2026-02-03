@@ -1,0 +1,685 @@
+import 'package:flutter/material.dart';
+import 'widgets/sidebar.dart';
+import 'widgets/dashboard_header.dart';
+import 'widgets/responsive_page_layout.dart';
+import 'package:intl/intl.dart';
+
+class AttendanceReport {
+  AttendanceReport({
+    required this.name,
+    required this.role,
+    required this.totalDaysPresent,
+    required this.totalHours,
+    required this.overtimeHours,
+    required this.cashAdvance,
+    required this.deduction,
+    required this.hourlyRate,
+  });
+
+  final String name;
+  final String role;
+  final int totalDaysPresent;
+  final double totalHours;
+  final double overtimeHours;
+  final double cashAdvance;
+  final double deduction;
+  final double hourlyRate;
+
+  double get grossPay =>
+      totalHours * hourlyRate + overtimeHours * hourlyRate * 1.5;
+  double get computedSalary => (grossPay - cashAdvance - deduction);
+}
+
+class ReportsPage extends StatefulWidget {
+  ReportsPage({super.key});
+
+  @override
+  State<ReportsPage> createState() => _ReportsPageState();
+}
+
+class _ReportsPageState extends State<ReportsPage> {
+  final Color neutral = const Color(0xFFF4F6F9);
+  final Color accent = const Color(0xFFFF7A18);
+  final DateFormat _dateFmt = DateFormat('yyyy-MM-dd');
+
+  DateTime _weekStart = DateTime.now().subtract(
+    Duration(days: DateTime.now().weekday - 1),
+  );
+  DateTime _weekEnd = DateTime.now().add(
+    Duration(days: DateTime.sunday - DateTime.now().weekday),
+  );
+
+  // sample data (UI/layout only - no backend)
+  List<AttendanceReport> _rows = [
+    AttendanceReport(
+      name: 'John Doe',
+      role: 'Foreman',
+      totalDaysPresent: 6,
+      totalHours: 48,
+      overtimeHours: 4,
+      cashAdvance: 50.0,
+      deduction: 0.0,
+      hourlyRate: 8.0,
+    ),
+    AttendanceReport(
+      name: 'Jane Smith',
+      role: 'Carpenter',
+      totalDaysPresent: 5,
+      totalHours: 40,
+      overtimeHours: 2,
+      cashAdvance: 0.0,
+      deduction: 10.0,
+      hourlyRate: 7.5,
+    ),
+    AttendanceReport(
+      name: 'Carlos Reyes',
+      role: 'Laborer',
+      totalDaysPresent: 6,
+      totalHours: 52,
+      overtimeHours: 6,
+      cashAdvance: 20.0,
+      deduction: 5.0,
+      hourlyRate: 6.0,
+    ),
+  ];
+
+  final _money = NumberFormat.currency(
+    locale: 'en_PH',
+    symbol: '₱',
+    decimalDigits: 2,
+  );
+
+  // Submit the current report to PM (demo)
+  void _submitToPM() {
+    setState(() {
+      _rows = List<AttendanceReport>.from(_rows);
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Submitted successfully (demo)')),
+    );
+  }
+
+  double get _totalDeductions =>
+      _rows.fold(0.0, (t, r) => t + r.deduction + r.cashAdvance);
+  double get _totalComputedSalary =>
+      _rows.fold(0.0, (t, r) => t + r.computedSalary);
+  double get _totalOvertime => _rows.fold(0.0, (t, r) => t + r.overtimeHours);
+  double get _totalHours => _rows.fold(0.0, (t, r) => t + r.totalHours);
+
+  Future<void> _pickStartDate() async {
+    final d = await showDatePicker(
+      context: context,
+      initialDate: _weekStart,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (d != null) {
+      setState(() {
+        _weekStart = d;
+        _weekEnd = _weekStart.add(const Duration(days: 6));
+      });
+    }
+  }
+
+  Future<void> _pickEndDate() async {
+    final d = await showDatePicker(
+      context: context,
+      initialDate: _weekEnd,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (d != null) {
+      setState(() {
+        _weekEnd = d;
+      });
+    }
+  }
+
+  Widget _kpiCard(String title, String value, {Color? color, IconData? icon}) {
+    return Expanded(
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              if (icon != null)
+                Container(
+                  decoration: BoxDecoration(
+                    color: (color ?? accent).withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.all(10),
+                  child: Icon(icon, color: color ?? accent, size: 20),
+                ),
+              if (icon != null) const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: color ?? Colors.black,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _rowCard(AttendanceReport r) {
+    final initials = r.name
+        .split(' ')
+        .map((s) => s.isNotEmpty ? s[0] : '')
+        .take(2)
+        .join();
+    final salaryStr = _money.format(r.computedSalary);
+    final deductionStr = _money.format(r.deduction + r.cashAdvance);
+    final cashAdvanceStr = _money.format(r.cashAdvance);
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: accent.withOpacity(0.14),
+              child: Text(
+                initials,
+                style: TextStyle(color: accent, fontWeight: FontWeight.w700),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          r.name,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          r.role,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Text(
+                        '${r.totalDaysPresent} days',
+                        style: TextStyle(color: Colors.grey[700]),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        '${r.totalHours.toStringAsFixed(1)} hrs',
+                        style: TextStyle(color: Colors.grey[700]),
+                      ),
+                      const SizedBox(width: 12),
+                      if (r.overtimeHours > 0)
+                        Chip(
+                          label: Text('+${r.overtimeHours} OT'),
+                          backgroundColor: Colors.orange.withOpacity(0.12),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            // show cash advance balance above computed salary and deduction
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  'Advance',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  cashAdvanceStr,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    color: Colors.orange,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  salaryStr,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                    color: Colors.green,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Deduct: $deductionStr',
+                  style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 768;
+    final isTablet = screenWidth >= 768 && screenWidth < 1024;
+
+    return ResponsivePageLayout(
+      currentPage: 'Reports',
+      title: 'Reports',
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 16),
+
+          // Subtitle and action buttons
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (isMobile) ...[
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Weekly Attendance Report',
+                        style: TextStyle(
+                          color: Color(0xFF0C1935),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Summary for ${_dateFmt.format(_weekStart)} — ${_dateFmt.format(_weekEnd)}',
+                        style: TextStyle(color: Colors.grey[700], fontSize: 12),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: _submitToPM,
+                              icon: const Icon(Icons.send, color: Colors.white, size: 18),
+                              label: const Text(
+                                'Submit',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: accent,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            onPressed: () {},
+                            icon: const Icon(
+                              Icons.download_rounded,
+                              color: Color(0xFF0C1935),
+                            ),
+                            tooltip: 'Export CSV',
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ] else
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Weekly Attendance Report',
+                              style: TextStyle(
+                                color: Color(0xFF0C1935),
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Summary for ${_dateFmt.format(_weekStart)} — ${_dateFmt.format(_weekEnd)}',
+                              style: TextStyle(color: Colors.grey[700]),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () {},
+                        icon: const Icon(
+                          Icons.download_rounded,
+                          color: Color(0xFF0C1935),
+                        ),
+                        tooltip: 'Export CSV',
+                      ),
+                      const SizedBox(width: 6),
+                      ElevatedButton.icon(
+                        onPressed: _submitToPM,
+                        icon: const Icon(Icons.send, color: Colors.white),
+                        label: const Text(
+                          'Submit',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: accent,
+                        ),
+                      ),
+                    ],
+                  ),
+
+                const SizedBox(height: 16),
+
+                // Date range selector
+                Card(
+                  elevation: 1,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextButton.icon(
+                          onPressed: _pickStartDate,
+                          icon: Icon(
+                            Icons.calendar_today,
+                            size: isMobile ? 16 : 18,
+                          ),
+                          label: Text(
+                            _dateFmt.format(_weekStart),
+                            style: TextStyle(fontSize: isMobile ? 12 : 14),
+                          ),
+                        ),
+                        const Text('—'),
+                        TextButton.icon(
+                          onPressed: _pickEndDate,
+                          icon: Icon(
+                            Icons.calendar_today,
+                            size: isMobile ? 16 : 18,
+                          ),
+                          label: Text(
+                            _dateFmt.format(_weekEnd),
+                            style: TextStyle(fontSize: isMobile ? 12 : 14),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                // KPI Cards
+                if (isMobile)
+                  Column(
+                    children: [
+                      _kpiCard(
+                        'Total Hours',
+                        '${_totalHours.toStringAsFixed(1)}',
+                        icon: Icons.access_time,
+                        color: accent,
+                      ),
+                      const SizedBox(height: 8),
+                      _kpiCard(
+                        'Overtime',
+                        '${_totalOvertime.toStringAsFixed(1)} hrs',
+                        icon: Icons.flash_on,
+                        color: Colors.orange,
+                      ),
+                      const SizedBox(height: 8),
+                      _kpiCard(
+                        'Total Deductions',
+                        _money.format(_totalDeductions),
+                        icon: Icons.money_off,
+                        color: Colors.redAccent,
+                      ),
+                    ],
+                  )
+                else
+                  Row(
+                    children: [
+                      _kpiCard(
+                        'Total Hours',
+                        '${_totalHours.toStringAsFixed(1)}',
+                        icon: Icons.access_time,
+                        color: accent,
+                      ),
+                      const SizedBox(width: 12),
+                      _kpiCard(
+                        'Overtime',
+                        '${_totalOvertime.toStringAsFixed(1)} hrs',
+                        icon: Icons.flash_on,
+                        color: Colors.orange,
+                      ),
+                      const SizedBox(width: 12),
+                      _kpiCard(
+                        'Total Deductions',
+                        _money.format(_totalDeductions),
+                        icon: Icons.money_off,
+                        color: Colors.redAccent,
+                      ),
+                    ],
+                  ),
+
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+
+          // Worker List
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 16 : 24,
+                vertical: 8,
+              ),
+              child: Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Padding(
+                  padding: EdgeInsets.all(isMobile ? 10 : 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (!isMobile)
+                        Row(
+                          children: [
+                            const Expanded(
+                              child: Text(
+                                'Worker',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(
+                              width: 220,
+                              child: Text(
+                                'Computed Salary',
+                                textAlign: TextAlign.right,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      if (!isMobile) const Divider(),
+                      Expanded(
+                        child: _rows.isEmpty
+                            ? Center(
+                                child: Text(
+                                  'No data for selected week',
+                                  style: TextStyle(
+                                    color: Colors.grey[700],
+                                  ),
+                                ),
+                              )
+                            : ListView.builder(
+                                itemCount: _rows.length,
+                                itemBuilder: (context, i) => _rowCard(_rows[i]),
+                              ),
+                      ),
+                      const SizedBox(height: 12),
+                      // Totals summary
+                      Container(
+                        padding: EdgeInsets.all(isMobile ? 10 : 12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: isMobile
+                            ? Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Total Deductions',
+                                    style: TextStyle(
+                                      color: Colors.grey[700],
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _money.format(_totalDeductions),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 14,
+                                      color: Colors.redAccent,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'Total Computed Salary',
+                                    style: TextStyle(
+                                      color: Colors.grey[700],
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _money.format(_totalComputedSalary),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 16,
+                                      color: Colors.green,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Total Deductions',
+                                        style: TextStyle(
+                                          color: Colors.grey[700],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        _money.format(_totalDeductions),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 16,
+                                          color: Colors.redAccent,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        'Total Computed Salary',
+                                        style: TextStyle(
+                                          color: Colors.grey[700],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        _money.format(_totalComputedSalary),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 18,
+                                          color: Colors.green,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          SizedBox(height: isMobile ? 80 : 12),
+        ],
+      ),
+    );
+  }
+}
