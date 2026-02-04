@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'dart:convert';
 import '../../services/auth_service.dart';
+import '../../services/app_config.dart';
 
 class AddClientModal extends StatefulWidget {
   const AddClientModal({super.key});
@@ -160,7 +161,7 @@ class _AddClientModalState extends State<AddClientModal> {
         print('Sending client data: $clientData');
 
         final response = await http.post(
-          Uri.parse('http://127.0.0.1:8000/api/clients/'),
+          AppConfig.apiUri('clients/'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode(clientData),
         );

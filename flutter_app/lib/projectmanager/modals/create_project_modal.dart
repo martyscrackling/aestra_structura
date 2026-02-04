@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
 import '../../services/auth_service.dart';
+import '../../services/app_config.dart';
 
 class CreateProjectModal extends StatefulWidget {
   const CreateProjectModal({super.key});
@@ -75,7 +76,7 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
     try {
       setState(() => _isLoadingRegions = true);
       final response = await http.get(
-        Uri.parse('http://127.0.0.1:8000/api/regions/'),
+        AppConfig.apiUri('regions/'),
       );
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -93,7 +94,7 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
   Future<void> _fetchProvinces(int regionId) async {
     try {
       final response = await http.get(
-        Uri.parse('http://127.0.0.1:8000/api/provinces/?region=$regionId'),
+        AppConfig.apiUri('provinces/?region=$regionId'),
       );
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -112,7 +113,7 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
   Future<void> _fetchCities(int provinceId) async {
     try {
       final response = await http.get(
-        Uri.parse('http://127.0.0.1:8000/api/cities/?province=$provinceId'),
+        AppConfig.apiUri('cities/?province=$provinceId'),
       );
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -130,7 +131,7 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
   Future<void> _fetchBarangays(int cityId) async {
     try {
       final response = await http.get(
-        Uri.parse('http://127.0.0.1:8000/api/barangays/?city=$cityId'),
+        AppConfig.apiUri('barangays/?city=$cityId'),
       );
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -148,7 +149,7 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
     try {
       setState(() => _isLoadingSupervisors = true);
       final response = await http.get(
-        Uri.parse('http://127.0.0.1:8000/api/supervisors/'),
+        AppConfig.apiUri('supervisors/'),
       );
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -170,7 +171,7 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
     try {
       setState(() => _isLoadingClients = true);
       final response = await http.get(
-        Uri.parse('http://127.0.0.1:8000/api/clients/'),
+        AppConfig.apiUri('clients/'),
       );
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -371,11 +372,11 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
 
         final response = await http
             .post(
-              Uri.parse('http://127.0.0.1:8000/api/projects/'),
+              AppConfig.apiUri('projects/'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode(payload),
             )
-            .timeout(const Duration(seconds: 10));
+            .timeout(const Duration(seconds: 30));
 
         print('✓ Response status: ${response.statusCode}');
         print('✓ Response body: ${response.body}');
@@ -413,11 +414,11 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
 
             final updateResponse = await http
                 .patch(
-                  Uri.parse('http://127.0.0.1:8000/api/projects/$projectId/'),
+                  AppConfig.apiUri('projects/$projectId/'),
                   headers: {'Content-Type': 'application/json'},
                   body: jsonEncode(updatePayload),
                 )
-                .timeout(const Duration(seconds: 10));
+                .timeout(const Duration(seconds: 30));
 
             print('✓ Update response status: ${updateResponse.statusCode}');
             print('✓ Update response body: ${updateResponse.body}');

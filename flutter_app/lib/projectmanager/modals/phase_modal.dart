@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../../services/app_config.dart';
 
 class PhaseModal extends StatefulWidget {
   final String projectTitle;
@@ -46,9 +47,7 @@ class _PhaseModalState extends State<PhaseModal> {
   Future<void> _fetchExistingPhases() async {
     try {
       final response = await http.get(
-        Uri.parse(
-          'http://127.0.0.1:8000/api/phases/?project_id=${widget.projectId}',
-        ),
+        AppConfig.apiUri('phases/?project_id=${widget.projectId}'),
       );
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -131,7 +130,7 @@ class _PhaseModalState extends State<PhaseModal> {
       };
 
       final response = await http.post(
-        Uri.parse('http://127.0.0.1:8000/api/phases/'),
+        AppConfig.apiUri('phases/'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(phaseData),
       );

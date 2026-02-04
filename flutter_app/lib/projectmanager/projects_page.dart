@@ -8,6 +8,7 @@ import 'widgets/responsive_page_layout.dart';
 import 'modals/create_project_modal.dart';
 import 'project_info.dart';
 import '../services/auth_service.dart';
+import '../services/app_config.dart';
 
 class ProjectsPage extends StatefulWidget {
   const ProjectsPage({super.key});
@@ -31,7 +32,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
   Future<double> _calculateProjectProgress(int projectId) async {
     try {
       final response = await http.get(
-        Uri.parse('http://127.0.0.1:8000/api/phases/?project_id=$projectId'),
+        AppConfig.apiUri('phases/?project_id=$projectId'),
       );
 
       if (response.statusCode == 200) {
@@ -79,10 +80,10 @@ class _ProjectsPageState extends State<ProjectsPage> {
         return;
       }
 
-      final url = 'http://127.0.0.1:8000/api/projects/?user_id=$userId';
+      final url = AppConfig.apiUri('projects/?user_id=$userId');
       print('🔍 Fetching from: $url');
 
-      final response = await http.get(Uri.parse(url));
+      final response = await http.get(url);
 
       print('✅ Response status: ${response.statusCode}');
       print('✅ Response body: ${response.body}');

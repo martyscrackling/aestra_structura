@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../../services/app_config.dart';
 
 class Workers extends StatefulWidget {
   final int projectId;
@@ -23,9 +24,7 @@ class _WorkersState extends State<Workers> {
   Future<List<Map<String, dynamic>>> _fetchWorkers() async {
     try {
       final response = await http.get(
-        Uri.parse(
-          'http://127.0.0.1:8000/api/field-workers/?project_id=${widget.projectId}',
-        ),
+        AppConfig.apiUri('field-workers/?project_id=${widget.projectId}'),
       );
 
       if (response.statusCode == 200) {

@@ -8,6 +8,7 @@ import 'modals/select_modal.dart';
 import 'modals/add_worker_modal.dart';
 import 'modals/add_fieldworker_modal.dart';
 import 'worker_profile_page.dart';
+import '../services/app_config.dart';
 
 class WorkforcePage extends StatefulWidget {
   const WorkforcePage({super.key});
@@ -43,12 +44,12 @@ class _WorkforcePageState extends State<WorkforcePage> {
     try {
       // Fetch supervisors
       final supervisorResponse = await http.get(
-        Uri.parse('http://127.0.0.1:8000/api/supervisors/'),
+        AppConfig.apiUri('supervisors/'),
       );
 
       // Fetch field workers
       final fieldWorkerResponse = await http.get(
-        Uri.parse('http://127.0.0.1:8000/api/field-workers/'),
+        AppConfig.apiUri('field-workers/'),
       );
 
       List<WorkerInfo> allWorkers = [];

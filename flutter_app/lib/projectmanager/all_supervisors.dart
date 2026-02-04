@@ -5,6 +5,7 @@ import 'dart:async';
 import 'widgets/sidebar.dart';
 import 'widgets/dashboard_header.dart';
 import 'modals/add_worker_modal.dart';
+import '../services/app_config.dart';
 
 class WorkforceSupervisorsPage extends StatefulWidget {
   const WorkforceSupervisorsPage({super.key});
@@ -33,7 +34,7 @@ class _WorkforceSupervisorsPageState extends State<WorkforceSupervisorsPage> {
       print('Fetching supervisors from API...');
       final response = await http
           .get(
-            Uri.parse('http://127.0.0.1:8000/api/workers/'),
+            AppConfig.apiUri('workers/'),
             headers: {'Content-Type': 'application/json'},
           )
           .timeout(

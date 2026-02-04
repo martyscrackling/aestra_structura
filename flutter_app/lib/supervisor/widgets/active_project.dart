@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'dart:convert';
 import '../../services/auth_service.dart';
+import '../../services/app_config.dart';
 
 class ActiveProject extends StatefulWidget {
   final Function(int)? onProjectLoaded;
@@ -42,7 +43,7 @@ class _ActiveProjectState extends State<ActiveProject> {
       }
 
       final projectResponse = await http.get(
-        Uri.parse('http://127.0.0.1:8000/api/projects/$projectId/'),
+        AppConfig.apiUri('projects/$projectId/'),
       );
 
       print('Project API response status: ${projectResponse.statusCode}');
@@ -62,7 +63,7 @@ class _ActiveProjectState extends State<ActiveProject> {
       // Fetch phases to calculate accurate progress
       try {
         final phasesResponse = await http.get(
-          Uri.parse('http://127.0.0.1:8000/api/phases/?project_id=$projectId'),
+          AppConfig.apiUri('phases/?project_id=$projectId'),
         );
         if (phasesResponse.statusCode == 200) {
           _cachedPhases = jsonDecode(phasesResponse.body) as List<dynamic>;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../project_details_page.dart';
+import '../../services/app_config.dart';
 
 class Worker {
   final int workerId;
@@ -63,7 +64,7 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
     try {
       print('🔍 Fetching all field workers');
       final response = await http.get(
-        Uri.parse('http://127.0.0.1:8000/api/field-workers/'),
+        AppConfig.apiUri('field-workers/'),
       );
 
       print('✅ Response status: ${response.statusCode}');
@@ -134,8 +135,8 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
     try {
       // First, clear existing assignments for this subtask
       final deleteResponse = await http.delete(
-        Uri.parse(
-          'http://127.0.0.1:8000/api/subtask-assignments/?subtask_id=${widget.subtask.subtaskId}',
+        AppConfig.apiUri(
+          'subtask-assignments/?subtask_id=${widget.subtask.subtaskId}',
         ),
       );
 
@@ -147,7 +148,7 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
       print('📤 Saving assignments: $assignments');
 
       final response = await http.post(
-        Uri.parse('http://127.0.0.1:8000/api/subtask-assignments/'),
+        AppConfig.apiUri('subtask-assignments/'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(assignments),
       );

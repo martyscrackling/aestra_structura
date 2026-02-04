@@ -55,12 +55,30 @@ MIDDLEWARE = [
 ]
 
 _cors_origins = os.getenv("CORS_ALLOWED_ORIGINS", "").strip()
-if _cors_origins:
-    CORS_ALLOWED_ORIGINS = [o.strip() for o in _cors_origins.split(",") if o.strip()]
-    CORS_ALLOW_ALL_ORIGINS = False
+
+_cors_allow_all = os.getenv("CORS_ALLOW_ALL_ORIGINS", "").strip().lower()
+if _cors_allow_all:
+    CORS_ALLOW_ALL_ORIGINS = _cors_allow_all in {"1", "true", "yes"}
 else:
     # Keep dev experience simple; lock down in prod by setting CORS_ALLOWED_ORIGINS.
     CORS_ALLOW_ALL_ORIGINS = DEBUG
+
+if _cors_origins:
+    CORS_ALLOWED_ORIGINS = [o.strip() for o in _cors_origins.split(",") if o.strip()]
+
+_cors_origin_regexes = os.getenv("CORS_ALLOWED_ORIGIN_REGEXES", "").strip()
+if _cors_origin_regexes:
+    CORS_ALLOWED_ORIGIN_REGEXES = [
+        r.strip() for r in _cors_origin_regexes.split(",") if r.strip()
+    ]
+
+if os.getenv("CORS_ALLOW_LOCALHOST", "0").strip() == "1":
+    CORS_ALLOWED_ORIGIN_REGEXES = list(
+        globals().get("CORS_ALLOWED_ORIGIN_REGEXES", [])
+    ) + [
+        r"^http://localhost(:\\d+)?$",
+        r"^http://127\\.0\\.0\\.1(:\\d+)?$",
+    ]
 
 _csrf_trusted = os.getenv("CSRF_TRUSTED_ORIGINS", "").strip()
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_trusted.split(",") if o.strip()]
@@ -90,10 +108,11 @@ WSGI_APPLICATION = 'structura_backend.wsgi.application'
 
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 if DATABASE_URL:
+    _db_conn_max_age = int(os.getenv("DB_CONN_MAX_AGE", "600"))
     DATABASES = {
         "default": dj_database_url.parse(
             DATABASE_URL,
-            conn_max_age=600,
+            conn_max_age=_db_conn_max_age,
             ssl_require=True,
         )
     }

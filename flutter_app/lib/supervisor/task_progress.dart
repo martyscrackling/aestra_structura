@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
 import '../services/auth_service.dart';
+import '../services/app_config.dart';
 import 'widgets/sidebar.dart';
 
 class Subtask {
@@ -109,7 +110,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
     try {
       // Fetch project details
       final projectResponse = await http.get(
-        Uri.parse('http://127.0.0.1:8000/api/projects/$projectId/'),
+        AppConfig.apiUri('projects/$projectId/'),
       );
 
       if (projectResponse.statusCode == 200) {
@@ -117,7 +118,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
       }
 
       final response = await http.get(
-        Uri.parse('http://127.0.0.1:8000/api/phases/?project_id=$projectId'),
+        AppConfig.apiUri('phases/?project_id=$projectId'),
       );
       if (response.statusCode == 200) {
         final List<dynamic> payload =
@@ -350,7 +351,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
 
         // Send PATCH request to update subtask
         final response = await http.patch(
-          Uri.parse('http://127.0.0.1:8000/api/subtasks/${subtask.id}/'),
+          AppConfig.apiUri('subtasks/${subtask.id}/'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode(requestBody),
         );
@@ -561,7 +562,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
 
                 // Send PATCH request to update subtask
                 final response = await http.patch(
-                  Uri.parse('http://127.0.0.1:8000/api/subtasks/${sub.id}/'),
+                  AppConfig.apiUri('subtasks/${sub.id}/'),
                   headers: {'Content-Type': 'application/json'},
                   body: jsonEncode(requestBody),
                 );

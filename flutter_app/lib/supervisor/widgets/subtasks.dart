@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../../services/app_config.dart';
 
 class SubtasksWidget extends StatefulWidget {
   final int phaseId;
@@ -28,9 +29,7 @@ class _SubtasksWidgetState extends State<SubtasksWidget> {
   Future<List<Map<String, dynamic>>> _fetchSubtasks() async {
     try {
       final response = await http.get(
-        Uri.parse(
-          'http://127.0.0.1:8000/api/subtasks/?phase_id=${widget.phaseId}',
-        ),
+        AppConfig.apiUri('subtasks/?phase_id=${widget.phaseId}'),
       );
 
       if (response.statusCode == 200) {

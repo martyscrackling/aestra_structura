@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'dart:convert';
 import '../services/auth_service.dart';
+import '../services/app_config.dart';
 import 'widgets/sidebar.dart';
 import 'dashboard_page.dart';
 import 'attendance_page.dart';
@@ -44,11 +45,10 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
         return [];
       }
 
-      final url =
-          'http://127.0.0.1:8000/api/field-workers/?project_id=$projectId';
+        final url = AppConfig.apiUri('field-workers/?project_id=$projectId');
       print('📡 API URL: $url');
 
-      final response = await http.get(Uri.parse(url));
+        final response = await http.get(url);
 
       print('📊 Response status: ${response.statusCode}');
       print('📦 Response body: ${response.body}');

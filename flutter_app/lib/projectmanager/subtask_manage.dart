@@ -5,6 +5,7 @@ import 'widgets/sidebar.dart';
 import 'widgets/dashboard_header.dart';
 import 'widgets/manage_workers.dart';
 import 'project_details_page.dart';
+import '../services/app_config.dart';
 
 class SubtaskManagePage extends StatefulWidget {
   final Phase phase;
@@ -399,8 +400,8 @@ class _ViewWorkForceModalState extends State<ViewWorkForceModal> {
         '🔍 Fetching assigned workers for subtask: ${widget.subtask.subtaskId}',
       );
       final response = await http.get(
-        Uri.parse(
-          'http://127.0.0.1:8000/api/subtask-assignments/?subtask_id=${widget.subtask.subtaskId}',
+        AppConfig.apiUri(
+          'subtask-assignments/?subtask_id=${widget.subtask.subtaskId}',
         ),
       );
 
@@ -415,8 +416,8 @@ class _ViewWorkForceModalState extends State<ViewWorkForceModal> {
         List<Map<String, dynamic>> workers = [];
         for (var assignment in assignments) {
           final workerResponse = await http.get(
-            Uri.parse(
-              'http://127.0.0.1:8000/api/field-workers/${assignment['field_worker']}/',
+            AppConfig.apiUri(
+              'field-workers/${assignment['field_worker']}/',
             ),
           );
 

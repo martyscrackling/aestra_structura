@@ -1,10 +1,13 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'app_config.dart';
 
 class AuthService extends ChangeNotifier {
   static final AuthService _instance = AuthService._internal();
+  static const Duration _networkTimeout = Duration(seconds: 30);
 
   factory AuthService() {
     return _instance;
@@ -14,7 +17,6 @@ class AuthService extends ChangeNotifier {
 
   Map<String, dynamic>? _currentUser;
   bool _isLoggedIn = false;
-  final String apiUrl = "http://127.0.0.1:8000/api/";
 
   // Getters
   bool get isLoggedIn => _isLoggedIn;
@@ -57,13 +59,15 @@ class AuthService extends ChangeNotifier {
   Future<bool> login(String email, String password) async {
     try {
       print('Attempting login with email: $email');
+      print('API_BASE_URL: ${AppConfig.apiBaseUrl}');
+      print('Login URL: ${AppConfig.apiUri('login/')}');
       final response = await http
           .post(
-            Uri.parse("${apiUrl}login/"),
+            AppConfig.apiUri('login/'),
             headers: {"Content-Type": "application/json"},
             body: jsonEncode({"email": email, "password": password}),
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(_networkTimeout);
 
       print('Login response status: ${response.statusCode}');
       print('Login response body: ${response.body}');
@@ -78,6 +82,9 @@ class AuthService extends ChangeNotifier {
           return true;
         }
       }
+      return false;
+    } on TimeoutException catch (e) {
+      print('Login timeout after ${_networkTimeout.inSeconds}s: $e');
       return false;
     } catch (e) {
       print("Login error: $e");
@@ -95,7 +102,7 @@ class AuthService extends ChangeNotifier {
       print('Attempting signup with email: $email');
       final response = await http
           .post(
-            Uri.parse("${apiUrl}users/"),
+            AppConfig.apiUri('users/'),
             headers: {"Content-Type": "application/json"},
             body: jsonEncode({
               "email": email,
@@ -104,7 +111,7 @@ class AuthService extends ChangeNotifier {
               "last_name": lastName,
             }),
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(_networkTimeout);
 
       print('Signup response status: ${response.statusCode}');
       print('Signup response body: ${response.body}');
@@ -119,6 +126,9 @@ class AuthService extends ChangeNotifier {
       } else if (response.statusCode == 400) {
         print('Signup validation error: ${response.body}');
       }
+      return false;
+    } on TimeoutException catch (e) {
+      print('Signup timeout after ${_networkTimeout.inSeconds}s: $e');
       return false;
     } catch (e) {
       print("Signup error: $e");
@@ -148,17 +158,20 @@ class AuthService extends ChangeNotifier {
 
       final response = await http
           .patch(
-            Uri.parse("${apiUrl}users/$userId/"),
+            AppConfig.apiUri('users/$userId/'),
             headers: {"Content-Type": "application/json"},
             body: jsonEncode(updatePayload),
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(_networkTimeout);
 
       if (response.statusCode == 200) {
         _currentUser = jsonDecode(response.body);
         notifyListeners();
         return true;
       }
+      return false;
+    } on TimeoutException catch (e) {
+      print('Update user info timeout after ${_networkTimeout.inSeconds}s: $e');
       return false;
     } catch (e) {
       print("Update user info error: $e");

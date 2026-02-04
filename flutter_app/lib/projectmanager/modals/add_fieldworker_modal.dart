@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../../services/app_config.dart';
 
 class AddFieldWorkerModal extends StatefulWidget {
   final String workerType;
@@ -121,7 +122,7 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
         print('Creating field worker: $fieldWorkerData');
 
         final response = await http.post(
-          Uri.parse('http://127.0.0.1:8000/api/field-workers/'),
+          AppConfig.apiUri('field-workers/'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode(fieldWorkerData),
         );

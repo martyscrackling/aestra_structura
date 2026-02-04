@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:convert';
 import '../services/auth_service.dart';
+import '../services/app_config.dart';
 import 'widgets/sidebar.dart';
 
 class AttendancePage extends StatefulWidget {
@@ -46,9 +47,7 @@ class _AttendancePageState extends State<AttendancePage> {
       if (projectId == null) return [];
 
       final response = await http.get(
-        Uri.parse(
-          'http://127.0.0.1:8000/api/field-workers/?project_id=$projectId',
-        ),
+        AppConfig.apiUri('field-workers/?project_id=$projectId'),
       );
 
       if (response.statusCode == 200) {
@@ -72,8 +71,8 @@ class _AttendancePageState extends State<AttendancePage> {
       final dateStr =
           '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}';
       final response = await http.get(
-        Uri.parse(
-          'http://127.0.0.1:8000/api/attendance/?project_id=$projectId&attendance_date=$dateStr',
+        AppConfig.apiUri(
+          'attendance/?project_id=$projectId&attendance_date=$dateStr',
         ),
       );
 
@@ -99,8 +98,8 @@ class _AttendancePageState extends State<AttendancePage> {
 
       // Check if attendance record exists
       final existingRecords = await http.get(
-        Uri.parse(
-          'http://127.0.0.1:8000/api/attendance/?field_worker_id=${attendanceData['field_worker']}&attendance_date=${attendanceData['attendance_date']}',
+        AppConfig.apiUri(
+          'attendance/?field_worker_id=${attendanceData['field_worker']}&attendance_date=${attendanceData['attendance_date']}',
         ),
       );
 
@@ -110,14 +109,14 @@ class _AttendancePageState extends State<AttendancePage> {
           // Update existing
           final attendanceId = data[0]['attendance_id'];
           await http.put(
-            Uri.parse('http://127.0.0.1:8000/api/attendance/$attendanceId/'),
+            AppConfig.apiUri('attendance/$attendanceId/'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode(attendanceData),
           );
         } else {
           // Create new
           await http.post(
-            Uri.parse('http://127.0.0.1:8000/api/attendance/'),
+            AppConfig.apiUri('attendance/'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode(attendanceData),
           );

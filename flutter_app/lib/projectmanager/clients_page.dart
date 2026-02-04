@@ -6,6 +6,7 @@ import 'widgets/dashboard_header.dart';
 import 'widgets/responsive_page_layout.dart';
 import 'modals/add_client_modal.dart';
 import 'client_profile_page.dart';
+import '../services/app_config.dart';
 
 class ClientsPage extends StatefulWidget {
   const ClientsPage({super.key});
@@ -26,7 +27,7 @@ class _ClientsPageState extends State<ClientsPage> {
   Future<List<ClientInfo>> _fetchClients() async {
     try {
       final response = await http.get(
-        Uri.parse('http://127.0.0.1:8000/api/clients/'),
+        AppConfig.apiUri('clients/'),
       );
 
       if (response.statusCode == 200) {

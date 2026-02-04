@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'widgets/sidebar.dart';
 import 'widgets/dashboard_header.dart';
 import 'project_details_page.dart' as task_details;
+import '../services/app_config.dart';
 
 class ProjectDetailsPage extends StatefulWidget {
   final String projectTitle;
@@ -70,7 +71,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     try {
       // First fetch project details to get client_id and supervisor_id
       final projectResponse = await http.get(
-        Uri.parse('http://127.0.0.1:8000/api/projects/${widget.projectId}/'),
+        AppConfig.apiUri('projects/${widget.projectId}/'),
       );
 
       if (projectResponse.statusCode != 200) {
@@ -97,7 +98,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
       if (clientId != null) {
         try {
           final clientResponse = await http.get(
-            Uri.parse('http://127.0.0.1:8000/api/clients/$clientId/'),
+            AppConfig.apiUri('clients/$clientId/'),
           );
           if (clientResponse.statusCode == 200) {
             setState(() {
@@ -115,7 +116,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         try {
           print('🔍 Attempting to fetch supervisor with ID: $supervisorId');
           final supervisorResponse = await http.get(
-            Uri.parse('http://127.0.0.1:8000/api/supervisors/$supervisorId/'),
+            AppConfig.apiUri('supervisors/$supervisorId/'),
           );
           print(
             '📡 Supervisor response status: ${supervisorResponse.statusCode}',
@@ -142,9 +143,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
       // Fetch phases for accurate progress calculation
       try {
         final phasesResponse = await http.get(
-          Uri.parse(
-            'http://127.0.0.1:8000/api/phases/?project_id=${widget.projectId}',
-          ),
+          AppConfig.apiUri('phases/?project_id=${widget.projectId}'),
         );
         if (phasesResponse.statusCode == 200) {
           setState(() {

@@ -1,14 +1,12 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'app_config.dart';
 
 class ApiService {
   // Configure at build time:
   // flutter build web --dart-define=API_BASE_URL=https://YOUR_BACKEND/api/
   // flutter build apk --dart-define=API_BASE_URL=https://YOUR_BACKEND/api/
-  static const String baseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'http://127.0.0.1:8000/api/',
-  );
+  static const String baseUrl = AppConfig.apiBaseUrl;
 
   static Future<Map<String, dynamic>> registerUser(
     String email,
@@ -16,7 +14,7 @@ class ApiService {
     String firstName,
     String lastName,
   ) async {
-    final url = Uri.parse("${baseUrl}users/");
+    final url = AppConfig.apiUri('users/');
     final response = await http.post(
       url,
       headers: {'Content-Type': 'application/json'},
@@ -39,7 +37,7 @@ class ApiService {
     String email,
     String password,
   ) async {
-    final url = Uri.parse("${baseUrl}login/");
+    final url = AppConfig.apiUri('login/');
     final response = await http.post(
       url,
       headers: {'Content-Type': 'application/json'},

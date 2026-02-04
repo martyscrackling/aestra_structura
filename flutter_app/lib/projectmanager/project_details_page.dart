@@ -6,6 +6,7 @@ import 'widgets/dashboard_header.dart';
 import 'modals/task_details_modal.dart';
 import 'modals/phase_modal.dart';
 import 'subtask_manage.dart';
+import '../services/app_config.dart';
 
 class Phase {
   final int phaseId;
@@ -147,9 +148,7 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
   Future<void> _fetchPhases() async {
     try {
       final response = await http.get(
-        Uri.parse(
-          'http://127.0.0.1:8000/api/phases/?project_id=${widget.projectId}',
-        ),
+        AppConfig.apiUri('phases/?project_id=${widget.projectId}'),
       );
 
       if (response.statusCode == 200) {

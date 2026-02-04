@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../../services/app_config.dart';
 
 class PhasesWidget extends StatefulWidget {
   final int projectId;
@@ -23,9 +24,7 @@ class _PhasesWidgetState extends State<PhasesWidget> {
   Future<List<Map<String, dynamic>>> _fetchPhases() async {
     try {
       final response = await http.get(
-        Uri.parse(
-          'http://127.0.0.1:8000/api/phases/?project_id=${widget.projectId}',
-        ),
+        AppConfig.apiUri('phases/?project_id=${widget.projectId}'),
       );
 
       if (response.statusCode == 200) {

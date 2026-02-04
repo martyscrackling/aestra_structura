@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'dart:convert';
 import '../../services/auth_service.dart';
+import '../../services/app_config.dart';
 
 class AddWorkerModal extends StatefulWidget {
   final String workerType;
@@ -126,7 +127,7 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
         print('Sending supervisor data: $supervisorData');
 
         final response = await http.post(
-          Uri.parse('http://127.0.0.1:8000/api/supervisors/'),
+          AppConfig.apiUri('supervisors/'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode(supervisorData),
         );
