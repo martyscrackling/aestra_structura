@@ -76,8 +76,8 @@ if os.getenv("CORS_ALLOW_LOCALHOST", "0").strip() == "1":
     CORS_ALLOWED_ORIGIN_REGEXES = list(
         globals().get("CORS_ALLOWED_ORIGIN_REGEXES", [])
     ) + [
-        r"^http://localhost(:\\d+)?$",
-        r"^http://127\\.0\\.0\\.1(:\\d+)?$",
+        r"^http://localhost(:\d+)?$",
+        r"^http://127\.0\.0\.1(:\d+)?$",
     ]
 
 _csrf_trusted = os.getenv("CSRF_TRUSTED_ORIGINS", "").strip()
