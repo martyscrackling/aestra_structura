@@ -111,7 +111,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
       final projectResponse = await http.get(
         Uri.parse('http://127.0.0.1:8000/api/projects/$projectId/'),
       );
-      
+
       if (projectResponse.statusCode == 200) {
         _projectInfo = jsonDecode(projectResponse.body) as Map<String, dynamic>;
       }
@@ -306,7 +306,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
 
     if (confirmed == true) {
       if (!mounted) return;
-      
+
       // Show loading indicator
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -346,9 +346,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
         }
 
         // Prepare the request body
-        final Map<String, dynamic> requestBody = {
-          'status': backendStatus,
-        };
+        final Map<String, dynamic> requestBody = {'status': backendStatus};
 
         // Send PATCH request to update subtask
         final response = await http.patch(
@@ -372,9 +370,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(
-                'Failed to submit update: ${response.statusCode}',
-              ),
+              content: Text('Failed to submit update: ${response.statusCode}'),
               backgroundColor: Colors.red,
             ),
           );
@@ -515,7 +511,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
             style: ElevatedButton.styleFrom(backgroundColor: primary),
             onPressed: () async {
               final notes = notesCtrl.text.trim();
-              
+
               // Show loading
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
@@ -527,7 +523,9 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                         height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
                         ),
                       ),
                       SizedBox(width: 16),

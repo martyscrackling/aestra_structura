@@ -87,7 +87,7 @@ class _WorkforcePageState extends State<WorkforcePage> {
         );
       }
 
-      setState(() { 
+      setState(() {
         _groups = [WorkerGroup(title: 'All Workers', workers: allWorkers)];
         _isLoading = false;
       });
