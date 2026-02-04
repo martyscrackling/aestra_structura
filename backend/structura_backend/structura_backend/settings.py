@@ -20,6 +20,12 @@ SECRET_KEY = os.getenv("SECRET_KEY", "unsafe-dev-secret-key")
 _allowed_hosts = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").strip()
 ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts.split(",") if h.strip()]
 
+# Render sets the external hostname in an env var. This makes deployments work
+# even if ALLOWED_HOSTS isn't manually set.
+_render_external_hostname = os.getenv("RENDER_EXTERNAL_HOSTNAME", "").strip()
+if _render_external_hostname and _render_external_hostname not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(_render_external_hostname)
+
 
 # Application definition
 
