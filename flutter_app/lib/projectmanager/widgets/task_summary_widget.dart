@@ -7,12 +7,16 @@ class TaskSummaryWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    
+
     final isSmallPhone = screenWidth < 375;
     final isMobile = screenWidth < 768;
     final isTablet = screenWidth >= 768 && screenWidth < 1024;
-    
-    final padding = isSmallPhone ? 12.0 : isMobile ? 16.0 : 20.0;
+
+    final padding = isSmallPhone
+        ? 12.0
+        : isMobile
+        ? 16.0
+        : 20.0;
 
     return Container(
       padding: EdgeInsets.all(padding),
@@ -36,7 +40,13 @@ class TaskSummaryWidget extends StatelessWidget {
               Text(
                 'Task Summary',
                 style: TextStyle(
-                  fontSize: isSmallPhone ? 14.0 : isMobile ? 16.0 : isTablet ? 17.0 : 18.0,
+                  fontSize: isSmallPhone
+                      ? 14.0
+                      : isMobile
+                      ? 16.0
+                      : isTablet
+                      ? 17.0
+                      : 18.0,
                   fontWeight: FontWeight.w700,
                   color: const Color(0xFF0C1935),
                 ),
@@ -56,28 +66,38 @@ class TaskSummaryWidget extends StatelessWidget {
             children: [
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: EdgeInsets.all(
+                    isSmallPhone
+                        ? 8.0
+                        : isMobile
+                        ? 12.0
+                        : 16.0,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.blue[600],
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
-                    children: const [
-                      Icon(Icons.folder_outlined, color: Colors.white, size: 28),
-                      SizedBox(height: 8),
+                    children: [
+                      Icon(
+                        Icons.folder_outlined,
+                        color: Colors.white,
+                        size: isSmallPhone ? 20.0 : 28.0,
+                      ),
+                      SizedBox(height: isSmallPhone ? 4.0 : 8.0),
                       Text(
                         'Projects',
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 13,
+                          fontSize: isSmallPhone ? 10.0 : 13.0,
                         ),
                       ),
-                      SizedBox(height: 4),
+                      SizedBox(height: isSmallPhone ? 2.0 : 4.0),
                       Text(
                         '40',
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 24,
+                          fontSize: isSmallPhone ? 18.0 : 24.0,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -85,31 +105,47 @@ class TaskSummaryWidget extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 16),
+              SizedBox(
+                width: isSmallPhone
+                    ? 6.0
+                    : isMobile
+                    ? 8.0
+                    : 16.0,
+              ),
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: EdgeInsets.all(
+                    isSmallPhone
+                        ? 8.0
+                        : isMobile
+                        ? 12.0
+                        : 16.0,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.cyan[400],
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
-                    children: const [
-                      Icon(Icons.assignment_outlined, color: Colors.white, size: 28),
-                      SizedBox(height: 8),
+                    children: [
+                      Icon(
+                        Icons.assignment_outlined,
+                        color: Colors.white,
+                        size: isSmallPhone ? 20.0 : 28.0,
+                      ),
+                      SizedBox(height: isSmallPhone ? 4.0 : 8.0),
                       Text(
                         'Assigned',
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 13,
+                          fontSize: isSmallPhone ? 10.0 : 13.0,
                         ),
                       ),
-                      SizedBox(height: 4),
+                      SizedBox(height: isSmallPhone ? 2.0 : 4.0),
                       Text(
                         '79',
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 24,
+                          fontSize: isSmallPhone ? 18.0 : 24.0,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -117,31 +153,47 @@ class TaskSummaryWidget extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 16),
+              SizedBox(
+                width: isSmallPhone
+                    ? 6.0
+                    : isMobile
+                    ? 8.0
+                    : 16.0,
+              ),
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: EdgeInsets.all(
+                    isSmallPhone
+                        ? 8.0
+                        : isMobile
+                        ? 12.0
+                        : 16.0,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.grey[100],
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
                     children: [
-                      Icon(Icons.grid_view_rounded, color: Colors.grey[400], size: 28),
-                      const SizedBox(height: 8),
+                      Icon(
+                        Icons.grid_view_rounded,
+                        color: Colors.grey[400],
+                        size: isSmallPhone ? 20.0 : 28.0,
+                      ),
+                      SizedBox(height: isSmallPhone ? 4.0 : 8.0),
                       Text(
                         'All',
                         style: TextStyle(
                           color: Colors.grey[600],
-                          fontSize: 13,
+                          fontSize: isSmallPhone ? 10.0 : 13.0,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      SizedBox(height: isSmallPhone ? 2.0 : 4.0),
                       Text(
                         '89',
                         style: TextStyle(
                           color: Colors.grey[800],
-                          fontSize: 24,
+                          fontSize: isSmallPhone ? 18.0 : 24.0,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -154,10 +206,7 @@ class TaskSummaryWidget extends StatelessWidget {
           const SizedBox(height: 24),
           Text(
             'On-time Completion Rate',
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.grey[600],
-            ),
+            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
           ),
           const SizedBox(height: 8),
           Row(

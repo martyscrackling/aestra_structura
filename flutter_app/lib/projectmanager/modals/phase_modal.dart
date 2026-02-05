@@ -165,11 +165,20 @@ class _PhaseModalState extends State<PhaseModal> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 768;
+    final modalWidth = isMobile ? screenWidth * 0.95 : 520.0;
+    final maxHeight = isMobile ? screenWidth * 1.2 : 600.0;
+
     return Dialog(
       backgroundColor: Colors.transparent,
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 8 : 40,
+        vertical: isMobile ? 24 : 40,
+      ),
       child: Container(
-        width: 520,
-        constraints: const BoxConstraints(maxHeight: 600),
+        width: modalWidth,
+        constraints: BoxConstraints(maxHeight: maxHeight),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
@@ -179,30 +188,36 @@ class _PhaseModalState extends State<PhaseModal> {
           children: [
             // Header
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: EdgeInsets.all(isMobile ? 16 : 20),
               decoration: const BoxDecoration(
                 border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
               ),
               child: Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF3F4F6),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      widget.projectTitle,
-                      style: const TextStyle(fontSize: 12),
+                  Flexible(
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isMobile ? 8 : 12,
+                        vertical: isMobile ? 4 : 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF3F4F6),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        widget.projectTitle,
+                        style: TextStyle(fontSize: isMobile ? 11 : 12),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
                   const Spacer(),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.close),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
                   ),
                 ],
               ),
@@ -211,7 +226,7 @@ class _PhaseModalState extends State<PhaseModal> {
             // Content
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
+                padding: EdgeInsets.all(isMobile ? 16 : 24),
                 child: Form(
                   key: _formKey,
                   child: Column(
@@ -220,6 +235,7 @@ class _PhaseModalState extends State<PhaseModal> {
                       // Phase dropdown
                       DropdownButtonFormField<String>(
                         value: _selectedPhase,
+                        isExpanded: true,
                         decoration: InputDecoration(
                           hintText: 'Select Phase',
                           filled: true,
@@ -248,7 +264,10 @@ class _PhaseModalState extends State<PhaseModal> {
                                 color: isDisabled
                                     ? Colors.grey.shade400
                                     : Colors.black,
+                                fontSize: isMobile ? 13 : 14,
                               ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
                           );
                         }).toList(),

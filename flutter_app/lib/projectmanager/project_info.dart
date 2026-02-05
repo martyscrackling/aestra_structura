@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'widgets/sidebar.dart';
 import 'widgets/dashboard_header.dart';
+import 'widgets/responsive_page_layout.dart';
 import 'project_details_page.dart' as task_details;
 import '../services/app_config.dart';
 
@@ -170,114 +171,121 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return Scaffold(
-        backgroundColor: const Color(0xFFF4F6F9),
-        body: Row(
-          children: [
-            const Sidebar(currentPage: 'Projects'),
-            const Expanded(child: Center(child: CircularProgressIndicator())),
-          ],
-        ),
+      return const Scaffold(
+        backgroundColor: Color(0xFFF4F6F9),
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_error != null) {
       return Scaffold(
         backgroundColor: const Color(0xFFF4F6F9),
-        body: Row(
-          children: [
-            const Sidebar(currentPage: 'Projects'),
-            Expanded(child: Center(child: Text('Error: $_error'))),
-          ],
-        ),
+        body: Center(child: Text('Error: $_error')),
       );
     }
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F9),
-      body: Row(
-        children: [
-          const Sidebar(currentPage: 'Projects'),
-          Expanded(
-            child: Column(
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 768;
+
+    return ResponsivePageLayout(
+      currentPage: 'Projects',
+      title: 'Project Details',
+      child: SingleChildScrollView(
+        padding: EdgeInsets.all(isMobile ? 16 : 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Back button
+            Row(
               children: [
-                const DashboardHeader(title: 'Project Details'),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.arrow_back),
+                  color: const Color(0xFF0C1935),
+                  tooltip: 'Back to Projects',
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Back to Projects',
+                  style: TextStyle(
+                    fontSize: isMobile ? 14 : 16,
+                    color: const Color(0xFF6B7280),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Banner Image
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: _buildProjectImage(widget.projectImage),
+            ),
+
+            const SizedBox(height: 24),
+
+            // Project Title + Edit icon
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
                 Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Banner Image
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: _buildProjectImage(widget.projectImage),
-                        ),
+                  child: Text(
+                    widget.projectTitle,
+                    style: const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ),
+                const Icon(Icons.edit, size: 20),
+              ],
+            ),
 
-                        const SizedBox(height: 24),
+            const SizedBox(height: 6),
 
-                        // Project Title + Edit icon
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                widget.projectTitle,
-                                style: const TextStyle(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                            ),
-                            const Icon(Icons.edit, size: 20),
-                          ],
-                        ),
+            // Location
+            Text(
+              widget.projectLocation,
+              style: const TextStyle(
+                fontSize: 15,
+                color: Colors.grey,
+              ),
+            ),
 
-                        const SizedBox(height: 6),
+            const SizedBox(height: 25),
 
-                        // Location
-                        Text(
-                          widget.projectLocation,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            color: Colors.grey,
-                          ),
-                        ),
+            // Progress bar number
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                "${(_calculateProjectProgress() * 100).round()}%",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red[400],
+                ),
+              ),
+            ),
 
-                        const SizedBox(height: 25),
+            // Progress bar
+            LinearProgressIndicator(
+              value: _calculateProjectProgress(),
+              minHeight: 8,
+              borderRadius: BorderRadius.circular(20),
+              backgroundColor: Colors.grey[300],
+              valueColor: AlwaysStoppedAnimation<Color>(
+                Colors.red.shade400,
+              ),
+            ),
 
-                        // Progress bar number
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: Text(
-                            "${(_calculateProjectProgress() * 100).round()}%",
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.red[400],
-                            ),
-                          ),
-                        ),
-
-                        // Progress bar
-                        LinearProgressIndicator(
-                          value: _calculateProjectProgress(),
-                          minHeight: 8,
-                          borderRadius: BorderRadius.circular(20),
-                          backgroundColor: Colors.grey[300],
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.red.shade400,
-                          ),
-                        ),
-
-                        const SizedBox(height: 30),
+            const SizedBox(height: 30),
 
                         // Project Details Cards
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _projectDetailCard(
+                        if (isMobile)
+                          Column(
+                            children: [
+                              _projectDetailCard(
                                 icon: Icons.calendar_today,
                                 title: 'Duration',
                                 value: _projectInfo != null
@@ -285,47 +293,74 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                                     : 'Loading...',
                                 color: const Color(0xFF2196F3),
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _projectDetailCard(
+                              const SizedBox(height: 12),
+                              _projectDetailCard(
                                 icon: Icons.event,
                                 title: 'Start Date',
                                 value: _projectInfo?['start_date'] ?? 'N/A',
                                 color: const Color(0xFF4CAF50),
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _projectDetailCard(
+                              const SizedBox(height: 12),
+                              _projectDetailCard(
                                 icon: Icons.event_available,
                                 title: 'End Date',
                                 value: _projectInfo?['end_date'] ?? 'N/A',
                                 color: const Color(0xFFF44336),
                               ),
-                            ),
-                          ],
-                        ),
+                            ],
+                          )
+                        else
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _projectDetailCard(
+                                  icon: Icons.calendar_today,
+                                  title: 'Duration',
+                                  value: _projectInfo != null
+                                      ? '${_projectInfo!['duration_days'] ?? 'N/A'} days'
+                                      : 'Loading...',
+                                  color: const Color(0xFF2196F3),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _projectDetailCard(
+                                  icon: Icons.event,
+                                  title: 'Start Date',
+                                  value: _projectInfo?['start_date'] ?? 'N/A',
+                                  color: const Color(0xFF4CAF50),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _projectDetailCard(
+                                  icon: Icons.event_available,
+                                  title: 'End Date',
+                                  value: _projectInfo?['end_date'] ?? 'N/A',
+                                  color: const Color(0xFFF44336),
+                                ),
+                              ),
+                            ],
+                          ),
 
                         const SizedBox(height: 24),
 
                         // Client & Supervisor Cards
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            if (_clientInfo != null)
-                              _infoCard(
-                                title: "Client:",
-                                name:
-                                    '${_clientInfo!['first_name']} ${_clientInfo!['last_name']}',
-                                email: _clientInfo!['email'] ?? 'N/A',
-                                phone: _clientInfo!['phone_number'] ?? 'N/A',
-                              )
-                            else
-                              Expanded(
-                                child: Container(
+                        if (isMobile)
+                          Column(
+                            children: [
+                              if (_clientInfo != null)
+                                _infoCard(
+                                  title: "Client:",
+                                  name:
+                                      '${_clientInfo!['first_name']} ${_clientInfo!['last_name']}',
+                                  email: _clientInfo!['email'] ?? 'N/A',
+                                  phone: _clientInfo!['phone_number'] ?? 'N/A',
+                                  isMobile: true,
+                                )
+                              else
+                                Container(
                                   padding: const EdgeInsets.all(16),
-                                  margin: const EdgeInsets.only(right: 12),
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
@@ -336,21 +371,20 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                                     child: Text('No client assigned'),
                                   ),
                                 ),
-                              ),
-                            if (_supervisorInfo != null)
-                              _infoCard(
-                                title: "Supervisor-in charge:",
-                                name:
-                                    '${_supervisorInfo!['first_name']} ${_supervisorInfo!['last_name']}',
-                                email: _supervisorInfo!['email'] ?? 'N/A',
-                                phone:
-                                    _supervisorInfo!['phone_number'] ?? 'N/A',
-                              )
-                            else
-                              Expanded(
-                                child: Container(
+                              const SizedBox(height: 12),
+                              if (_supervisorInfo != null)
+                                _infoCard(
+                                  title: "Supervisor-in charge:",
+                                  name:
+                                      '${_supervisorInfo!['first_name']} ${_supervisorInfo!['last_name']}',
+                                  email: _supervisorInfo!['email'] ?? 'N/A',
+                                  phone:
+                                      _supervisorInfo!['phone_number'] ?? 'N/A',
+                                  isMobile: true,
+                                )
+                              else
+                                Container(
                                   padding: const EdgeInsets.all(16),
-                                  margin: const EdgeInsets.only(right: 12),
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
@@ -361,9 +395,65 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                                     child: Text('No supervisor assigned'),
                                   ),
                                 ),
-                              ),
-                          ],
-                        ),
+                            ],
+                          )
+                        else
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              if (_clientInfo != null)
+                                _infoCard(
+                                  title: "Client:",
+                                  name:
+                                      '${_clientInfo!['first_name']} ${_clientInfo!['last_name']}',
+                                  email: _clientInfo!['email'] ?? 'N/A',
+                                  phone: _clientInfo!['phone_number'] ?? 'N/A',
+                                  isMobile: false,
+                                )
+                              else
+                                Expanded(
+                                  child: Container(
+                                    padding: const EdgeInsets.all(16),
+                                    margin: const EdgeInsets.only(right: 12),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: Colors.grey.shade300,
+                                      ),
+                                    ),
+                                    child: const Center(
+                                      child: Text('No client assigned'),
+                                    ),
+                                  ),
+                                ),
+                              if (_supervisorInfo != null)
+                                _infoCard(
+                                  title: "Supervisor-in charge:",
+                                  name:
+                                      '${_supervisorInfo!['first_name']} ${_supervisorInfo!['last_name']}',
+                                  email: _supervisorInfo!['email'] ?? 'N/A',
+                                  phone:
+                                      _supervisorInfo!['phone_number'] ?? 'N/A',
+                                  isMobile: false,
+                                )
+                              else
+                                Expanded(
+                                  child: Container(
+                                    padding: const EdgeInsets.all(16),
+                                    margin: const EdgeInsets.only(right: 12),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: Colors.grey.shade300,
+                                      ),
+                                    ),
+                                    child: const Center(
+                                      child: Text('No supervisor assigned'),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
 
                         const SizedBox(height: 12),
 
@@ -454,14 +544,9 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                             ],
                           ),
                         ),
+                        SizedBox(height: isMobile ? 80 : 32), // Space for bottom nav
                       ],
                     ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -559,11 +644,95 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     required String name,
     required String email,
     required String phone,
+    required bool isMobile,
   }) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        margin: const EdgeInsets.only(right: 12),
+    return isMobile
+        ? Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(fontSize: 14, color: Colors.grey.shade800),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 26,
+                      backgroundColor: const Color(0xFFE8F5E9),
+                      child: const Icon(
+                        Icons.person,
+                        size: 26,
+                        color: Color(0xFF10B981),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            email,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey,
+                            ),
+                          ),
+                          Text(
+                            phone,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Align(
+                  alignment: Alignment.bottomRight,
+                  child: OutlinedButton(
+                    onPressed: () {},
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 10,
+                      ),
+                      side: const BorderSide(color: Colors.orangeAccent),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: const Text(
+                      "View Profile",
+                      style: TextStyle(color: Colors.orangeAccent, fontSize: 13),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )
+        : Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              margin: const EdgeInsets.only(right: 12),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Colors.grey.shade300),

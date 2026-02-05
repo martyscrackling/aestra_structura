@@ -813,7 +813,19 @@ class FooterSection extends StatelessWidget {
           else
             Column(
               crossAxisAlignment: CrossAxisAlignment.center,
-              children: [..._footerColumns()],
+              children: [
+                _footerColumns()[0], // Logo and Description
+                const SizedBox(height: 30),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _footerColumns()[2], // Quick Links
+                    const SizedBox(width: 40),
+                    _footerColumns()[4], // Contact Us
+                  ],
+                ),
+              ],
             ),
           const SizedBox(height: 40),
           const Divider(color: Colors.white24),

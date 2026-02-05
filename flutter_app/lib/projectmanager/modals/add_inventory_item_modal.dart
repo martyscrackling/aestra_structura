@@ -51,12 +51,17 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final isMobile = width < 600;
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
-        width: 600,
-        constraints: const BoxConstraints(maxHeight: 700),
-        padding: const EdgeInsets.all(24),
+        width: isMobile ? width * 0.9 : 600,
+        constraints: BoxConstraints(
+          maxHeight: isMobile ? MediaQuery.of(context).size.height * 0.85 : 700,
+        ),
+        padding: EdgeInsets.all(isMobile ? 16 : 24),
         child: Form(
           key: _formKey,
           child: Column(
@@ -172,10 +177,8 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
                       const SizedBox(height: 16),
 
                       // Category and Status Row
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
+                      isMobile
+                          ? Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text(
@@ -205,14 +208,7 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
                                     return null;
                                   },
                                 ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
+                                const SizedBox(height: 12),
                                 const Text(
                                   'Status',
                                   style: TextStyle(
@@ -247,17 +243,99 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
                                   },
                                 ),
                               ],
+                            )
+                          : Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Category',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF6B7280),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      TextFormField(
+                                        controller: _categoryController,
+                                        decoration: InputDecoration(
+                                          hintText: 'e.g., Machinery',
+                                          filled: true,
+                                          fillColor: const Color(0xFFF9FAFB),
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                            borderSide: BorderSide.none,
+                                          ),
+                                        ),
+                                        validator: (value) {
+                                          if (value == null || value.isEmpty) {
+                                            return 'Required';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Status',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF6B7280),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      DropdownButtonFormField<String>(
+                                        value: _selectedStatus,
+                                        decoration: InputDecoration(
+                                          filled: true,
+                                          fillColor: const Color(0xFFF9FAFB),
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                            borderSide: BorderSide.none,
+                                          ),
+                                        ),
+                                        items: _statusOptions.map((
+                                          String status,
+                                        ) {
+                                          return DropdownMenuItem<String>(
+                                            value: status,
+                                            child: Text(status),
+                                          );
+                                        }).toList(),
+                                        onChanged: (String? newValue) {
+                                          if (newValue != null) {
+                                            setState(() {
+                                              _selectedStatus = newValue;
+                                            });
+                                          }
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                        ],
-                      ),
                       const SizedBox(height: 16),
 
                       // Quantity and Serial Number Row
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
+                      isMobile
+                          ? Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text(
@@ -288,14 +366,7 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
                                     return null;
                                   },
                                 ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
+                                const SizedBox(height: 12),
                                 const Text(
                                   'Serial Number',
                                   style: TextStyle(
@@ -318,10 +389,81 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
                                   ),
                                 ),
                               ],
+                            )
+                          : Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Quantity',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF6B7280),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      TextFormField(
+                                        controller: _quantityController,
+                                        keyboardType: TextInputType.number,
+                                        decoration: InputDecoration(
+                                          hintText: '1',
+                                          filled: true,
+                                          fillColor: const Color(0xFFF9FAFB),
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                            borderSide: BorderSide.none,
+                                          ),
+                                        ),
+                                        validator: (value) {
+                                          if (value == null || value.isEmpty) {
+                                            return 'Required';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Serial Number',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF6B7280),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      TextFormField(
+                                        controller: _serialNumberController,
+                                        decoration: InputDecoration(
+                                          hintText: 'Optional',
+                                          filled: true,
+                                          fillColor: const Color(0xFFF9FAFB),
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                            borderSide: BorderSide.none,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                        ],
-                      ),
                       const SizedBox(height: 16),
 
                       // Location

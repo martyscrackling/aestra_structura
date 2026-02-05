@@ -37,33 +37,53 @@ class _SettingsPageState extends State<SettingsPage> {
             SettingsCard(
               title: 'Account',
               description: 'Update your basic information',
-              child: Wrap(
-                spacing: isMobile ? 12 : 16,
-                runSpacing: isMobile ? 12 : 16,
-                children: const [
-                  SizedBox(
-                    width: 260,
-                    child: _SettingsTextField(
-                      label: 'Full Name',
-                      value: 'AESTRA Admin',
+              child: isMobile
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        _SettingsTextField(
+                          label: 'Full Name',
+                          value: 'AESTRA Admin',
+                        ),
+                        SizedBox(height: 16),
+                        _SettingsTextField(
+                          label: 'Email',
+                          value: 'admin@structura.com',
+                        ),
+                        SizedBox(height: 16),
+                        _SettingsTextField(
+                          label: 'Company',
+                          value: 'Structura',
+                        ),
+                      ],
+                    )
+                  : Wrap(
+                      spacing: 16,
+                      runSpacing: 16,
+                      children: const [
+                        SizedBox(
+                          width: 260,
+                          child: _SettingsTextField(
+                            label: 'Full Name',
+                            value: 'AESTRA Admin',
+                          ),
+                        ),
+                        SizedBox(
+                          width: 260,
+                          child: _SettingsTextField(
+                            label: 'Email',
+                            value: 'admin@structura.com',
+                          ),
+                        ),
+                        SizedBox(
+                          width: 260,
+                          child: _SettingsTextField(
+                            label: 'Company',
+                            value: 'Structura',
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  SizedBox(
-                    width: 260,
-                    child: _SettingsTextField(
-                      label: 'Email',
-                      value: 'admin@structura.com',
-                    ),
-                  ),
-                  SizedBox(
-                    width: 260,
-                    child: _SettingsTextField(
-                      label: 'Company',
-                      value: 'Structura',
-                    ),
-                  ),
-                ],
-              ),
             ),
             const SizedBox(height: 20),
             SettingsCard(
@@ -85,9 +105,11 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   _SwitchTile(
                     label: 'Auto assign tasks',
-                    subtitle: 'Automatically assign workers based on availability',
+                    subtitle:
+                        'Automatically assign workers based on availability',
                     value: autoAssignments,
-                    onChanged: (value) => setState(() => autoAssignments = value),
+                    onChanged: (value) =>
+                        setState(() => autoAssignments = value),
                   ),
                 ],
               ),
@@ -222,9 +244,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         onPressed: () {},
                         style: OutlinedButton.styleFrom(
                           foregroundColor: const Color(0xFF0C1935),
-                          side: const BorderSide(
-                            color: Color(0xFFE5E7EB),
-                          ),
+                          side: const BorderSide(color: Color(0xFFE5E7EB)),
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
@@ -232,9 +252,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                         child: const Text(
                           'Enable',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: TextStyle(fontWeight: FontWeight.w600),
                         ),
                       ),
                     ),
@@ -267,18 +285,14 @@ class _SettingsPageState extends State<SettingsPage> {
                           onPressed: () {},
                           style: OutlinedButton.styleFrom(
                             foregroundColor: const Color(0xFF0C1935),
-                            side: const BorderSide(
-                              color: Color(0xFFE5E7EB),
-                            ),
+                            side: const BorderSide(color: Color(0xFFE5E7EB)),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
                             ),
                           ),
                           child: const Text(
                             'Enable',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style: TextStyle(fontWeight: FontWeight.w600),
                           ),
                         ),
                       ],
@@ -304,10 +318,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   const SizedBox(height: 4),
                   const Text(
                     'Temporarily suspend your Structura workspace access.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF6B7280),
-                    ),
+                    style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
                   ),
                   const SizedBox(height: 12),
                   SizedBox(
@@ -317,18 +328,14 @@ class _SettingsPageState extends State<SettingsPage> {
                       onPressed: () {},
                       style: OutlinedButton.styleFrom(
                         foregroundColor: const Color(0xFFF43F5E),
-                        side: const BorderSide(
-                          color: Color(0xFFFECACA),
-                        ),
+                        side: const BorderSide(color: Color(0xFFFECACA)),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
                       child: const Text(
                         'Deactivate',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: TextStyle(fontWeight: FontWeight.w600),
                       ),
                     ),
                   ),
@@ -348,6 +355,72 @@ class _SettingsIntro extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 768;
+
+    if (isMobile) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Workspace Settings',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF0C1935),
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Manage account details, preferences, and security.',
+            style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () {},
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF0C1935),
+                    side: const BorderSide(color: Color(0xFFE5E7EB)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text(
+                    'Reset',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () {},
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF7A18),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text(
+                    'Save',
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

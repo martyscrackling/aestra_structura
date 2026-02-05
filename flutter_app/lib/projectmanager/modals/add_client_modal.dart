@@ -205,11 +205,21 @@ class _AddClientModalState extends State<AddClientModal> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final isMobile = screenWidth < 600;
+
     return Dialog(
       backgroundColor: Colors.transparent,
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 16 : 40,
+        vertical: isMobile ? 24 : 40,
+      ),
       child: Container(
-        width: 700,
-        constraints: const BoxConstraints(maxHeight: 650),
+        width: isMobile ? double.infinity : 700,
+        constraints: BoxConstraints(
+          maxHeight: isMobile ? screenHeight * 0.9 : 650,
+        ),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
@@ -219,16 +229,16 @@ class _AddClientModalState extends State<AddClientModal> {
           children: [
             // Header
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: EdgeInsets.all(isMobile ? 16 : 20),
               decoration: const BoxDecoration(
                 border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
               ),
               child: Row(
                 children: [
-                  const Text(
+                  Text(
                     'Add a client',
                     style: TextStyle(
-                      fontSize: 20,
+                      fontSize: isMobile ? 18 : 20,
                       fontWeight: FontWeight.w700,
                       color: Color(0xFF0C1935),
                     ),
@@ -247,271 +257,529 @@ class _AddClientModalState extends State<AddClientModal> {
 
             // Form Content
             Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Left side - Image
-                  Container(
-                    width: 280,
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      children: [
-                        GestureDetector(
-                          onTap: _pickImage,
-                          child: Container(
-                            width: 200,
-                            height: 280,
-                            decoration: BoxDecoration(
-                              color: Colors.grey[200],
-                              borderRadius: BorderRadius.circular(12),
-                              image: _selectedImage != null
-                                  ? const DecorationImage(
-                                      image: AssetImage(
-                                        'assets/images/engineer.jpg',
-                                      ),
-                                      fit: BoxFit.cover,
+              child: isMobile
+                  ? SingleChildScrollView(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        children: [
+                          // Image on top for mobile
+                          GestureDetector(
+                            onTap: _pickImage,
+                            child: Container(
+                              width: 120,
+                              height: 120,
+                              decoration: BoxDecoration(
+                                color: Colors.grey[200],
+                                borderRadius: BorderRadius.circular(12),
+                                image: _selectedImage != null
+                                    ? const DecorationImage(
+                                        image: AssetImage(
+                                          'assets/images/engineer.jpg',
+                                        ),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : null,
+                              ),
+                              child: _selectedImage == null
+                                  ? Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.person_outline,
+                                          size: 40,
+                                          color: Colors.grey[400],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Upload photo',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                      ],
                                     )
                                   : null,
                             ),
-                            child: _selectedImage == null
-                                ? Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.person_outline,
-                                        size: 60,
-                                        color: Colors.grey[400],
+                          ),
+                          const SizedBox(height: 20),
+                          // Form for mobile
+                          Form(
+                            key: _formKey,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // First Name
+                                _buildTextField(
+                                  controller: _firstNameController,
+                                  hintText: 'First Name',
+                                  onChanged: (value) => _generateEmail(),
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Required';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+
+                                // Middle Name
+                                _buildTextField(
+                                  controller: _middleNameController,
+                                  hintText: 'Middle Name (Optional)',
+                                ),
+                                const SizedBox(height: 12),
+
+                                // Last Name
+                                _buildTextField(
+                                  controller: _lastNameController,
+                                  hintText: 'Last Name',
+                                  onChanged: (value) => _generateEmail(),
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Required';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+
+                                // Generated Account Email
+                                _buildTextField(
+                                  controller: _generatedEmailController,
+                                  hintText: 'Account Email (Auto-generated)',
+                                  readOnly: true,
+                                ),
+                                const SizedBox(height: 12),
+
+                                // Generated Password
+                                _buildTextField(
+                                  controller: _passwordController,
+                                  hintText: 'Password (Default)',
+                                  readOnly: true,
+                                ),
+                                const SizedBox(height: 12),
+
+                                // Phone Number
+                                _buildTextField(
+                                  controller: _phoneNumberController,
+                                  hintText: 'Phone Number',
+                                  keyboardType: TextInputType.phone,
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Required';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+
+                                // Birthdate
+                                _buildTextField(
+                                  controller: _birthdateController,
+                                  hintText: 'Birthdate (Optional)',
+                                  readOnly: true,
+                                  suffixIcon: Icons.calendar_today_outlined,
+                                  onTap: () => _selectDate(
+                                    context,
+                                    _birthdateController,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+
+                                // Status Dropdown
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Status',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF6B7280),
                                       ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        'Click to upload photo',
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF9FAFB),
+                                        border: Border.all(
+                                          color: Colors.grey[300]!,
+                                        ),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: DropdownButtonHideUnderline(
+                                        child: DropdownButton<String>(
+                                          value: _selectedStatus,
+                                          isExpanded: true,
+                                          items: const [
+                                            DropdownMenuItem(
+                                              value: 'active',
+                                              child: Text('Active'),
+                                            ),
+                                            DropdownMenuItem(
+                                              value: 'deactivated',
+                                              child: Text('Deactivated'),
+                                            ),
+                                            DropdownMenuItem(
+                                              value: 'fired',
+                                              child: Text('Fired'),
+                                            ),
+                                          ],
+                                          onChanged: (value) {
+                                            setState(() {
+                                              _selectedStatus =
+                                                  value ?? 'active';
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Left side - Image (Desktop)
+                        Container(
+                          width: 280,
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            children: [
+                              GestureDetector(
+                                onTap: _pickImage,
+                                child: Container(
+                                  width: 200,
+                                  height: 280,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[200],
+                                    borderRadius: BorderRadius.circular(12),
+                                    image: _selectedImage != null
+                                        ? const DecorationImage(
+                                            image: AssetImage(
+                                              'assets/images/engineer.jpg',
+                                            ),
+                                            fit: BoxFit.cover,
+                                          )
+                                        : null,
+                                  ),
+                                  child: _selectedImage == null
+                                      ? Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              Icons.person_outline,
+                                              size: 60,
+                                              color: Colors.grey[400],
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              'Click to upload photo',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey[600],
+                                              ),
+                                            ),
+                                          ],
+                                        )
+                                      : null,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Divider
+                        Container(width: 1, color: const Color(0xFFE5E7EB)),
+
+                        // Right side - Form (Desktop)
+                        Expanded(
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.all(24),
+                            child: Form(
+                              key: _formKey,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // First Name
+                                  _buildTextField(
+                                    controller: _firstNameController,
+                                    hintText: 'First Name',
+                                    onChanged: (value) => _generateEmail(),
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'Required';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  // Middle Name
+                                  _buildTextField(
+                                    controller: _middleNameController,
+                                    hintText: 'Middle Name (Optional)',
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  // Last Name
+                                  _buildTextField(
+                                    controller: _lastNameController,
+                                    hintText: 'Last Name',
+                                    onChanged: (value) => _generateEmail(),
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'Required';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  // Generated Account Email
+                                  _buildTextField(
+                                    controller: _generatedEmailController,
+                                    hintText: 'Account Email (Auto-generated)',
+                                    readOnly: true,
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  // Generated Password
+                                  _buildTextField(
+                                    controller: _passwordController,
+                                    hintText: 'Password (Default)',
+                                    readOnly: true,
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  // Phone Number
+                                  _buildTextField(
+                                    controller: _phoneNumberController,
+                                    hintText: 'Phone Number',
+                                    keyboardType: TextInputType.phone,
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'Required';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  // Birthdate
+                                  _buildTextField(
+                                    controller: _birthdateController,
+                                    hintText: 'Birthdate (Optional)',
+                                    readOnly: true,
+                                    suffixIcon: Icons.calendar_today_outlined,
+                                    onTap: () => _selectDate(
+                                      context,
+                                      _birthdateController,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  // Status Dropdown
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Status',
                                         style: TextStyle(
                                           fontSize: 12,
-                                          color: Colors.grey[600],
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF6B7280),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF9FAFB),
+                                          border: Border.all(
+                                            color: Colors.grey[300]!,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                        child: DropdownButtonHideUnderline(
+                                          child: DropdownButton<String>(
+                                            value: _selectedStatus,
+                                            isExpanded: true,
+                                            items: const [
+                                              DropdownMenuItem(
+                                                value: 'active',
+                                                child: Text('Active'),
+                                              ),
+                                              DropdownMenuItem(
+                                                value: 'deactivated',
+                                                child: Text('Deactivated'),
+                                              ),
+                                              DropdownMenuItem(
+                                                value: 'fired',
+                                                child: Text('Fired'),
+                                              ),
+                                            ],
+                                            onChanged: (value) {
+                                              setState(() {
+                                                _selectedStatus =
+                                                    value ?? 'active';
+                                              });
+                                            },
+                                          ),
                                         ),
                                       ),
                                     ],
-                                  )
-                                : null,
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                       ],
                     ),
-                  ),
-
-                  // Divider
-                  Container(width: 1, color: const Color(0xFFE5E7EB)),
-
-                  // Right side - Form
-                  Expanded(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(24),
-                      child: Form(
-                        key: _formKey,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // First Name
-                            _buildTextField(
-                              controller: _firstNameController,
-                              hintText: 'First Name',
-                              onChanged: (value) => _generateEmail(),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Required';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Middle Name
-                            _buildTextField(
-                              controller: _middleNameController,
-                              hintText: 'Middle Name (Optional)',
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Last Name
-                            _buildTextField(
-                              controller: _lastNameController,
-                              hintText: 'Last Name',
-                              onChanged: (value) => _generateEmail(),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Required';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Generated Account Email
-                            _buildTextField(
-                              controller: _generatedEmailController,
-                              hintText: 'Account Email (Auto-generated)',
-                              readOnly: true,
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Generated Password
-                            _buildTextField(
-                              controller: _passwordController,
-                              hintText: 'Password (Default)',
-                              readOnly: true,
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Phone Number
-                            _buildTextField(
-                              controller: _phoneNumberController,
-                              hintText: 'Phone Number',
-                              keyboardType: TextInputType.phone,
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Required';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Birthdate
-                            _buildTextField(
-                              controller: _birthdateController,
-                              hintText: 'Birthdate (Optional)',
-                              readOnly: true,
-                              suffixIcon: Icons.calendar_today_outlined,
-                              onTap: () =>
-                                  _selectDate(context, _birthdateController),
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Status Dropdown
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Status',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF6B7280),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF9FAFB),
-                                    border: Border.all(
-                                      color: Colors.grey[300]!,
-                                    ),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: DropdownButtonHideUnderline(
-                                    child: DropdownButton<String>(
-                                      value: _selectedStatus,
-                                      isExpanded: true,
-                                      items: const [
-                                        DropdownMenuItem(
-                                          value: 'active',
-                                          child: Text('Active'),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: 'deactivated',
-                                          child: Text('Deactivated'),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: 'fired',
-                                          child: Text('Fired'),
-                                        ),
-                                      ],
-                                      onChanged: (value) {
-                                        setState(() {
-                                          _selectedStatus = value ?? 'active';
-                                        });
-                                      },
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
             ),
 
             // Footer Buttons
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: EdgeInsets.all(isMobile ? 16 : 20),
               decoration: const BoxDecoration(
                 border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
               ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        side: const BorderSide(color: Color(0xFFE5E7EB)),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF6B7280),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _handleSubmit,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        backgroundColor: const Color(0xFFFF7A18),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.white,
-                                ),
+              child: isMobile
+                  ? Column(
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _handleSubmit,
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              backgroundColor: const Color(0xFFFF7A18),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
                               ),
-                            )
-                          : const Text(
-                              'Add Client',
+                            ),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                : const Text(
+                                    'Add Client',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              side: const BorderSide(color: Color(0xFFE5E7EB)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: const Text(
+                              'Cancel',
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.white,
+                                color: Color(0xFF6B7280),
                               ),
                             ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              side: const BorderSide(color: Color(0xFFE5E7EB)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: const Text(
+                              'Cancel',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF6B7280),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _handleSubmit,
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              backgroundColor: const Color(0xFFFF7A18),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                : const Text(
+                                    'Add Client',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              ),
             ),
           ],
         ),

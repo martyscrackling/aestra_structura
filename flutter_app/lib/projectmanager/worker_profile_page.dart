@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'widgets/sidebar.dart';
-import 'widgets/dashboard_header.dart';
+import 'widgets/responsive_page_layout.dart';
 import 'workforce_page.dart';
 import 'modals/view_edit_worker_modal.dart';
 
@@ -67,137 +66,147 @@ class WorkerProfilePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F9),
-      body: Row(
-        children: [
-          const Sidebar(currentPage: 'Workforce'),
-          Expanded(
-            child: Column(
-              children: [
-                const DashboardHeader(title: 'Workforce'),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Back button and header
-                        Row(
-                          children: [
-                            IconButton(
-                              onPressed: () => Navigator.of(context).pop(),
-                              icon: const Icon(Icons.arrow_back),
-                              color: const Color(0xFF0C1935),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '${worker.role} Profile',
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF0C1935),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
+    return ResponsivePageLayout(
+      currentPage: 'Workforce',
+      title: 'Workforce',
+      child: Builder(
+        builder: (context) {
+          final screenWidth = MediaQuery.of(context).size.width;
+          final isMobile = screenWidth < 768;
 
-                        // Worker Profile Card
-                        Container(
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.05),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            children: [
-                              // Profile Image
-                              CircleAvatar(
-                                radius: 50,
-                                backgroundImage: NetworkImage(worker.avatarUrl),
-                              ),
-                              const SizedBox(width: 24),
-                              // Profile Info
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+          return SingleChildScrollView(
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 16 : 24,
+              vertical: isMobile ? 16 : 24,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Back button and header
+                Row(
+                  children: [
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.arrow_back),
+                      color: const Color(0xFF0C1935),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${worker.role} Profile',
+                        style: TextStyle(
+                          fontSize: isMobile ? 20 : 24,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF0C1935),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: isMobile ? 16 : 24),
+
+                // Worker Profile Card
+                Container(
+                  padding: EdgeInsets.all(isMobile ? 16 : 24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: isMobile
+                      ? Column(
+                          children: [
+                            // Profile Image
+                            CircleAvatar(
+                              radius: 40,
+                              backgroundImage: NetworkImage(worker.avatarUrl),
+                            ),
+                            const SizedBox(height: 16),
+                            // Profile Info
+                            Column(
+                              children: [
+                                Text(
+                                  worker.name,
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF0C1935),
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFFF2E8),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    worker.role,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFFFF7A18),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Text(
-                                      worker.name,
-                                      style: const TextStyle(
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.w700,
-                                        color: Color(0xFF0C1935),
-                                      ),
+                                    const Icon(
+                                      Icons.email_outlined,
+                                      size: 16,
+                                      color: Color(0xFF6B7280),
                                     ),
-                                    const SizedBox(height: 4),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFFFF2E8),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
+                                    const SizedBox(width: 8),
+                                    Flexible(
                                       child: Text(
-                                        worker.role,
+                                        worker.email,
                                         style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                          color: Color(0xFFFF7A18),
+                                          fontSize: 14,
+                                          color: Color(0xFF6B7280),
                                         ),
+                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Row(
-                                      children: [
-                                        const Icon(
-                                          Icons.email_outlined,
-                                          size: 16,
-                                          color: Color(0xFF6B7280),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          worker.email,
-                                          style: const TextStyle(
-                                            fontSize: 14,
-                                            color: Color(0xFF6B7280),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Row(
-                                      children: [
-                                        const Icon(
-                                          Icons.phone_outlined,
-                                          size: 16,
-                                          color: Color(0xFF6B7280),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          worker.phone,
-                                          style: const TextStyle(
-                                            fontSize: 14,
-                                            color: Color(0xFF6B7280),
-                                          ),
-                                        ),
-                                      ],
                                     ),
                                   ],
                                 ),
-                              ),
-                              // Edit Button
-                              ElevatedButton.icon(
+                                const SizedBox(height: 6),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.phone_outlined,
+                                      size: 16,
+                                      color: Color(0xFF6B7280),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      worker.phone,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        color: Color(0xFF6B7280),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            // Edit Button
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
                                 onPressed: () {
                                   showDialog(
                                     context: context,
@@ -229,33 +238,147 @@ class WorkerProfilePage extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
+                        )
+                      : Row(
+                          children: [
+                            // Profile Image
+                            CircleAvatar(
+                              radius: 50,
+                              backgroundImage: NetworkImage(worker.avatarUrl),
+                            ),
+                            const SizedBox(width: 24),
+                            // Profile Info
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    worker.name,
+                                    style: const TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF0C1935),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFFF2E8),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      worker.role,
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFFFF7A18),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.email_outlined,
+                                        size: 16,
+                                        color: Color(0xFF6B7280),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        worker.email,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          color: Color(0xFF6B7280),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.phone_outlined,
+                                        size: 16,
+                                        color: Color(0xFF6B7280),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        worker.phone,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          color: Color(0xFF6B7280),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Edit Button
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (context) =>
+                                      ViewEditWorkerModal(worker: worker),
+                                );
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFFF7A18),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              icon: const Icon(
+                                Icons.edit_outlined,
+                                size: 18,
+                                color: Colors.white,
+                              ),
+                              label: const Text(
+                                'Edit Profile',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 32),
-
-                        // Active Projects Section
-                        _ProjectSection(
-                          title: 'Active Projects',
-                          count: _activeProjects.length,
-                          projects: _activeProjects,
-                        ),
-                        const SizedBox(height: 32),
-
-                        // Finished Projects Section
-                        _ProjectSection(
-                          title: 'Finished Projects',
-                          count: _finishedProjects.length,
-                          projects: _finishedProjects,
-                        ),
-                      ],
-                    ),
-                  ),
                 ),
+                SizedBox(height: isMobile ? 24 : 32),
+
+                // Active Projects Section
+                _ProjectSection(
+                  title: 'Active Projects',
+                  count: _activeProjects.length,
+                  projects: _activeProjects,
+                  isMobile: isMobile,
+                ),
+                SizedBox(height: isMobile ? 24 : 32),
+
+                // Finished Projects Section
+                _ProjectSection(
+                  title: 'Finished Projects',
+                  count: _finishedProjects.length,
+                  projects: _finishedProjects,
+                  isMobile: isMobile,
+                ),
+                SizedBox(height: isMobile ? 80 : 0),
               ],
             ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -265,11 +388,13 @@ class _ProjectSection extends StatelessWidget {
   final String title;
   final int count;
   final List<WorkerProject> projects;
+  final bool isMobile;
 
   const _ProjectSection({
     required this.title,
     required this.count,
     required this.projects,
+    required this.isMobile,
   });
 
   @override
@@ -279,17 +404,17 @@ class _ProjectSection extends StatelessWidget {
       children: [
         Text(
           '$title ($count)',
-          style: const TextStyle(
-            fontSize: 18,
+          style: TextStyle(
+            fontSize: isMobile ? 16 : 18,
             fontWeight: FontWeight.w700,
             color: Color(0xFF0C1935),
           ),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: isMobile ? 12 : 16),
         ...projects.map(
           (project) => Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: _ProjectCard(project: project),
+            padding: EdgeInsets.only(bottom: isMobile ? 12 : 16),
+            child: _ProjectCard(project: project, isMobile: isMobile),
           ),
         ),
       ],
@@ -299,13 +424,14 @@ class _ProjectSection extends StatelessWidget {
 
 class _ProjectCard extends StatelessWidget {
   final WorkerProject project;
+  final bool isMobile;
 
-  const _ProjectCard({required this.project});
+  const _ProjectCard({required this.project, required this.isMobile});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(isMobile ? 16 : 20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -320,26 +446,25 @@ class _ProjectCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
+          isMobile
+              ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        Text(
-                          project.projectName,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF0C1935),
+                        Expanded(
+                          child: Text(
+                            project.projectName,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF0C1935),
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 12),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
+                            horizontal: 8,
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
@@ -351,7 +476,7 @@ class _ProjectCard extends StatelessWidget {
                           child: Text(
                             project.status,
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               fontWeight: FontWeight.w600,
                               color: project.progress >= 1
                                   ? const Color(0xFF10B981)
@@ -361,38 +486,110 @@ class _ProjectCard extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     Row(
                       children: [
                         const Icon(
                           Icons.location_on_outlined,
-                          size: 16,
+                          size: 14,
                           color: Color(0xFF6B7280),
                         ),
                         const SizedBox(width: 4),
-                        Text(
-                          project.location,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: Color(0xFF6B7280),
+                        Expanded(
+                          child: Text(
+                            project.location,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF6B7280),
+                            ),
                           ),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${(project.progress * 100).round()}%',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF0C1935),
+                      ),
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                project.projectName,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF0C1935),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: project.progress >= 1
+                                      ? const Color(0xFFE5F8ED)
+                                      : const Color(0xFFFFF2E8),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  project.status,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: project.progress >= 1
+                                        ? const Color(0xFF10B981)
+                                        : const Color(0xFFFF7A18),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.location_on_outlined,
+                                size: 16,
+                                color: Color(0xFF6B7280),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                project.location,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Color(0xFF6B7280),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      '${(project.progress * 100).round()}%',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF0C1935),
+                      ),
+                    ),
                   ],
                 ),
-              ),
-              Text(
-                '${(project.progress * 100).round()}%',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF0C1935),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
+          SizedBox(height: isMobile ? 12 : 16),
           Row(
             children: [
               const Icon(
@@ -403,7 +600,10 @@ class _ProjectCard extends StatelessWidget {
               const SizedBox(width: 6),
               Text(
                 '${project.startDate} - ${project.endDate}',
-                style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+                style: TextStyle(
+                  fontSize: isMobile ? 12 : 13,
+                  color: Color(0xFF6B7280),
+                ),
               ),
             ],
           ),

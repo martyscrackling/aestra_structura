@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 class Sidebar extends StatefulWidget {
   final String currentPage;
@@ -40,7 +41,7 @@ class _SidebarState extends State<Sidebar> {
         return;
     }
     if (route != null) {
-      Navigator.pushReplacementNamed(context, route);
+      context.go(route);
     }
   }
 

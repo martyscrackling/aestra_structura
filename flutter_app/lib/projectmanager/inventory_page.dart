@@ -123,34 +123,80 @@ class _InventoryPageState extends State<InventoryPage> {
       currentPage: 'Inventory',
       title: 'Inventory',
       padding: EdgeInsets.zero,
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const SizedBox(height: 18),
-            // Search and Add button row
-            if (isMobile) ...[
-              SizedBox(
-                    width: double.infinity,
-                    child: TextField(
-                      onChanged: (v) => setState(() => _query = v),
-                      decoration: InputDecoration(
-                        hintText: 'Search tools',
-                        isDense: true,
-                        prefixIcon: const Icon(Icons.search, size: 20),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey[100],
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 18),
+              // Search and Add button row
+              if (isMobile) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: TextField(
+                    onChanged: (v) => setState(() => _query = v),
+                    decoration: InputDecoration(
+                      hintText: 'Search tools',
+                      isDense: true,
+                      prefixIcon: const Icon(Icons.search, size: 20),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey[100],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      final result = await showDialog(
+                        context: context,
+                        builder: (ctx) => const AddInventoryItemModal(),
+                      );
+                      if (result != null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Added: ${result['name']}')),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Add Item'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF7A18),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
+                ),
+              ] else
+                Row(
+                  children: [
+                    const Spacer(),
+                    // Search field (compact)
+                    SizedBox(
+                      width: isWide ? 360 : 200,
+                      child: TextField(
+                        onChanged: (v) => setState(() => _query = v),
+                        decoration: InputDecoration(
+                          hintText: 'Search tools, category, status',
+                          isDense: true,
+                          prefixIcon: const Icon(Icons.search, size: 20),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          filled: true,
+                          fillColor: Colors.grey[100],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
                       onPressed: () async {
                         final result = await showDialog(
                           context: context,
@@ -158,148 +204,94 @@ class _InventoryPageState extends State<InventoryPage> {
                         );
                         if (result != null) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Added: ${result['name']}'),
-                            ),
+                            SnackBar(content: Text('Added: ${result['name']}')),
                           );
                         }
                       },
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Add Tool'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFF7A18),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
+                      icon: const Icon(Icons.add, color: Colors.white),
+                      label: const Text(
+                        'Add Item',
+                        style: TextStyle(color: Colors.white),
                       ),
+                      style: ElevatedButton.styleFrom(backgroundColor: primary),
                     ),
-                  ),
-                ] else
-                  Row(
-                children: [
-                  const Spacer(),
-                      // Search field (compact)
-                      SizedBox(
-                        width: isWide ? 360 : 200,
-                        child: TextField(
-                          onChanged: (v) => setState(() => _query = v),
-                          decoration: InputDecoration(
-                            hintText: 'Search tools, category, status',
-                            isDense: true,
-                            prefixIcon: const Icon(Icons.search, size: 20),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            filled: true,
-                            fillColor: Colors.grey[100],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      ElevatedButton.icon(
-                        onPressed: () async {
-                          final result = await showDialog(
-                            context: context,
-                            builder: (ctx) => const AddInventoryItemModal(),
-                          );
-                          if (result != null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Added: ${result['name']}'),
-                              ),
-                            );
-                          }
-                        },
-                        icon: const Icon(Icons.add, color: Colors.white),
-                        label: const Text(
-                          'Add Item',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primary,
-                        ),
-                      ),
-                    ],
-                  ),
-            
-            const SizedBox(height: 18),
+                  ],
+                ),
 
-            // Grid of all items
-            Text(
-              'All Tools & Machines',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: Colors.grey[800],
+              const SizedBox(height: 18),
+
+              // Grid of all items
+              Text(
+                'All Tools & Machines',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.grey[800],
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            LayoutBuilder(
-              builder: (context, c) {
-                final maxWidth = c.maxWidth;
-                final crossAxis =
-                    maxWidth ~/ 260; // each card ~260px
-                final crossAxisCount = crossAxis.clamp(1, 4);
-                return GridView.builder(
-                  physics: const NeverScrollableScrollPhysics(),
-                  shrinkWrap: true,
-                  gridDelegate:
-                      SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: crossAxisCount,
-                        mainAxisExtent: 220,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                      ),
-                  itemCount: _filtered.length,
-                  itemBuilder: (context, i) {
-                    final t = _filtered[i];
-                    return _toolCard(t);
-                  },
-                );
-              },
-            ),
-            const SizedBox(height: 22),
+              const SizedBox(height: 12),
+              LayoutBuilder(
+                builder: (context, c) {
+                  final maxWidth = c.maxWidth;
+                  final crossAxis = maxWidth ~/ 260; // each card ~260px
+                  final crossAxisCount = crossAxis.clamp(1, 4);
+                  return GridView.builder(
+                    physics: const NeverScrollableScrollPhysics(),
+                    shrinkWrap: true,
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: crossAxisCount,
+                      mainAxisExtent: 250,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                    ),
+                    itemCount: _filtered.length,
+                    itemBuilder: (context, i) {
+                      final t = _filtered[i];
+                      return _toolCard(t);
+                    },
+                  );
+                },
+              ),
+              const SizedBox(height: 22),
 
-            // Active / In-use section
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Currently In Use',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
+              // Active / In-use section
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Currently In Use',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
-                ),
-                Text(
-                  '${_active.length} active',
-                  style: const TextStyle(color: Colors.grey),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _active.isEmpty
-                ? Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Text(
-                      'No active tools currently',
-                    ),
-                  )
-                : Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: _active
-                        .map((a) => _activeCard(a, context))
-                        .toList(),
+                  Text(
+                    '${_active.length} active',
+                    style: const TextStyle(color: Colors.grey),
                   ),
-            SizedBox(height: isMobile ? 100 : 28),
-          ],
+                ],
+              ),
+              const SizedBox(height: 12),
+              _active.isEmpty
+                  ? Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Text('No active tools currently'),
+                    )
+                  : Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: _active
+                          .map((a) => _activeCard(a, context))
+                          .toList(),
+                    ),
+              SizedBox(height: isMobile ? 100 : 28),
+            ],
+          ),
         ),
       ),
     );

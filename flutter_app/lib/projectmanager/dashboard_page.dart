@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'widgets/sidebar.dart';
 import 'widgets/dashboard_header.dart';
 import 'widgets/recent_projects.dart';
@@ -22,7 +23,7 @@ class PMDashboardPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    
+
     // Enhanced breakpoints for all screen sizes
     final isSmallPhone = screenWidth < 375;
     final isMobile = screenWidth < 768;
@@ -34,9 +35,11 @@ class PMDashboardPage extends StatelessWidget {
       body: isMobile
           ? _buildMobileLayout(context, isSmallPhone)
           : isTablet
-              ? _buildTabletLayout(context)
-              : _buildDesktopLayout(context, screenWidth),
-      bottomNavigationBar: !isDesktop ? const _BottomNavBar(currentPage: 'Dashboard') : null,
+          ? _buildTabletLayout(context)
+          : _buildDesktopLayout(context, screenWidth),
+      bottomNavigationBar: !isDesktop
+          ? const _BottomNavBar(currentPage: 'Dashboard')
+          : null,
     );
   }
 
@@ -108,8 +111,12 @@ class PMDashboardPage extends StatelessWidget {
   Widget _buildMobileLayout(BuildContext context, bool isSmallPhone) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isExtraSmallPhone = screenWidth <= 320;
-    final padding = isExtraSmallPhone ? 8.0 : isSmallPhone ? 12.0 : 16.0;
-    
+    final padding = isExtraSmallPhone
+        ? 8.0
+        : isSmallPhone
+        ? 12.0
+        : 16.0;
+
     return Column(
       children: [
         // Header fixed at top
@@ -122,7 +129,11 @@ class PMDashboardPage extends StatelessWidget {
               padding: EdgeInsets.all(padding),
               child: _buildDashboardContent(
                 screenWidth: screenWidth,
-                layout: isExtraSmallPhone ? LayoutType.extraSmallPhone : isSmallPhone ? LayoutType.smallPhone : LayoutType.mobile,
+                layout: isExtraSmallPhone
+                    ? LayoutType.extraSmallPhone
+                    : isSmallPhone
+                    ? LayoutType.smallPhone
+                    : LayoutType.mobile,
               ),
             ),
           ),
@@ -135,10 +146,14 @@ class PMDashboardPage extends StatelessWidget {
     required double screenWidth,
     required LayoutType layout,
   }) {
-    final spacing = layout == LayoutType.extraSmallPhone ? 8.0
-        : layout == LayoutType.smallPhone ? 12.0 
-        : layout == LayoutType.mobile ? 16.0 
-        : layout == LayoutType.tablet ? 20.0 
+    final spacing = layout == LayoutType.extraSmallPhone
+        ? 8.0
+        : layout == LayoutType.smallPhone
+        ? 12.0
+        : layout == LayoutType.mobile
+        ? 16.0
+        : layout == LayoutType.tablet
+        ? 20.0
         : 24.0;
 
     return Column(
@@ -149,7 +164,9 @@ class PMDashboardPage extends StatelessWidget {
         SizedBox(height: spacing),
 
         // Activity and Task Summary
-        if (layout == LayoutType.extraSmallPhone || layout == LayoutType.smallPhone || layout == LayoutType.mobile) ...[
+        if (layout == LayoutType.extraSmallPhone ||
+            layout == LayoutType.smallPhone ||
+            layout == LayoutType.mobile) ...[
           const ActivityWidget(),
           SizedBox(height: spacing),
           const TaskSummaryWidget(),
@@ -159,13 +176,9 @@ class PMDashboardPage extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Expanded(
-                child: ActivityWidget(),
-              ),
+              const Expanded(child: ActivityWidget()),
               SizedBox(width: spacing),
-              const Expanded(
-                child: TaskSummaryWidget(),
-              ),
+              const Expanded(child: TaskSummaryWidget()),
             ],
           )
         else
@@ -173,22 +186,21 @@ class PMDashboardPage extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Expanded(
-                flex: 2,
-                child: ActivityWidget(),
-              ),
+              const Expanded(flex: 2, child: ActivityWidget()),
               SizedBox(width: spacing),
-              const Expanded(
-                child: TaskSummaryWidget(),
-              ),
+              const Expanded(child: TaskSummaryWidget()),
             ],
           ),
 
-        if (layout != LayoutType.extraSmallPhone && layout != LayoutType.smallPhone && layout != LayoutType.mobile) 
+        if (layout != LayoutType.extraSmallPhone &&
+            layout != LayoutType.smallPhone &&
+            layout != LayoutType.mobile)
           SizedBox(height: spacing),
 
         // Task Today and Active Workers
-        if (layout == LayoutType.extraSmallPhone || layout == LayoutType.smallPhone || layout == LayoutType.mobile) ...[
+        if (layout == LayoutType.extraSmallPhone ||
+            layout == LayoutType.smallPhone ||
+            layout == LayoutType.mobile) ...[
           const TaskTodayWidget(),
           SizedBox(height: spacing),
           const ActiveWorkersWidget(),
@@ -198,13 +210,9 @@ class PMDashboardPage extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Expanded(
-                child: TaskTodayWidget(),
-              ),
+              const Expanded(child: TaskTodayWidget()),
               SizedBox(width: spacing),
-              const Expanded(
-                child: ActiveWorkersWidget(),
-              ),
+              const Expanded(child: ActiveWorkersWidget()),
             ],
           )
         else
@@ -212,14 +220,9 @@ class PMDashboardPage extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Expanded(
-                flex: 2,
-                child: TaskTodayWidget(),
-              ),
+              const Expanded(flex: 2, child: TaskTodayWidget()),
               SizedBox(width: spacing),
-              const Expanded(
-                child: ActiveWorkersWidget(),
-              ),
+              const Expanded(child: ActiveWorkersWidget()),
             ],
           ),
       ],
@@ -227,13 +230,7 @@ class PMDashboardPage extends StatelessWidget {
   }
 }
 
-enum LayoutType {
-  extraSmallPhone,
-  smallPhone,
-  mobile,
-  tablet,
-  desktop,
-}
+enum LayoutType { extraSmallPhone, smallPhone, mobile, tablet, desktop }
 
 class _BottomNavBar extends StatelessWidget {
   final String currentPage;
@@ -290,47 +287,46 @@ class _BottomNavBar extends StatelessWidget {
     if (label == "More") {
       return InkWell(
         onTap: () => _showMoreMenu(context),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              color: Colors.white70,
-              size: 24,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 10,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: Colors.white70, size: 24),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: const TextStyle(color: Colors.white70, fontSize: 10),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
 
     return InkWell(
       onTap: () => _navigateToPage(context, label),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            color: isActive ? const Color(0xFF1396E9) : Colors.white70,
-            size: 24,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
               color: isActive ? const Color(0xFF1396E9) : Colors.white70,
-              fontSize: 10,
-              fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+              size: 24,
             ),
-          ),
-        ],
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: isActive ? const Color(0xFF1396E9) : Colors.white70,
+                fontSize: 10,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -347,7 +343,11 @@ class _BottomNavBar extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildMoreMenuItem(context, "Inventory", Icons.inventory_2_outlined),
+            _buildMoreMenuItem(
+              context,
+              "Inventory",
+              Icons.inventory_2_outlined,
+            ),
             _buildMoreMenuItem(context, "Reports", Icons.insert_chart),
             _buildMoreMenuItem(context, "Settings", Icons.settings),
           ],
@@ -359,10 +359,7 @@ class _BottomNavBar extends StatelessWidget {
   Widget _buildMoreMenuItem(BuildContext context, String label, IconData icon) {
     return ListTile(
       leading: Icon(icon, color: Colors.white70),
-      title: Text(
-        label,
-        style: const TextStyle(color: Colors.white70),
-      ),
+      title: Text(label, style: const TextStyle(color: Colors.white70)),
       onTap: () {
         Navigator.pop(context);
         _navigateToPage(context, label);
@@ -371,8 +368,19 @@ class _BottomNavBar extends StatelessWidget {
   }
 
   void _navigateToPage(BuildContext context, String label) {
-    // Navigation logic would go here
-    // For now, just print
-    debugPrint('Navigate to: $label');
+    final routeMap = {
+      'Dashboard': '/dashboard',
+      'Projects': '/projects',
+      'Workforce': '/workforce',
+      'Clients': '/clients',
+      'Inventory': '/inventory',
+      'Reports': '/reports',
+      'Settings': '/settings',
+    };
+
+    final route = routeMap[label];
+    if (route != null) {
+      context.go(route);
+    }
   }
 }

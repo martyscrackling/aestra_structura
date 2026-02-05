@@ -358,6 +358,81 @@ class _ProjectsHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 768;
+
+    if (isMobile) {
+      // Mobile layout: Stack vertically
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              Text(
+                'Projects',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF0C1935),
+                ),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Monitor construction progress across all active sites.',
+                style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Controls row for mobile
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 40,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF7A18),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => const CreateProjectModal(),
+                      ).then((_) {
+                        onRefresh();
+                      });
+                    },
+                    icon: const Icon(Icons.add, size: 18, color: Colors.black),
+                    label: const Text(
+                      'Create',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: _SearchField(isMobile: true),
+              ),
+              const SizedBox(width: 8),
+              _SortButton(onPressed: onRefresh, isMobile: true),
+            ],
+          ),
+        ],
+      );
+    }
+
+    // Desktop layout: Single row
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -409,21 +484,23 @@ class _ProjectsHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 16),
-        const _SearchField(),
+        const _SearchField(isMobile: false),
         const SizedBox(width: 12),
-        _SortButton(onPressed: onRefresh),
+        _SortButton(onPressed: onRefresh, isMobile: false),
       ],
     );
   }
 }
 
 class _SearchField extends StatelessWidget {
-  const _SearchField();
+  const _SearchField({required this.isMobile});
+
+  final bool isMobile;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 220,
+      width: isMobile ? null : 220,
       height: 40,
       child: TextField(
         decoration: InputDecoration(
@@ -431,7 +508,7 @@ class _SearchField extends StatelessWidget {
           fillColor: Colors.white,
           prefixIcon: const Icon(Icons.search, size: 18),
           hintText: 'Search projects…',
-          hintStyle: const TextStyle(fontSize: 13),
+          hintStyle: TextStyle(fontSize: isMobile ? 12 : 13),
           contentPadding: const EdgeInsets.symmetric(horizontal: 12),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
@@ -444,12 +521,33 @@ class _SearchField extends StatelessWidget {
 }
 
 class _SortButton extends StatelessWidget {
-  const _SortButton({required this.onPressed});
+  const _SortButton({required this.onPressed, required this.isMobile});
 
   final VoidCallback onPressed;
+  final bool isMobile;
 
   @override
   Widget build(BuildContext context) {
+    if (isMobile) {
+      // Mobile: Icon only button
+      return SizedBox(
+        height: 40,
+        width: 40,
+        child: OutlinedButton(
+          onPressed: onPressed,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: const Color(0xFF0C1935),
+            side: const BorderSide(color: Color(0xFFE5E7EB)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            padding: EdgeInsets.zero,
+          ),
+          child: const Icon(Icons.sort, size: 18),
+        ),
+      );
+    }
+
     return SizedBox(
       height: 40,
       child: OutlinedButton.icon(

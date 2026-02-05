@@ -193,11 +193,21 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final isMobile = screenWidth < 600;
+
     return Dialog(
       backgroundColor: Colors.transparent,
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 16 : 40,
+        vertical: isMobile ? 24 : 40,
+      ),
       child: Container(
-        width: 900,
-        constraints: const BoxConstraints(maxHeight: 650),
+        width: isMobile ? double.infinity : 900,
+        constraints: BoxConstraints(
+          maxHeight: isMobile ? screenHeight * 0.9 : 650,
+        ),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
@@ -207,7 +217,7 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
           children: [
             // Header
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: EdgeInsets.all(isMobile ? 16 : 20),
               decoration: const BoxDecoration(
                 border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
               ),
@@ -220,15 +230,16 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
                     padding: EdgeInsets.zero,
                   ),
                   const SizedBox(width: 12),
-                  Text(
-                    widget.workerType,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF0C1935),
+                  Expanded(
+                    child: Text(
+                      widget.workerType,
+                      style: TextStyle(
+                        fontSize: isMobile ? 18 : 20,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF0C1935),
+                      ),
                     ),
                   ),
-                  const Spacer(),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.close),
@@ -242,225 +253,371 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
 
             // Form Content
             Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Left side - Image
-                  Container(
-                    width: 280,
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      children: [
-                        GestureDetector(
-                          onTap: _pickImage,
-                          child: Container(
-                            width: 200,
-                            height: 280,
-                            decoration: BoxDecoration(
-                              color: Colors.grey[200],
-                              borderRadius: BorderRadius.circular(12),
-                              image: _selectedImage != null
-                                  ? const DecorationImage(
-                                      image: AssetImage(
-                                        'assets/images/engineer.jpg',
-                                      ),
-                                      fit: BoxFit.cover,
+              child: isMobile
+                  ? SingleChildScrollView(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        children: [
+                          // Image on top for mobile
+                          GestureDetector(
+                            onTap: _pickImage,
+                            child: Container(
+                              width: 120,
+                              height: 120,
+                              decoration: BoxDecoration(
+                                color: Colors.grey[200],
+                                borderRadius: BorderRadius.circular(12),
+                                image: _selectedImage != null
+                                    ? const DecorationImage(
+                                        image: AssetImage(
+                                          'assets/images/engineer.jpg',
+                                        ),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : null,
+                              ),
+                              child: _selectedImage == null
+                                  ? Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.person_outline,
+                                          size: 40,
+                                          color: Colors.grey[400],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Upload photo',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                      ],
                                     )
                                   : null,
                             ),
-                            child: _selectedImage == null
-                                ? Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.person_outline,
-                                        size: 60,
-                                        color: Colors.grey[400],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        'Click to upload photo',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey[600],
-                                        ),
-                                      ),
-                                    ],
-                                  )
-                                : null,
+                          ),
+                          const SizedBox(height: 20),
+                          // Form for mobile
+                          Form(
+                            key: _formKey,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: _buildFormFields(isMobile),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Left side - Image
+                        Container(
+                          width: 280,
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            children: [
+                              GestureDetector(
+                                onTap: _pickImage,
+                                child: Container(
+                                  width: 200,
+                                  height: 280,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[200],
+                                    borderRadius: BorderRadius.circular(12),
+                                    image: _selectedImage != null
+                                        ? const DecorationImage(
+                                            image: AssetImage(
+                                              'assets/images/engineer.jpg',
+                                            ),
+                                            fit: BoxFit.cover,
+                                          )
+                                        : null,
+                                  ),
+                                  child: _selectedImage == null
+                                      ? Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              Icons.person_outline,
+                                              size: 60,
+                                              color: Colors.grey[400],
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              'Click to upload photo',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey[600],
+                                              ),
+                                            ),
+                                          ],
+                                        )
+                                      : null,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Divider
+                        Container(width: 1, color: const Color(0xFFE5E7EB)),
+
+                        // Right side - Form
+                        Expanded(
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.all(24),
+                            child: Form(
+                              key: _formKey,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: _buildFormFields(false),
+                              ),
+                            ),
                           ),
                         ),
                       ],
                     ),
-                  ),
+            ),
 
-                  // Divider
-                  Container(width: 1, color: const Color(0xFFE5E7EB)),
-
-                  // Right side - Form
-                  Expanded(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(24),
-                      child: Form(
-                        key: _formKey,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // First Name
-                            _buildTextField(
-                              controller: _firstNameController,
-                              hintText: 'First Name',
-                              onChanged: (value) => _generateEmail(),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Required';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Middle Name
-                            _buildTextField(
-                              controller: _middleNameController,
-                              hintText: 'Middle Name (Optional)',
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Last Name
-                            _buildTextField(
-                              controller: _lastNameController,
-                              hintText: 'Last Name',
-                              onChanged: (value) => _generateEmail(),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Required';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Generated Account Email
-                            _buildTextField(
-                              controller: _generatedEmailController,
-                              hintText: 'Account Email (Auto-generated)',
-                              readOnly: true,
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Generated Password
-                            _buildTextField(
-                              controller: _passwordController,
-                              hintText: 'Password (Default)',
-                              readOnly: true,
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Phone Number
-                            _buildTextField(
-                              controller: _phoneNumberController,
-                              hintText: 'Phone Number',
-                              keyboardType: TextInputType.phone,
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Required';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Birthdate
-                            _buildTextField(
-                              controller: _birthdateController,
-                              hintText: 'Birthdate (Optional)',
-                              readOnly: true,
-                              suffixIcon: Icons.calendar_today_outlined,
-                              onTap: () =>
-                                  _selectDate(context, _birthdateController),
-                            ),
-                            const SizedBox(height: 16),
-
-                            // SSS ID
-                            _buildTextField(
-                              controller: _sssIdController,
-                              hintText: 'SSS ID (Optional)',
-                            ),
-                            const SizedBox(height: 16),
-
-                            // PhilHealth ID
-                            _buildTextField(
-                              controller: _philHealthIdController,
-                              hintText: 'PhilHealth ID (Optional)',
-                            ),
-                            const SizedBox(height: 16),
-
-                            // PagIbig ID
-                            _buildTextField(
-                              controller: _pagIbigIdController,
-                              hintText: 'PagIbig ID (Optional)',
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Payrate
-                            _buildTextField(
-                              controller: _payrateController,
-                              hintText: 'Payrate (Optional)',
-                              keyboardType: TextInputType.number,
-                            ),
-                            const SizedBox(height: 16),
-
-                            const SizedBox(height: 24),
-
-                            // Add Button
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: _isLoading ? null : _handleSubmit,
-                                style: ElevatedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 14,
-                                  ),
-                                  backgroundColor: const Color(0xFFFF7A18),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                                child: _isLoading
-                                    ? const SizedBox(
-                                        height: 20,
-                                        width: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          valueColor:
-                                              AlwaysStoppedAnimation<Color>(
-                                                Colors.white,
-                                              ),
-                                        ),
-                                      )
-                                    : const Text(
-                                        'Add Worker',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.white,
-                                        ),
-                                      ),
+            // Footer Buttons
+            Container(
+              padding: EdgeInsets.all(isMobile ? 16 : 20),
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
+              ),
+              child: isMobile
+                  ? Column(
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _handleSubmit,
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              backgroundColor: const Color(0xFFFF7A18),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
                               ),
                             ),
-                          ],
+                            child: _isLoading
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                : const Text(
+                                    'Add Worker',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              side: const BorderSide(color: Color(0xFFE5E7EB)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: const Text(
+                              'Cancel',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF6B7280),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              side: const BorderSide(color: Color(0xFFE5E7EB)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: const Text(
+                              'Cancel',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF6B7280),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _handleSubmit,
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              backgroundColor: const Color(0xFFFF7A18),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                : const Text(
+                                    'Add Worker',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  List<Widget> _buildFormFields(bool isMobile) {
+    final spacing = isMobile ? 12.0 : 16.0;
+    return [
+      // First Name
+      _buildTextField(
+        controller: _firstNameController,
+        hintText: 'First Name',
+        onChanged: (value) => _generateEmail(),
+        validator: (value) {
+          if (value == null || value.isEmpty) {
+            return 'Required';
+          }
+          return null;
+        },
+      ),
+      SizedBox(height: spacing),
+
+      // Middle Name
+      _buildTextField(
+        controller: _middleNameController,
+        hintText: 'Middle Name (Optional)',
+      ),
+      SizedBox(height: spacing),
+
+      // Last Name
+      _buildTextField(
+        controller: _lastNameController,
+        hintText: 'Last Name',
+        onChanged: (value) => _generateEmail(),
+        validator: (value) {
+          if (value == null || value.isEmpty) {
+            return 'Required';
+          }
+          return null;
+        },
+      ),
+      SizedBox(height: spacing),
+
+      // Generated Account Email
+      _buildTextField(
+        controller: _generatedEmailController,
+        hintText: 'Account Email (Auto-generated)',
+        readOnly: true,
+      ),
+      SizedBox(height: spacing),
+
+      // Generated Password
+      _buildTextField(
+        controller: _passwordController,
+        hintText: 'Password (Default)',
+        readOnly: true,
+      ),
+      SizedBox(height: spacing),
+
+      // Phone Number
+      _buildTextField(
+        controller: _phoneNumberController,
+        hintText: 'Phone Number',
+        keyboardType: TextInputType.phone,
+        validator: (value) {
+          if (value == null || value.isEmpty) {
+            return 'Required';
+          }
+          return null;
+        },
+      ),
+      SizedBox(height: spacing),
+
+      // Birthdate
+      _buildTextField(
+        controller: _birthdateController,
+        hintText: 'Birthdate (Optional)',
+        readOnly: true,
+        suffixIcon: Icons.calendar_today_outlined,
+        onTap: () => _selectDate(context, _birthdateController),
+      ),
+      SizedBox(height: spacing),
+
+      // SSS ID
+      _buildTextField(
+        controller: _sssIdController,
+        hintText: 'SSS ID (Optional)',
+      ),
+      SizedBox(height: spacing),
+
+      // PhilHealth ID
+      _buildTextField(
+        controller: _philHealthIdController,
+        hintText: 'PhilHealth ID (Optional)',
+      ),
+      SizedBox(height: spacing),
+
+      // PagIbig ID
+      _buildTextField(
+        controller: _pagIbigIdController,
+        hintText: 'PagIbig ID (Optional)',
+      ),
+      SizedBox(height: spacing),
+
+      // Payrate
+      _buildTextField(
+        controller: _payrateController,
+        hintText: 'Payrate (Optional)',
+        keyboardType: TextInputType.number,
+      ),
+    ];
   }
 
   Widget _buildTextField({

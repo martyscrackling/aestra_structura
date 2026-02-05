@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'widgets/sidebar.dart';
 import 'widgets/dashboard_header.dart';
+import 'widgets/responsive_page_layout.dart';
 import 'modals/task_details_modal.dart';
 import 'modals/phase_modal.dart';
 import 'subtask_manage.dart';
@@ -232,72 +233,68 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F9),
-      body: Row(
-        children: [
-          const Sidebar(currentPage: 'Projects'),
-          Expanded(
-            child: Column(
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 768;
+
+    return ResponsivePageLayout(
+      currentPage: 'Projects',
+      title: 'Projects',
+      child: SingleChildScrollView(
+        padding: EdgeInsets.all(isMobile ? 16 : 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Back button and project header
+            Row(
               children: [
-                const DashboardHeader(title: 'Projects'),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.arrow_back),
+                  color: const Color(0xFF0C1935),
+                ),
+                const SizedBox(width: 8),
                 Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Back button and project header
-                        Row(
-                          children: [
-                            IconButton(
-                              onPressed: () => Navigator.of(context).pop(),
-                              icon: const Icon(Icons.arrow_back),
-                              color: const Color(0xFF0C1935),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    widget.projectTitle,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.w700,
-                                      color: Color(0xFF0C1935),
-                                    ),
-                                  ),
-                                  Text(
-                                    widget.projectLocation,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      color: Color(0xFF6B7280),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            // Project info badge
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: _calculateProjectProgress() >= 1
-                                    ? const Color(0xFFE5F8ED)
-                                    : const Color(0xFFFFF2E8),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                '${(_calculateProjectProgress() * 100).round()}%',
-                                style: TextStyle(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.projectTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: isMobile ? 18 : 24,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF0C1935),
+                        ),
+                      ),
+                      Text(
+                        widget.projectLocation,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: isMobile ? 12 : 14,
+                          color: const Color(0xFF6B7280),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                // Project info badge
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _calculateProjectProgress() >= 1
+                        ? const Color(0xFFE5F8ED)
+                        : const Color(0xFFFFF2E8),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${(_calculateProjectProgress() * 100).round()}%',
+                    style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
                                   color: _calculateProjectProgress() >= 1
@@ -497,15 +494,10 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
                             onRefresh: _fetchPhases,
                           ),
                         ],
+                        SizedBox(height: isMobile ? 80 : 32), // Space for bottom nav
                       ],
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

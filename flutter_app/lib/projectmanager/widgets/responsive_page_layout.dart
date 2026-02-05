@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'sidebar.dart';
 import 'dashboard_header.dart';
 import '../dashboard_page.dart' show LayoutType;
@@ -20,7 +21,7 @@ class ResponsivePageLayout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    
+
     final isExtraSmallPhone = screenWidth <= 320;
     final isSmallPhone = screenWidth < 375;
     final isMobile = screenWidth < 768;
@@ -32,9 +33,11 @@ class ResponsivePageLayout extends StatelessWidget {
       body: isMobile
           ? _buildMobileLayout(context, isExtraSmallPhone, isSmallPhone)
           : isTablet
-              ? _buildTabletLayout(context)
-              : _buildDesktopLayout(context, screenWidth),
-      bottomNavigationBar: !isDesktop ? _BottomNavBar(currentPage: currentPage) : null,
+          ? _buildTabletLayout(context)
+          : _buildDesktopLayout(context, screenWidth),
+      bottomNavigationBar: !isDesktop
+          ? _BottomNavBar(currentPage: currentPage)
+          : null,
     );
   }
 
@@ -70,8 +73,10 @@ class ResponsivePageLayout extends StatelessWidget {
   }
 
   Widget _buildTabletLayout(BuildContext context) {
-    final contentPadding = _getContentPadding(MediaQuery.of(context).size.width);
-    
+    final contentPadding = _getContentPadding(
+      MediaQuery.of(context).size.width,
+    );
+
     return Column(
       children: [
         DashboardHeader(title: title),
@@ -85,9 +90,15 @@ class ResponsivePageLayout extends StatelessWidget {
     );
   }
 
-  Widget _buildMobileLayout(BuildContext context, bool isExtraSmallPhone, bool isSmallPhone) {
-    final contentPadding = _getContentPadding(MediaQuery.of(context).size.width);
-    
+  Widget _buildMobileLayout(
+    BuildContext context,
+    bool isExtraSmallPhone,
+    bool isSmallPhone,
+  ) {
+    final contentPadding = _getContentPadding(
+      MediaQuery.of(context).size.width,
+    );
+
     return Column(
       children: [
         DashboardHeader(title: title),
@@ -169,18 +180,11 @@ class _BottomNavBar extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              color: Colors.white70,
-              size: 24,
-            ),
+            Icon(icon, color: Colors.white70, size: 24),
             const SizedBox(height: 4),
             Text(
               label,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 10,
-              ),
+              style: const TextStyle(color: Colors.white70, fontSize: 10),
             ),
           ],
         ),
@@ -229,7 +233,11 @@ class _BottomNavBar extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildMoreMenuItem(context, "Inventory", Icons.inventory_2_outlined),
+            _buildMoreMenuItem(
+              context,
+              "Inventory",
+              Icons.inventory_2_outlined,
+            ),
             _buildMoreMenuItem(context, "Reports", Icons.insert_chart),
             _buildMoreMenuItem(context, "Settings", Icons.settings),
           ],
@@ -241,10 +249,7 @@ class _BottomNavBar extends StatelessWidget {
   Widget _buildMoreMenuItem(BuildContext context, String label, IconData icon) {
     return ListTile(
       leading: Icon(icon, color: Colors.white70),
-      title: Text(
-        label,
-        style: const TextStyle(color: Colors.white70),
-      ),
+      title: Text(label, style: const TextStyle(color: Colors.white70)),
       onTap: () {
         Navigator.pop(context);
         _navigateToPage(context, label);
@@ -262,11 +267,12 @@ class _BottomNavBar extends StatelessWidget {
       'Reports': '/reports',
       'Settings': '/settings',
     };
-    
+
     final route = routeMap[label];
     if (route != null) {
       print('Navigating to: $route'); // Debug log
-      Navigator.of(context).pushReplacementNamed(route);
+      // Use pushReplacement to ensure proper navigation
+      GoRouter.of(context).go(route);
     } else {
       print('Route not found for: $label'); // Debug log
     }
