@@ -9,6 +9,9 @@ class ProjectCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -18,7 +21,7 @@ class ProjectCard extends StatelessWidget {
             color: Colors.black.withOpacity(0.05),
             blurRadius: 12,
             offset: const Offset(0, 6),
-          )
+          ),
         ],
       ),
       child: Column(
@@ -26,21 +29,25 @@ class ProjectCard extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
-                child: Image.network(
-                  item.imageUrl,
-                  height: 140,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    height: 140,
-                    color: Colors.grey[200],
-                    alignment: Alignment.center,
-                    child: const Icon(Icons.broken_image, size: 40, color: Colors.grey),
-                  ),
+            child: Image.network(
+              item.imageUrl,
+              height: isMobile ? 120 : 140,
+              width: double.infinity,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) => Container(
+                height: isMobile ? 120 : 140,
+                color: Colors.grey[200],
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.broken_image,
+                  size: 40,
+                  color: Colors.grey,
                 ),
+              ),
+            ),
           ),
           Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: EdgeInsets.all(isMobile ? 12.0 : 16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -49,24 +56,27 @@ class ProjectCard extends StatelessWidget {
                     Expanded(
                       child: Text(
                         item.title,
-                        style: const TextStyle(
-                          fontSize: 16,
+                        style: TextStyle(
+                          fontSize: isMobile ? 15 : 16,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF0C1935),
+                          color: const Color(0xFF0C1935),
                         ),
                       ),
                     ),
-                        // Non-interactive overflow icon for clients (read-only access)
-                        const Padding(
-                          padding: EdgeInsets.only(left: 8.0),
-                          child: Icon(Icons.more_horiz, color: Colors.grey),
-                        ),
+                    // Non-interactive overflow icon for clients (read-only access)
+                    const Padding(
+                      padding: EdgeInsets.only(left: 8.0),
+                      child: Icon(Icons.more_horiz, color: Colors.grey),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 6),
                 Text(
                   '${item.startDate}  •  ${item.endDate}',
-                  style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF6B7280),
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -82,8 +92,8 @@ class ProjectCard extends StatelessWidget {
                             item.progress > 0.7
                                 ? Colors.green
                                 : item.progress > 0.4
-                                    ? Colors.orange
-                                    : Colors.red,
+                                ? Colors.orange
+                                : Colors.red,
                           ),
                         ),
                       ),
@@ -92,19 +102,29 @@ class ProjectCard extends StatelessWidget {
                     Text(
                       '${(item.progress * 100).toInt()}%',
                       style: const TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF0C1935)),
-                    )
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF0C1935),
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    const Icon(Icons.location_on_outlined, size: 16, color: Color(0xFFFF7A18)),
+                    const Icon(
+                      Icons.location_on_outlined,
+                      size: 16,
+                      color: Color(0xFFFF7A18),
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         item.location,
-                        style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF6B7280),
+                        ),
                       ),
                     ),
                   ],
@@ -114,24 +134,45 @@ class ProjectCard extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.check_box_outlined, size: 16, color: Color(0xFF6B7280)),
+                        const Icon(
+                          Icons.check_box_outlined,
+                          size: 16,
+                          color: Color(0xFF6B7280),
+                        ),
                         const SizedBox(width: 6),
-                        Text('${item.tasksCompleted}/${item.totalTasks}', style: const TextStyle(color: Color(0xFF6B7280))),
+                        Text(
+                          '${item.tasksCompleted}/${item.totalTasks}',
+                          style: const TextStyle(color: Color(0xFF6B7280)),
+                        ),
                       ],
                     ),
                     const Spacer(),
-                        ElevatedButton(
-                          onPressed: () {
-                            // Open read-only project view
-                            Navigator.of(context).push(MaterialPageRoute(
-                              builder: (_) => ProjectViewPage(project: item),
-                            ));
-                          },
+                    ElevatedButton(
+                      onPressed: () {
+                        // Open read-only project view
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ProjectViewPage(project: item),
+                          ),
+                        );
+                      },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFFF7A18),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: isMobile ? 10 : 12,
+                          vertical: isMobile ? 6 : 8,
+                        ),
                       ),
-                      child: const Text('View more', style: TextStyle(color: Colors.white)),
+                      child: Text(
+                        'View more',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: isMobile ? 12 : 14,
+                        ),
+                      ),
                     ),
                   ],
                 ),

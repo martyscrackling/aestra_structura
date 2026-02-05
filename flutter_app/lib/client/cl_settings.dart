@@ -9,10 +9,18 @@ class ClSettingsPage extends StatefulWidget {
 
 class _ClSettingsPageState extends State<ClSettingsPage> {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _firstName = TextEditingController(text: 'Barney');
-  final TextEditingController _lastName = TextEditingController(text: 'Mercado');
-  final TextEditingController _email = TextEditingController(text: 'client@Structura.com');
-  final TextEditingController _contact = TextEditingController(text: '0976-537-4124');
+  final TextEditingController _firstName = TextEditingController(
+    text: 'Barney',
+  );
+  final TextEditingController _lastName = TextEditingController(
+    text: 'Mercado',
+  );
+  final TextEditingController _email = TextEditingController(
+    text: 'client@Structura.com',
+  );
+  final TextEditingController _contact = TextEditingController(
+    text: '0976-537-4124',
+  );
   final TextEditingController _password = TextEditingController();
   final TextEditingController _confirm = TextEditingController();
 
@@ -43,44 +51,70 @@ class _ClSettingsPageState extends State<ClSettingsPage> {
   }
 
   Widget _label(String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 6.0),
-        child: Text(text, style: const TextStyle(fontWeight: FontWeight.w700)),
-      );
+    padding: const EdgeInsets.only(bottom: 6.0),
+    child: Text(text, style: const TextStyle(fontWeight: FontWeight.w700)),
+  );
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
-        title: const Text('Settings', style: TextStyle(color: Color(0xFF0C1935))),
+        title: const Text(
+          'Settings',
+          style: TextStyle(color: Color(0xFF0C1935)),
+        ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: EdgeInsets.all(isMobile ? 16.0 : 20.0),
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _label('First name:'),
-              TextFormField(controller: _firstName, decoration: _fieldDecoration(), validator: (v) => (v==null || v.trim().isEmpty) ? 'Required' : null),
+              TextFormField(
+                controller: _firstName,
+                decoration: _fieldDecoration(),
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Required' : null,
+              ),
               const SizedBox(height: 12),
 
               _label('Last name:'),
-              TextFormField(controller: _lastName, decoration: _fieldDecoration(), validator: (v) => (v==null || v.trim().isEmpty) ? 'Required' : null),
+              TextFormField(
+                controller: _lastName,
+                decoration: _fieldDecoration(),
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Required' : null,
+              ),
               const SizedBox(height: 12),
 
               _label('Email:'),
-              TextFormField(controller: _email, decoration: _fieldDecoration(), keyboardType: TextInputType.emailAddress, validator: (v) {
-                if (v == null || v.trim().isEmpty) return 'Required';
-                if (!RegExp(r"^[^@\s]+@[^@\s]+\.[^@\s]+$").hasMatch(v)) return 'Invalid email';
-                return null;
-              }),
+              TextFormField(
+                controller: _email,
+                decoration: _fieldDecoration(),
+                keyboardType: TextInputType.emailAddress,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Required';
+                  if (!RegExp(r"^[^@\s]+@[^@\s]+\.[^@\s]+$").hasMatch(v))
+                    return 'Invalid email';
+                  return null;
+                },
+              ),
               const SizedBox(height: 12),
 
               _label('Contact info:'),
-              TextFormField(controller: _contact, decoration: _fieldDecoration(), keyboardType: TextInputType.phone),
+              TextFormField(
+                controller: _contact,
+                decoration: _fieldDecoration(),
+                keyboardType: TextInputType.phone,
+              ),
               const SizedBox(height: 12),
 
               _label('Enter new password:'),
@@ -89,8 +123,13 @@ class _ClSettingsPageState extends State<ClSettingsPage> {
                 obscureText: _obscurePassword,
                 decoration: _fieldDecoration().copyWith(
                   suffixIcon: IconButton(
-                    icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                    ),
+                    onPressed: () =>
+                        setState(() => _obscurePassword = !_obscurePassword),
                   ),
                 ),
               ),
@@ -102,12 +141,16 @@ class _ClSettingsPageState extends State<ClSettingsPage> {
                 obscureText: _obscureConfirm,
                 decoration: _fieldDecoration().copyWith(
                   suffixIcon: IconButton(
-                    icon: Icon(_obscureConfirm ? Icons.visibility_off : Icons.visibility),
-                    onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                    icon: Icon(
+                      _obscureConfirm ? Icons.visibility_off : Icons.visibility,
+                    ),
+                    onPressed: () =>
+                        setState(() => _obscureConfirm = !_obscureConfirm),
                   ),
                 ),
                 validator: (v) {
-                  if (_password.text.isNotEmpty && v != _password.text) return 'Passwords do not match';
+                  if (_password.text.isNotEmpty && v != _password.text)
+                    return 'Passwords do not match';
                   return null;
                 },
               ),
@@ -120,10 +163,15 @@ class _ClSettingsPageState extends State<ClSettingsPage> {
                       onPressed: () => Navigator.of(context).pop(),
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(color: Color(0xFF0C1935)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6),
+                        ),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
-                      child: const Text('Cancel', style: TextStyle(color: Color(0xFF0C1935))),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(color: Color(0xFF0C1935)),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -132,12 +180,16 @@ class _ClSettingsPageState extends State<ClSettingsPage> {
                       onPressed: () {
                         if (_formKey.currentState?.validate() ?? false) {
                           // Here you would send data to backend.
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Settings saved')));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Settings saved')),
+                          );
                         }
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF0C1935),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6),
+                        ),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       child: const Text('Save Edit'),

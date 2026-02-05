@@ -9,45 +9,65 @@ class ProjectViewPage extends StatelessWidget {
   // Sample weekly breakdown and tasks. In a real app these would come from the
   // `tasks` and `progress_logs` tables in the database filtered by project_id.
   List<_Week> get _weeks => [
-        _Week(
-          title: 'Week 1 - Pre-Construction & Site Prep',
-          date: 'Sept 28',
-          tasks: [
-            _TaskItem(
-              title: 'Site survey, layout, soil test, clear site.',
-              imageUrl:
-                  'https://images.unsplash.com/photo-1545259742-9e4f2baf2d4d?auto=format&fit=crop&w=800&q=60',
-            ),
-            _TaskItem(title: 'Mobilize equipment, set up temporary facilities.', imageUrl: ''),
-            _TaskItem(title: 'Excavation for foundation.', imageUrl: ''),
-          ],
+    _Week(
+      title: 'Week 1 - Pre-Construction & Site Prep',
+      date: 'Sept 28',
+      tasks: [
+        _TaskItem(
+          title: 'Site survey, layout, soil test, clear site.',
+          imageUrl:
+              'https://images.unsplash.com/photo-1545259742-9e4f2baf2d4d?auto=format&fit=crop&w=800&q=60',
         ),
-        _Week(
-          title: 'Week 2 - Foundation',
-          date: 'Oct 5',
-          tasks: [
-            _TaskItem(title: 'Build foundation by reinforcing, pouring, curing.', imageUrl: ''),
-            _TaskItem(title: 'Inspect footings and foundation walls.', imageUrl: ''),
-          ],
+        _TaskItem(
+          title: 'Mobilize equipment, set up temporary facilities.',
+          imageUrl: '',
         ),
-        _Week(
-          title: 'Week 3 - Structural Framework',
-          date: 'Oct 12',
-          tasks: [
-            _TaskItem(title: 'Construct beams, columns, slab preparation.', imageUrl: ''),
-          ],
+        _TaskItem(title: 'Excavation for foundation.', imageUrl: ''),
+      ],
+    ),
+    _Week(
+      title: 'Week 2 - Foundation',
+      date: 'Oct 5',
+      tasks: [
+        _TaskItem(
+          title: 'Build foundation by reinforcing, pouring, curing.',
+          imageUrl: '',
         ),
-      ];
+        _TaskItem(
+          title: 'Inspect footings and foundation walls.',
+          imageUrl: '',
+        ),
+      ],
+    ),
+    _Week(
+      title: 'Week 3 - Structural Framework',
+      date: 'Oct 12',
+      tasks: [
+        _TaskItem(
+          title: 'Construct beams, columns, slab preparation.',
+          imageUrl: '',
+        ),
+      ],
+    ),
+  ];
 
   void _showTasksModal(BuildContext context, _Week week) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
     showDialog(
       context: context,
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 700, maxHeight: 520),
+          constraints: BoxConstraints(
+            maxWidth: isMobile ? screenWidth * 0.9 : 700,
+            maxHeight: isMobile
+                ? MediaQuery.of(context).size.height * 0.7
+                : 520,
+          ),
           child: Padding(
-            padding: const EdgeInsets.all(18),
+            padding: EdgeInsets.all(isMobile ? 12 : 18),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -55,13 +75,25 @@ class ProjectViewPage extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Flexible(
-                      child: Text(week.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                      child: Text(
+                        week.title,
+                        style: TextStyle(
+                          fontSize: isMobile ? 16 : 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
-                    IconButton(onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.close)),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
-                const Text('Subtasks', style: TextStyle(fontWeight: FontWeight.w700)),
+                const Text(
+                  'Subtasks',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
                 const SizedBox(height: 12),
                 Expanded(
                   child: ListView.separated(
@@ -73,7 +105,10 @@ class ProjectViewPage extends StatelessWidget {
                         leading: Container(
                           width: 10,
                           height: 10,
-                          decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
+                          decoration: const BoxDecoration(
+                            color: Colors.green,
+                            shape: BoxShape.circle,
+                          ),
                         ),
                         title: Text(t.title),
                         trailing: Row(
@@ -82,10 +117,16 @@ class ProjectViewPage extends StatelessWidget {
                             if (t.imageUrl.isNotEmpty)
                               IconButton(
                                 icon: const Icon(Icons.image_outlined),
-                                onPressed: () => _showImagePreview(context, t.imageUrl),
+                                onPressed: () =>
+                                    _showImagePreview(context, t.imageUrl),
                               ),
                             PopupMenuButton<int>(
-                              itemBuilder: (_) => [const PopupMenuItem(value: 1, child: Text('...'))],
+                              itemBuilder: (_) => [
+                                const PopupMenuItem(
+                                  value: 1,
+                                  child: Text('...'),
+                                ),
+                              ],
                               icon: const Icon(Icons.more_horiz),
                             ),
                           ],
@@ -113,12 +154,20 @@ class ProjectViewPage extends StatelessWidget {
           child: InteractiveViewer(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: Image.network(url, fit: BoxFit.contain, errorBuilder: (c, e, s) => Container(
-                height: 200,
-                color: Colors.grey[200],
-                alignment: Alignment.center,
-                child: const Icon(Icons.broken_image, size: 48, color: Colors.grey),
-              )),
+              child: Image.network(
+                url,
+                fit: BoxFit.contain,
+                errorBuilder: (c, e, s) => Container(
+                  height: 200,
+                  color: Colors.grey[200],
+                  alignment: Alignment.center,
+                  child: const Icon(
+                    Icons.broken_image,
+                    size: 48,
+                    color: Colors.grey,
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -128,76 +177,179 @@ class ProjectViewPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
-        title: Text(project.title, style: const TextStyle(color: Color(0xFF0C1935))),
+        title: Text(
+          project.title,
+          style: const TextStyle(color: Color(0xFF0C1935)),
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Image.network(
-              project.imageUrl,
-              height: 200,
-              width: double.infinity,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => Container(
-                height: 200,
-                color: Colors.grey[200],
-                alignment: Alignment.center,
-                child: const Icon(Icons.broken_image, size: 48, color: Colors.grey),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(project.title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Color(0xFF0C1935))),
-          const SizedBox(height: 8),
-          Text('${project.startDate}  •  ${project.endDate}', style: const TextStyle(color: Color(0xFF6B7280))),
-          const SizedBox(height: 12),
-          Row(children: [
-            Expanded(
-              child: LinearProgressIndicator(
-                value: project.progress,
-                minHeight: 8,
-                backgroundColor: Colors.grey[200],
-                valueColor: AlwaysStoppedAnimation(
-                  project.progress > 0.7 ? Colors.green : project.progress > 0.4 ? Colors.orange : Colors.red,
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Text('${(project.progress * 100).toInt()}%', style: const TextStyle(fontWeight: FontWeight.w600)),
-          ]),
-          const SizedBox(height: 16),
-          Row(children: [const Icon(Icons.location_on_outlined, color: Color(0xFFFF7A18)), const SizedBox(width: 8), Expanded(child: Text(project.location))]),
-          const SizedBox(height: 20),
-          const Text('To Do', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 12),
-          // Weekly sections
-          ..._weeks.map((w) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Container(
-                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 2))]),
-                  child: ListTile(
-                    title: Text(w.title, style: const TextStyle(fontWeight: FontWeight.w700)),
-                    subtitle: Text(w.date),
-                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Text('${w.tasks.length}/${w.tasks.length}', style: const TextStyle(color: Color(0xFF6B7280))),
-                      const SizedBox(width: 12),
-                      ElevatedButton(
-                        onPressed: () => _showTasksModal(context, w),
-                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF7A18), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                        child: const Text('View more', style: TextStyle(color: Colors.white)),
-                      ),
-                    ]),
+        padding: EdgeInsets.all(isMobile ? 16 : 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(
+                project.imageUrl,
+                height: isMobile ? 160 : 200,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  height: isMobile ? 160 : 200,
+                  color: Colors.grey[200],
+                  alignment: Alignment.center,
+                  child: const Icon(
+                    Icons.broken_image,
+                    size: 48,
+                    color: Colors.grey,
                   ),
                 ),
-              )),
-        ]),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              project.title,
+              style: TextStyle(
+                fontSize: isMobile ? 18 : 20,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF0C1935),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${project.startDate}  •  ${project.endDate}',
+              style: const TextStyle(color: Color(0xFF6B7280)),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: LinearProgressIndicator(
+                    value: project.progress,
+                    minHeight: 8,
+                    backgroundColor: Colors.grey[200],
+                    valueColor: AlwaysStoppedAnimation(
+                      project.progress > 0.7
+                          ? Colors.green
+                          : project.progress > 0.4
+                          ? Colors.orange
+                          : Colors.red,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  '${(project.progress * 100).toInt()}%',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                const Icon(
+                  Icons.location_on_outlined,
+                  color: Color(0xFFFF7A18),
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: Text(project.location)),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'To Do',
+              style: TextStyle(
+                fontSize: isMobile ? 16 : 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Weekly sections
+            ..._weeks.map(
+              (w) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.03),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 12 : 16,
+                      vertical: isMobile ? 10 : 12,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          w.title,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: isMobile ? 14 : 15,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          w.date,
+                          style: TextStyle(
+                            fontSize: isMobile ? 12 : 13,
+                            color: const Color(0xFF6B7280),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Text(
+                              '${w.tasks.length}/${w.tasks.length}',
+                              style: const TextStyle(color: Color(0xFF6B7280)),
+                            ),
+                            const Spacer(),
+                            ElevatedButton(
+                              onPressed: () => _showTasksModal(context, w),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFFF7A18),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: isMobile ? 12 : 16,
+                                  vertical: isMobile ? 8 : 10,
+                                ),
+                              ),
+                              child: Text(
+                                'View more',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: isMobile ? 12 : 14,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

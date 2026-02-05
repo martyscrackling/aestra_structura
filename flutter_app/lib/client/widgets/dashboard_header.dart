@@ -9,41 +9,73 @@ class ClientDashboardHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
     return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      child: Row(
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              color: Color(0xFF0C1935),
-              fontSize: 24,
-              fontWeight: FontWeight.w700,
-            ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            offset: const Offset(0, 2),
+            blurRadius: 4,
           ),
-          const Spacer(),
-          // Notification bell (client-specific)
-          _ClientNotificationMenu(),
-          const SizedBox(width: 16),
-          // User profile (simple)
-          _ClientProfileMenu(),
         ],
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: isMobile ? 16 : 24,
+            vertical: isMobile ? 12 : 16,
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    color: const Color(0xFF0C1935),
+                    fontSize: isMobile ? 20 : 24,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              // Notification bell (client-specific)
+              _ClientNotificationMenu(isMobile: isMobile),
+              SizedBox(width: isMobile ? 8 : 16),
+              // User profile (simple)
+              _ClientProfileMenu(isMobile: isMobile),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
 class _ClientNotificationMenu extends StatelessWidget {
+  const _ClientNotificationMenu({this.isMobile = false});
+
+  final bool isMobile;
+
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<int>(
       tooltip: 'Notifications',
-      offset: const Offset(0, 12),
+      offset: Offset(0, isMobile ? 8 : 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      constraints: BoxConstraints(
+        maxWidth: isMobile ? 280 : 320,
+        maxHeight: isMobile ? 300 : 400,
+      ),
       onSelected: (value) {
         if (value == 1) {
-          Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ClNotificationsPage()));
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const ClNotificationsPage()),
+          );
         }
       },
       itemBuilder: (context) => [
@@ -110,13 +142,17 @@ class _ClientNotificationMenu extends StatelessWidget {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          Icon(Icons.notifications_outlined, size: 24, color: Colors.grey[600]),
+          Icon(
+            Icons.notifications_outlined,
+            size: isMobile ? 22 : 24,
+            color: Colors.grey[600],
+          ),
           Positioned(
             right: 0,
             top: 0,
             child: Container(
-              width: 8,
-              height: 8,
+              width: isMobile ? 7 : 8,
+              height: isMobile ? 7 : 8,
               decoration: const BoxDecoration(
                 color: Colors.red,
                 shape: BoxShape.circle,
@@ -130,7 +166,11 @@ class _ClientNotificationMenu extends StatelessWidget {
 }
 
 class _NotificationTile extends StatelessWidget {
-  const _NotificationTile({required this.title, required this.time, required this.color});
+  const _NotificationTile({
+    required this.title,
+    required this.time,
+    required this.color,
+  });
 
   final String title;
   final String time;
@@ -174,19 +214,26 @@ class _NotificationTile extends StatelessWidget {
 }
 
 class _ClientProfileMenu extends StatelessWidget {
-  const _ClientProfileMenu();
+  const _ClientProfileMenu({this.isMobile = false});
+
+  final bool isMobile;
 
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<int>(
       tooltip: 'Profile',
-      offset: const Offset(0, 48),
+      offset: Offset(0, isMobile ? 40 : 48),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      constraints: BoxConstraints(maxWidth: isMobile ? 180 : 200),
       onSelected: (value) async {
         if (value == 1) {
-          Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ClNotificationsPage()));
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const ClNotificationsPage()),
+          );
         } else if (value == 2) {
-          Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ClSettingsPage()));
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const ClSettingsPage()));
         } else if (value == 3) {
           final confirm = await showDialog<bool>(
             context: context,
@@ -194,8 +241,14 @@ class _ClientProfileMenu extends StatelessWidget {
               title: const Text('Log out'),
               content: const Text('Are you sure you want to log out?'),
               actions: [
-                TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-                TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Log out')),
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  child: const Text('Log out'),
+                ),
               ],
             ),
           );
@@ -209,7 +262,11 @@ class _ClientProfileMenu extends StatelessWidget {
           value: 1,
           child: Row(
             children: const [
-              Icon(Icons.notifications_outlined, size: 16, color: Color(0xFF0C1935)),
+              Icon(
+                Icons.notifications_outlined,
+                size: 16,
+                color: Color(0xFF0C1935),
+              ),
               SizedBox(width: 8),
               Text('Notifications'),
             ],
@@ -238,30 +295,44 @@ class _ClientProfileMenu extends StatelessWidget {
         ),
       ],
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          const CircleAvatar(
-            radius: 18,
-            backgroundColor: Color(0xFF0C1935),
-            child: Icon(Icons.person, color: Colors.white, size: 20),
+          CircleAvatar(
+            radius: isMobile ? 16 : 18,
+            backgroundColor: const Color(0xFF0C1935),
+            child: Icon(
+              Icons.person,
+              color: Colors.white,
+              size: isMobile ? 18 : 20,
+            ),
           ),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: const [
-              Text(
-                'AESTRA',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF0C1935),
+          if (!isMobile) ...[
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Text(
+                  'AESTRA',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF0C1935),
+                  ),
                 ),
-              ),
-              Text('Client', style: TextStyle(fontSize: 11, color: Colors.grey)),
-            ],
+                Text(
+                  'Client',
+                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                ),
+              ],
+            ),
+            const SizedBox(width: 6),
+          ],
+          Icon(
+            Icons.keyboard_arrow_down,
+            color: Colors.grey[600],
+            size: isMobile ? 18 : 20,
           ),
-          const SizedBox(width: 6),
-          Icon(Icons.keyboard_arrow_down, color: Colors.grey[600], size: 20),
         ],
       ),
     );

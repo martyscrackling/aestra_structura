@@ -5,6 +5,68 @@ class TopControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
+    if (isMobile) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'My Projects',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF0C1935),
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Overview of your projects and progress.',
+            style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: 'Search...',
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                height: 40,
+                width: 40,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: IconButton(
+                  onPressed: () {},
+                  icon: const Icon(
+                    Icons.filter_list,
+                    color: Colors.grey,
+                    size: 20,
+                  ),
+                  padding: EdgeInsets.zero,
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+
     return Row(
       children: [
         Column(
@@ -26,38 +88,40 @@ class TopControls extends StatelessWidget {
           ],
         ),
         const Spacer(),
-        SizedBox(
-          width: 360,
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  decoration: InputDecoration(
-                    hintText: 'Search...',
-                    prefixIcon: const Icon(Icons.search),
-                    filled: true,
-                    fillColor: Colors.white,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none,
+        Flexible(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    decoration: InputDecoration(
+                      hintText: 'Search...',
+                      prefixIcon: const Icon(Icons.search),
+                      filled: true,
+                      fillColor: Colors.white,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Container(
-                height: 40,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
+                const SizedBox(width: 12),
+                Container(
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: IconButton(
+                    onPressed: () {},
+                    icon: const Icon(Icons.filter_list, color: Colors.grey),
+                  ),
                 ),
-                child: IconButton(
-                  onPressed: () {},
-                  icon: const Icon(Icons.filter_list, color: Colors.grey),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ],
