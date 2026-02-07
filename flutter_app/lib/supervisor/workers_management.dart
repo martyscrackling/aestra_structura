@@ -45,10 +45,10 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
         return [];
       }
 
-        final url = AppConfig.apiUri('field-workers/?project_id=$projectId');
+      final url = AppConfig.apiUri('field-workers/?project_id=$projectId');
       print('📡 API URL: $url');
 
-        final response = await http.get(url);
+      final response = await http.get(url);
 
       print('📊 Response status: ${response.statusCode}');
       print('📦 Response body: ${response.body}');

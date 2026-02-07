@@ -416,9 +416,7 @@ class _ViewWorkForceModalState extends State<ViewWorkForceModal> {
         List<Map<String, dynamic>> workers = [];
         for (var assignment in assignments) {
           final workerResponse = await http.get(
-            AppConfig.apiUri(
-              'field-workers/${assignment['field_worker']}/',
-            ),
+            AppConfig.apiUri('field-workers/${assignment['field_worker']}/'),
           );
 
           if (workerResponse.statusCode == 200) {

@@ -237,116 +237,103 @@ class _ProjectsPageState extends State<ProjectsPage> {
       child: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.error_outline,
-                        size: 48,
-                        color: Colors.red,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(_error!),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: _fetchProjects,
-                        child: const Text('Retry'),
-                      ),
-                    ],
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                  const SizedBox(height: 16),
+                  Text(_error!),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: _fetchProjects,
+                    child: const Text('Retry'),
                   ),
-                )
-              : _projects.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.folder_open,
-                            size: 64,
-                            color: Colors.grey,
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'No projects yet added.',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.grey,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          ElevatedButton(
-                            onPressed: () {
-                              showDialog(
-                                context: context,
-                                builder: (context) =>
-                                    const CreateProjectModal(),
-                              );
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue[600],
-                              padding: EdgeInsets.symmetric(
-                                horizontal: isMobile ? 24 : 32,
-                                vertical: 12,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            child: const Text(
-                              'Add Now',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _ProjectsHeader(onRefresh: _fetchProjects),
-                        const SizedBox(height: 24),
-                        LayoutBuilder(
-                          builder: (context, constraints) {
-                            final columnCount =
-                                constraints.maxWidth > 1400
-                                    ? 4
-                                    : constraints.maxWidth > 1100
-                                        ? 3
-                                        : constraints.maxWidth > 800
-                                            ? 2
-                                            : 1;
-                            final cardWidth =
-                                (constraints.maxWidth -
-                                        (columnCount - 1) * 20) /
-                                    columnCount;
-
-                            return Wrap(
-                              spacing: 20,
-                              runSpacing: 20,
-                              children: _projects
-                                  .map(
-                                    (project) => SizedBox(
-                                      width: cardWidth,
-                                      child: ProjectOverviewCard(
-                                        data: project,
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 32),
-                        ProjectListPanel(items: _projects),
-                        SizedBox(height: isMobile ? 80 : 32), // Space for bottom nav
-                      ],
+                ],
+              ),
+            )
+          : _projects.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.folder_open, size: 64, color: Colors.grey),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'No projects yet added.',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey,
                     ),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => const CreateProjectModal(),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue[600],
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isMobile ? 24 : 32,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text(
+                      'Add Now',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _ProjectsHeader(onRefresh: _fetchProjects),
+                const SizedBox(height: 24),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final columnCount = constraints.maxWidth > 1400
+                        ? 4
+                        : constraints.maxWidth > 1100
+                        ? 3
+                        : constraints.maxWidth > 800
+                        ? 2
+                        : 1;
+                    final cardWidth =
+                        (constraints.maxWidth - (columnCount - 1) * 20) /
+                        columnCount;
+
+                    return Wrap(
+                      spacing: 20,
+                      runSpacing: 20,
+                      children: _projects
+                          .map(
+                            (project) => SizedBox(
+                              width: cardWidth,
+                              child: ProjectOverviewCard(data: project),
+                            ),
+                          )
+                          .toList(),
+                    );
+                  },
+                ),
+                const SizedBox(height: 32),
+                ProjectListPanel(items: _projects),
+                SizedBox(height: isMobile ? 80 : 32), // Space for bottom nav
+              ],
+            ),
     );
   }
 }

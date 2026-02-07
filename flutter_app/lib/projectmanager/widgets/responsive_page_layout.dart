@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'sidebar.dart';
 import 'dashboard_header.dart';
-import '../dashboard_page.dart' show LayoutType;
 
 class ResponsivePageLayout extends StatelessWidget {
   final String currentPage;
@@ -222,37 +221,54 @@ class _BottomNavBar extends StatelessWidget {
   }
 
   void _showMoreMenu(BuildContext context) {
+    final rootContext = context;
     showModalBottomSheet(
-      context: context,
+      context: rootContext,
       backgroundColor: const Color(0xFF0C1935),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => Container(
+      builder: (sheetContext) => Container(
         padding: const EdgeInsets.symmetric(vertical: 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             _buildMoreMenuItem(
-              context,
+              rootContext,
+              sheetContext,
               "Inventory",
               Icons.inventory_2_outlined,
             ),
-            _buildMoreMenuItem(context, "Reports", Icons.insert_chart),
-            _buildMoreMenuItem(context, "Settings", Icons.settings),
+            _buildMoreMenuItem(
+              rootContext,
+              sheetContext,
+              "Reports",
+              Icons.insert_chart,
+            ),
+            _buildMoreMenuItem(
+              rootContext,
+              sheetContext,
+              "Settings",
+              Icons.settings,
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildMoreMenuItem(BuildContext context, String label, IconData icon) {
+  Widget _buildMoreMenuItem(
+    BuildContext rootContext,
+    BuildContext sheetContext,
+    String label,
+    IconData icon,
+  ) {
     return ListTile(
       leading: Icon(icon, color: Colors.white70),
       title: Text(label, style: const TextStyle(color: Colors.white70)),
       onTap: () {
-        Navigator.pop(context);
-        _navigateToPage(context, label);
+        Navigator.pop(sheetContext);
+        Future.microtask(() => _navigateToPage(rootContext, label));
       },
     );
   }
@@ -270,11 +286,7 @@ class _BottomNavBar extends StatelessWidget {
 
     final route = routeMap[label];
     if (route != null) {
-      print('Navigating to: $route'); // Debug log
-      // Use pushReplacement to ensure proper navigation
-      GoRouter.of(context).go(route);
-    } else {
-      print('Route not found for: $label'); // Debug log
+      context.go(route);
     }
   }
 }

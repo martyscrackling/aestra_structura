@@ -14,35 +14,19 @@ class _SidebarState extends State<Sidebar> {
   String? hoveredItem;
 
   void _navigateToPage(BuildContext context, String label) {
-    String? route;
-    switch (label) {
-      case 'Dashboard':
-        route = '/dashboard';
-        break;
-      case 'Projects':
-        route = '/projects';
-        break;
-      case 'Workforce':
-        route = '/workforce';
-        break;
-      case 'Clients':
-        route = '/clients';
-        break;
-      case 'Reports':
-        route = '/reports';
-        break;
-      case 'Inventory':
-        route = '/inventory';
-        break;
-      case 'Settings':
-        route = '/settings';
-        break;
-      default:
-        return;
-    }
-    if (route != null) {
-      context.go(route);
-    }
+    const routesByLabel = <String, String>{
+      'Dashboard': '/dashboard',
+      'Projects': '/projects',
+      'Workforce': '/workforce',
+      'Clients': '/clients',
+      'Reports': '/reports',
+      'Inventory': '/inventory',
+      'Settings': '/settings',
+    };
+
+    final route = routesByLabel[label];
+    if (route == null) return;
+    context.go(route);
   }
 
   @override

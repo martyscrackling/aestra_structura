@@ -75,9 +75,7 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
   Future<void> _fetchRegions() async {
     try {
       setState(() => _isLoadingRegions = true);
-      final response = await http.get(
-        AppConfig.apiUri('regions/'),
-      );
+      final response = await http.get(AppConfig.apiUri('regions/'));
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
         setState(() {
@@ -148,9 +146,7 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
   Future<void> _fetchSupervisors() async {
     try {
       setState(() => _isLoadingSupervisors = true);
-      final response = await http.get(
-        AppConfig.apiUri('supervisors/'),
-      );
+      final response = await http.get(AppConfig.apiUri('supervisors/'));
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
         print(
@@ -170,9 +166,7 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
   Future<void> _fetchClients() async {
     try {
       setState(() => _isLoadingClients = true);
-      final response = await http.get(
-        AppConfig.apiUri('clients/'),
-      );
+      final response = await http.get(AppConfig.apiUri('clients/'));
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
         print(

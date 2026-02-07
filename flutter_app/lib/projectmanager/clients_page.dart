@@ -26,9 +26,7 @@ class _ClientsPageState extends State<ClientsPage> {
 
   Future<List<ClientInfo>> _fetchClients() async {
     try {
-      final response = await http.get(
-        AppConfig.apiUri('clients/'),
-      );
+      final response = await http.get(AppConfig.apiUri('clients/'));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -68,31 +66,21 @@ class _ClientsPageState extends State<ClientsPage> {
           FutureBuilder<List<ClientInfo>>(
             future: _clientsFuture,
             builder: (context, snapshot) {
-              if (snapshot.connectionState ==
-                  ConnectionState.waiting) {
-                return const Center(
-                                child: CircularProgressIndicator(),
-              );
-            } else if (snapshot.hasError) {
-              return Center(
-                child: Text('Error: ${snapshot.error}'),
-              );
-            } else if (!snapshot.hasData ||
-                snapshot.data!.isEmpty) {
-              return const Center(
-                child: Text('No clients found'),
-              );
-            } else {
-              return _ActiveClientsSection(
-                clients: snapshot.data!,
-              );
-            }
-          },
-        ),
-        SizedBox(height: isMobile ? 80 : 0), // Space for bottom navbar
-      ],
-    ),
-  );
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              } else if (snapshot.hasError) {
+                return Center(child: Text('Error: ${snapshot.error}'));
+              } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                return const Center(child: Text('No clients found'));
+              } else {
+                return _ActiveClientsSection(clients: snapshot.data!);
+              }
+            },
+          ),
+          SizedBox(height: isMobile ? 80 : 0), // Space for bottom navbar
+        ],
+      ),
+    );
   }
 }
 
@@ -128,10 +116,7 @@ class _ClientsHeader extends StatelessWidget {
                 ],
               ),
               const Spacer(),
-              SizedBox(
-                height: 40,
-                child: _AddClientButton(),
-              ),
+              SizedBox(height: 40, child: _AddClientButton()),
             ],
           )
         else ...[
@@ -167,9 +152,7 @@ class _AddClientButton extends StatelessWidget {
       style: ElevatedButton.styleFrom(
         backgroundColor: const Color(0xFFFF7A18),
         padding: const EdgeInsets.symmetric(horizontal: 18),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
       onPressed: () {
         showDialog(

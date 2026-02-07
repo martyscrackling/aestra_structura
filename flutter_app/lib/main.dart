@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_web_plugins/flutter_web_plugins.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth/login.dart';
@@ -23,6 +22,7 @@ import 'supervisor/inventory.dart' as supervisor;
 import 'client/cl_dashboard.dart' as client;
 import 'license/plan.dart';
 import 'services/auth_service.dart';
+import 'services/url_strategy/url_strategy.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -44,7 +44,7 @@ void main() async {
     debug: true, // optional
   );
 
-  setUrlStrategy(PathUrlStrategy());
+  configureUrlStrategy();
 
   // Initialize auth ONCE before app starts
   final authService = AuthService();

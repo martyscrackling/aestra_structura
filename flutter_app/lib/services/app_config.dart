@@ -10,8 +10,9 @@ class AppConfig {
 
   static Uri apiUri(String pathAndQuery) {
     final base = apiBaseUrl.endsWith('/') ? apiBaseUrl : '$apiBaseUrl/';
-    final normalized =
-        pathAndQuery.startsWith('/') ? pathAndQuery.substring(1) : pathAndQuery;
+    final normalized = pathAndQuery.startsWith('/')
+        ? pathAndQuery.substring(1)
+        : pathAndQuery;
     return Uri.parse('$base$normalized');
   }
 }

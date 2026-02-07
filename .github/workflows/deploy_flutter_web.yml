@@ -1,0 +1,52 @@
+name: Deploy Flutter Web to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter Pub Get
+        working-directory: flutter_app
+        run: flutter pub get
+
+      - name: Build Web
+        working-directory: flutter_app
+        run: |
+          flutter build web --release \
+            --base-href "/aestra_structura/" \
+            --dart-define=API_BASE_URL=https://structura-backend-4vxo.onrender.com/api/
+
+          # GitHub Pages has no SPA rewrites; serving index.html as 404.html makes deep links work.
+          cp build/web/index.html build/web/404.html
+          touch build/web/.nojekyll
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: flutter_app/build/web
+          force_orphan: true
