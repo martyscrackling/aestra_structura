@@ -63,12 +63,10 @@ class _ReportsPageState extends State<ReportsPage> {
   final Color neutral = const Color(0xFFF4F6F9);
   final Color accent = const Color(0xFFFF6F00);
   final DateFormat _dateFmt = DateFormat('yyyy-MM-dd');
-  late bool _isSidebarVisible;
 
   @override
   void initState() {
     super.initState();
-    _isSidebarVisible = widget.initialSidebarVisible;
   }
 
   void _navigateToPage(String page) {
@@ -76,15 +74,18 @@ class _ReportsPageState extends State<ReportsPage> {
       case 'Dashboard':
         context.go('/supervisor');
         break;
+      case 'Workers':
       case 'Worker Management':
         context.go('/supervisor/workers');
         break;
       case 'Attendance':
         context.go('/supervisor/attendance');
         break;
+      case 'Logs':
       case 'Daily Logs':
         context.go('/supervisor/daily-logs');
         break;
+      case 'Tasks':
       case 'Task Progress':
         context.go('/supervisor/task-progress');
         break;
@@ -553,8 +554,8 @@ class _ReportsPageState extends State<ReportsPage> {
         children: [
           Row(
             children: [
-              if (_isSidebarVisible && isDesktop)
-                Sidebar(activePage: 'Reports', keepVisible: _isSidebarVisible),
+              if (isDesktop)
+                Sidebar(activePage: 'Reports', keepVisible: true),
               Expanded(
                 child: Column(
                   children: [
@@ -568,23 +569,6 @@ class _ReportsPageState extends State<ReportsPage> {
                       ),
                       child: Row(
                         children: [
-                          // Hamburger menu (hidden on mobile)
-                          if (!isMobile) ...[
-                            IconButton(
-                              icon: const Icon(
-                                Icons.menu,
-                                color: Color(0xFF0C1935),
-                                size: 24,
-                              ),
-                              onPressed: () => setState(
-                                () => _isSidebarVisible = !_isSidebarVisible,
-                              ),
-                              tooltip: 'Menu',
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                            const SizedBox(width: 8),
-                          ],
                           // slim blue accent line in the left corner
                           Container(
                             width: isMobile ? 3 : 4,
@@ -1824,22 +1808,6 @@ class _ReportsPageState extends State<ReportsPage> {
               ),
             ],
           ),
-          // Overlay sidebar for tablet only
-          if (_isSidebarVisible && !isDesktop && !isMobile)
-            GestureDetector(
-              onTap: () => setState(() => _isSidebarVisible = false),
-              child: Container(color: Colors.black.withOpacity(0.5)),
-            ),
-          if (_isSidebarVisible && !isDesktop && !isMobile)
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              child: Sidebar(
-                activePage: 'Reports',
-                keepVisible: _isSidebarVisible,
-              ),
-            ),
         ],
       ),
       // Bottom navigation bar for mobile only

@@ -22,13 +22,11 @@ class WorkerManagementPage extends StatefulWidget {
 }
 
 class _WorkerManagementPageState extends State<WorkerManagementPage> {
-  late bool _isSidebarVisible;
   late Future<List<Map<String, dynamic>>> _workersFuture;
 
   @override
   void initState() {
     super.initState();
-    _isSidebarVisible = widget.initialSidebarVisible;
     _workersFuture = _fetchFieldWorkers();
   }
 
@@ -76,14 +74,17 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
         );
         break;
       case 'Workers':
+      case 'Worker Management':
         return; // Already on workers page
       case 'Attendance':
         destination = const AttendancePage(initialSidebarVisible: false);
         break;
       case 'Logs':
+      case 'Daily Logs':
         destination = const DailyLogsPage(initialSidebarVisible: false);
         break;
       case 'Tasks':
+      case 'Task Progress':
         destination = const TaskProgressPage(initialSidebarVisible: false);
         break;
       case 'Reports':
@@ -477,19 +478,17 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
         children: [
           Row(
             children: [
-              if (_isSidebarVisible && isDesktop)
+              if (isDesktop)
                 Sidebar(
                   activePage: "Worker Management",
-                  keepVisible: _isSidebarVisible,
+                  keepVisible: true,
                 ),
               Expanded(
                 child: Column(
                   children: [
                     // White header with blue left accent (keeps Notification bell & AESTRA)
                     WorkersHeader(
-                      onMenuPressed: () => setState(
-                        () => _isSidebarVisible = !_isSidebarVisible,
-                      ),
+                      onMenuPressed: () {},
                       isMobile: isMobile,
                     ),
 
@@ -820,22 +819,6 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
               ),
             ],
           ),
-          // Overlay sidebar for tablet only
-          if (_isSidebarVisible && isTablet)
-            GestureDetector(
-              onTap: () => setState(() => _isSidebarVisible = false),
-              child: Container(color: Colors.black.withOpacity(0.5)),
-            ),
-          if (_isSidebarVisible && isTablet)
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              child: Sidebar(
-                activePage: "Worker Management",
-                keepVisible: _isSidebarVisible,
-              ),
-            ),
         ],
       ),
       // Bottom navigation bar for mobile only
@@ -1425,17 +1408,6 @@ class _WorkersHeaderState extends State<WorkersHeader> {
       ),
       child: Row(
         children: [
-          // Hamburger menu button (hidden on mobile)
-          if (!widget.isMobile) ...[
-            IconButton(
-              icon: const Icon(Icons.menu, color: Color(0xFF0C1935), size: 24),
-              onPressed: widget.onMenuPressed,
-              tooltip: 'Menu',
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-            ),
-            const SizedBox(width: 8),
-          ],
           // slim blue line in the left corner
           Container(
             width: widget.isMobile ? 3 : 4,

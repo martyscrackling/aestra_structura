@@ -27,14 +27,12 @@ class SupervisorDashboardPage extends StatefulWidget {
 }
 
 class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
-  late bool _isSidebarVisible;
   int? _currentProjectId;
   final GlobalKey _activeProjectKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
-    _isSidebarVisible = widget.initialSidebarVisible;
   }
 
   void _navigateToPage(String page) {
@@ -43,15 +41,18 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
       case 'Dashboard':
         return; // Already on dashboard
       case 'Workers':
+      case 'Worker Management':
         destination = const WorkerManagementPage(initialSidebarVisible: false);
         break;
       case 'Attendance':
         destination = const AttendancePage(initialSidebarVisible: false);
         break;
       case 'Logs':
+      case 'Daily Logs':
         destination = const DailyLogsPage(initialSidebarVisible: false);
         break;
       case 'Tasks':
+      case 'Task Progress':
         destination = const TaskProgressPage(initialSidebarVisible: false);
         break;
       case 'Reports':
@@ -91,10 +92,10 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
           Row(
             children: [
               // Sidebar stays fixed on the left (only on desktop)
-              if (_isSidebarVisible && isDesktop)
+              if (isDesktop)
                 Sidebar(
                   activePage: "Dashboard",
-                  keepVisible: _isSidebarVisible,
+                  keepVisible: true,
                 ),
 
               // Right area (header fixed, content scrollable)
@@ -103,9 +104,7 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
                   children: [
                     // Header fixed at top of right area
                     DashboardHeader(
-                      onMenuPressed: () => setState(
-                        () => _isSidebarVisible = !_isSidebarVisible,
-                      ),
+                      onMenuPressed: () {},
                     ),
 
                     // Scrollable content below header while sidebar stays put
@@ -123,22 +122,6 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
               ),
             ],
           ),
-          // Overlay sidebar for tablet only
-          if (_isSidebarVisible && isTablet)
-            GestureDetector(
-              onTap: () => setState(() => _isSidebarVisible = false),
-              child: Container(color: Colors.black.withOpacity(0.5)),
-            ),
-          if (_isSidebarVisible && isTablet)
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              child: Sidebar(
-                activePage: "Dashboard",
-                keepVisible: _isSidebarVisible,
-              ),
-            ),
         ],
       ),
       // Bottom navigation bar for mobile only

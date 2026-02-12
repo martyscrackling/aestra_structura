@@ -21,7 +21,6 @@ class _AttendancePageState extends State<AttendancePage> {
   final Color primary = const Color(0xFFFF6F00);
   final Color primaryLight = const Color(0xFFFFF3E0);
   final Color neutral = const Color(0xFFF4F6F9);
-  late bool _isSidebarVisible;
 
   late Future<List<Map<String, dynamic>>> _fieldWorkersFuture;
   late Future<List<Map<String, dynamic>>> _attendanceRecordsFuture;
@@ -34,7 +33,6 @@ class _AttendancePageState extends State<AttendancePage> {
   @override
   void initState() {
     super.initState();
-    _isSidebarVisible = widget.initialSidebarVisible;
     _fieldWorkersFuture = _fetchFieldWorkers();
     _attendanceRecordsFuture = _fetchAttendanceRecords();
   }
@@ -137,14 +135,17 @@ class _AttendancePageState extends State<AttendancePage> {
       case 'Dashboard':
         context.go('/supervisor');
         break;
+      case 'Workers':
       case 'Worker Management':
         context.go('/supervisor/workers');
         break;
       case 'Attendance':
         return; // Already on attendance page
+      case 'Logs':
       case 'Daily Logs':
         context.go('/supervisor/daily-logs');
         break;
+      case 'Tasks':
       case 'Task Progress':
         context.go('/supervisor/task-progress');
         break;
@@ -238,10 +239,10 @@ class _AttendancePageState extends State<AttendancePage> {
         children: [
           Row(
             children: [
-              if (_isSidebarVisible && isDesktop)
+              if (isDesktop)
                 Sidebar(
                   activePage: "Attendance",
-                  keepVisible: _isSidebarVisible,
+                  keepVisible: true,
                 ),
               Expanded(
                 child: Column(
@@ -255,23 +256,6 @@ class _AttendancePageState extends State<AttendancePage> {
                       ),
                       child: Row(
                         children: [
-                          // Hamburger menu button (hidden on mobile)
-                          if (!isMobile) ...[
-                            IconButton(
-                              icon: const Icon(
-                                Icons.menu,
-                                color: Color(0xFF0C1935),
-                                size: 24,
-                              ),
-                              onPressed: () => setState(
-                                () => _isSidebarVisible = !_isSidebarVisible,
-                              ),
-                              tooltip: 'Menu',
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                            const SizedBox(width: 8),
-                          ],
                           Container(
                             width: isMobile ? 3 : 4,
                             height: isMobile ? 40 : 56,
@@ -1087,22 +1071,6 @@ class _AttendancePageState extends State<AttendancePage> {
               ),
             ],
           ),
-          // Overlay sidebar for tablet only
-          if (_isSidebarVisible && !isDesktop && !isMobile)
-            GestureDetector(
-              onTap: () => setState(() => _isSidebarVisible = false),
-              child: Container(color: Colors.black.withOpacity(0.5)),
-            ),
-          if (_isSidebarVisible && !isDesktop && !isMobile)
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              child: Sidebar(
-                activePage: "Attendance",
-                keepVisible: _isSidebarVisible,
-              ),
-            ),
         ],
       ),
       // Bottom navigation bar for mobile only

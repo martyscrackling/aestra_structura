@@ -49,7 +49,6 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
   final Color primary = const Color(0xFFFF6F00);
   final Color neutral = const Color(0xFFF4F6F9);
   final ImagePicker _picker = ImagePicker();
-  late bool _isSidebarVisible;
   List<Phase> _phases = [];
   bool _isLoadingPhases = true;
   String? _phasesError;
@@ -58,7 +57,6 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
   @override
   void initState() {
     super.initState();
-    _isSidebarVisible = widget.initialSidebarVisible;
     Future.microtask(_loadPhases);
   }
 
@@ -67,15 +65,18 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
       case 'Dashboard':
         context.go('/supervisor');
         break;
+      case 'Workers':
       case 'Worker Management':
         context.go('/supervisor/workers');
         break;
       case 'Attendance':
         context.go('/supervisor/attendance');
         break;
+      case 'Logs':
       case 'Daily Logs':
         context.go('/supervisor/daily-logs');
         break;
+      case 'Tasks':
       case 'Task Progress':
         return; // Already on tasks page
       case 'Reports':
@@ -1064,10 +1065,10 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
         children: [
           Row(
             children: [
-              if (_isSidebarVisible && isDesktop)
+              if (isDesktop)
                 Sidebar(
                   activePage: 'Task Progress',
-                  keepVisible: _isSidebarVisible,
+                  keepVisible: true,
                 ),
               Expanded(
                 child: Column(
@@ -1081,22 +1082,6 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                       ),
                       child: Row(
                         children: [
-                          if (!isMobile) ...[
-                            IconButton(
-                              icon: const Icon(
-                                Icons.menu,
-                                color: Color(0xFF0C1935),
-                                size: 24,
-                              ),
-                              onPressed: () => setState(
-                                () => _isSidebarVisible = !_isSidebarVisible,
-                              ),
-                              tooltip: 'Menu',
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                            const SizedBox(width: 8),
-                          ],
                           Container(
                             width: isMobile ? 3 : 4,
                             height: isMobile ? 40 : 56,
@@ -1376,22 +1361,6 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
               ),
             ],
           ),
-          // Overlay sidebar for tablet only
-          if (_isSidebarVisible && !isDesktop && !isMobile)
-            GestureDetector(
-              onTap: () => setState(() => _isSidebarVisible = false),
-              child: Container(color: Colors.black.withOpacity(0.5)),
-            ),
-          if (_isSidebarVisible && !isDesktop && !isMobile)
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              child: Sidebar(
-                activePage: 'Task Progress',
-                keepVisible: _isSidebarVisible,
-              ),
-            ),
         ],
       ),
       // Bottom navigation bar for mobile only

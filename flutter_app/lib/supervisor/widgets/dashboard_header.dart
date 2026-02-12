@@ -21,15 +21,6 @@ class _DashboardHeaderState extends State<DashboardHeader> {
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Row(
         children: [
-          // Hamburger menu button (hidden on mobile)
-          if (!isMobile) ...[
-            IconButton(
-              icon: const Icon(Icons.menu, color: Color(0xFF0C1935)),
-              onPressed: widget.onMenuPressed,
-              tooltip: 'Menu',
-            ),
-            const SizedBox(width: 12),
-          ],
           // Left side - Dashboard title
           const Text(
             "Dashboard",

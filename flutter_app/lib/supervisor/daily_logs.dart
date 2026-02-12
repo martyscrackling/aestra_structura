@@ -20,12 +20,10 @@ class _DailyLogsPageState extends State<DailyLogsPage> {
   final Color primary = const Color(0xFFFF6F00);
   final Color neutral = const Color(0xFFF4F6F9);
   final Color darkAction = const Color(0xFF0C1935);
-  late bool _isSidebarVisible;
 
   @override
   void initState() {
     super.initState();
-    _isSidebarVisible = widget.initialSidebarVisible;
   }
 
   void _navigateToPage(String page) {
@@ -33,14 +31,17 @@ class _DailyLogsPageState extends State<DailyLogsPage> {
       case 'Dashboard':
         context.go('/supervisor');
         break;
+      case 'Workers':
       case 'Worker Management':
         context.go('/supervisor/workers');
         break;
       case 'Attendance':
         context.go('/supervisor/attendance');
         break;
+      case 'Logs':
       case 'Daily Logs':
         return; // Already on logs page
+      case 'Tasks':
       case 'Task Progress':
         context.go('/supervisor/task-progress');
         break;
@@ -104,324 +105,102 @@ class _DailyLogsPageState extends State<DailyLogsPage> {
         children: [
           Row(
             children: [
-              if (_isSidebarVisible && isDesktop)
+              if (isDesktop)
                 Sidebar(
                   activePage: "Daily Logs",
-                  keepVisible: _isSidebarVisible,
+                  keepVisible: true,
                 ),
               Expanded(
                 child: Column(
                   children: [
-                    // White header
+                    // Clean header
                     Container(
                       color: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 22,
-                        vertical: 12,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isMobile ? 16 : 24,
+                        vertical: isMobile ? 12 : 16,
                       ),
                       child: Row(
                         children: [
-                          // Hamburger menu (hidden on mobile)
-                          if (!isMobile) ...[
-                            IconButton(
-                              icon: const Icon(
-                                Icons.menu,
-                                color: Color(0xFF0C1935),
-                                size: 24,
-                              ),
-                              onPressed: () => setState(
-                                () => _isSidebarVisible = !_isSidebarVisible,
-                              ),
-                              tooltip: 'Toggle Sidebar',
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                            const SizedBox(width: 8),
-                          ],
+                          // Orange accent bar
                           Container(
-                            width: isMobile ? 3 : 4,
-                            height: isMobile ? 40 : 56,
+                            width: 4,
+                            height: 40,
                             decoration: BoxDecoration(
                               color: primary,
-                              borderRadius: BorderRadius.circular(6),
+                              borderRadius: BorderRadius.circular(4),
                             ),
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: 16),
+                          // Title section
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
                                   'Daily Logs',
                                   style: TextStyle(
-                                    color: const Color(0xFF0C1935),
-                                    fontSize: isMobile ? 16 : 20,
-                                    fontWeight: FontWeight.w800,
+                                    color: darkAction,
+                                    fontSize: isMobile ? 18 : 22,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
                                 if (!isMobile) const SizedBox(height: 4),
                                 if (!isMobile)
-                                  const Text(
-                                    'Create and review daily site logs',
+                                  Text(
+                                    '${logs.length} logs • ${logs.where((l) => l['status'] == 'Draft').length} drafts • ${logs.where((l) => l['status'] == 'Submitted').length} submitted',
                                     style: TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                      fontSize: 13,
                                     ),
                                   ),
                               ],
                             ),
                           ),
-                          if (!isMobile) ...[
-                            // subtle KPI chips (creative)
-                            _headerKPI(
-                              'Drafts',
-                              '${logs.where((l) => l['status'] == 'Draft').length}',
-                              Colors.orange,
-                            ),
-                            const SizedBox(width: 8),
-                            _headerKPI(
-                              'Submitted',
-                              '${logs.where((l) => l['status'] == 'Submitted').length}',
-                              Colors.green,
-                            ),
-                            const SizedBox(width: 12),
-                          ],
-                          // notification bell & AESTRA
-                          if (!isMobile)
-                            Stack(
+                          // Notification icon
+                          IconButton(
+                            icon: Stack(
+                              clipBehavior: Clip.none,
                               children: [
-                                IconButton(
-                                  onPressed: () {
-                                    setState(() => hasNotifications = false);
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Notifications opened (demo)',
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                  icon: Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey[100],
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: const Icon(
-                                      Icons.notifications_outlined,
-                                      color: Color(0xFF0C1935),
-                                    ),
-                                  ),
+                                Icon(
+                                  Icons.notifications_outlined,
+                                  color: darkAction,
+                                  size: 24,
                                 ),
                                 if (hasNotifications)
                                   Positioned(
-                                    right: 10,
-                                    top: 8,
+                                    top: -2,
+                                    right: -2,
                                     child: Container(
                                       width: 10,
                                       height: 10,
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFFFF6B6B),
-                                        borderRadius: BorderRadius.circular(6),
+                                        color: Colors.red,
+                                        shape: BoxShape.circle,
                                       ),
                                     ),
                                   ),
                               ],
                             ),
-                          if (!isMobile) const SizedBox(width: 10),
-                          if (!isMobile)
-                            PopupMenuButton<String>(
-                              onSelected: (value) {
-                                if (value == 'switch') {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Switch account (demo)'),
-                                    ),
-                                  );
-                                } else if (value == 'logout') {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Logout (demo)'),
-                                    ),
-                                  );
-                                }
-                              },
-                              offset: const Offset(0, 48),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              itemBuilder: (BuildContext context) =>
-                                  <PopupMenuEntry<String>>[
-                                    const PopupMenuItem<String>(
-                                      value: 'switch',
-                                      height: 48,
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            Icons.swap_horiz,
-                                            size: 18,
-                                            color: Colors.black87,
-                                          ),
-                                          SizedBox(width: 12),
-                                          Text('Switch Account'),
-                                        ],
-                                      ),
-                                    ),
-                                    const PopupMenuDivider(height: 1),
-                                    const PopupMenuItem<String>(
-                                      value: 'logout',
-                                      height: 48,
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            Icons.logout,
-                                            size: 18,
-                                            color: Color(0xFFFF6B6B),
-                                          ),
-                                          SizedBox(width: 12),
-                                          Text(
-                                            'Logout',
-                                            style: TextStyle(
-                                              color: Color(0xFFFF6B6B),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[100],
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 36,
-                                      height: 36,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFE8D5F2),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: const Center(
-                                        child: Text(
-                                          "A",
-                                          style: TextStyle(
-                                            color: Color(0xFFB088D9),
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    const Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          "AESTRA",
-                                          style: TextStyle(
-                                            color: Color(0xFF0C1935),
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                        Text(
-                                          "Supervisor",
-                                          style: TextStyle(
-                                            color: Colors.grey,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w400,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          if (isMobile)
-                            IconButton(
-                              icon: Stack(
-                                children: [
-                                  const Icon(
-                                    Icons.notifications_outlined,
-                                    color: Color(0xFF0C1935),
-                                    size: 22,
-                                  ),
-                                  if (hasNotifications)
-                                    Positioned(
-                                      top: 0,
-                                      right: 0,
-                                      child: Container(
-                                        width: 8,
-                                        height: 8,
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFFF6B6B),
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                              onPressed: () {
-                                setState(() => hasNotifications = false);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Notifications opened (demo)',
-                                    ),
-                                  ),
-                                );
-                              },
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
+                            onPressed: () {
+                              setState(() => hasNotifications = false);
+                            },
+                          ),
+
                         ],
                       ),
                     ),
 
-                    const SizedBox(height: 18),
-
-                    // Main content: just the logs panel with Add Log button
+                    // Main content: logs list
                     Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isMobile ? 12 : 22,
-                        ),
-                        child: _buildLogsPanel(),
-                      ),
+                      child: _buildLogsPanel(isMobile),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-          // Overlay sidebar for tablet only
-          if (_isSidebarVisible && !isDesktop && !isMobile)
-            GestureDetector(
-              onTap: () => setState(() => _isSidebarVisible = false),
-              child: Container(color: Colors.black.withOpacity(0.5)),
-            ),
-          if (_isSidebarVisible && !isDesktop && !isMobile)
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              child: Sidebar(
-                activePage: "Daily Logs",
-                keepVisible: _isSidebarVisible,
-              ),
-            ),
         ],
       ),
       // Bottom navigation bar for mobile only
@@ -436,43 +215,9 @@ class _DailyLogsPageState extends State<DailyLogsPage> {
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
         ),
       ),
-    );
-  }
-
-  // small KPI used in header
-  static Widget _headerKPI(String label, String value, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        boxShadow: [
-          BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 2)),
-        ],
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 12,
-            backgroundColor: color.withOpacity(0.12),
-            child: Icon(Icons.circle, color: color, size: 12),
-          ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(fontSize: 11, color: Colors.grey),
-              ),
-              Text(
-                value,
-                style: TextStyle(fontWeight: FontWeight.w800, color: color),
-              ),
-            ],
-          ),
-        ],
-      ),
+      floatingActionButtonLocation: isMobile
+          ? FloatingActionButtonLocation.endFloat
+          : FloatingActionButtonLocation.endFloat,
     );
   }
 
@@ -610,205 +355,253 @@ class _DailyLogsPageState extends State<DailyLogsPage> {
     );
   }
 
-  Widget _buildLogsPanel() {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Submitted & Draft Logs',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+  Widget _buildLogsPanel(bool isMobile) {
+    return Container(
+      margin: EdgeInsets.all(isMobile ? 12 : 20),
+      child: logs.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.description_outlined,
+                    size: 64,
+                    color: Colors.grey[400],
                   ),
-                ),
-                IconButton(
-                  onPressed: () => setState(() {}),
-                  icon: const Icon(Icons.filter_list),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: logs.isEmpty
-                  ? Center(
-                      child: Text(
-                        'No logs yet',
-                        style: TextStyle(color: Colors.grey[700]),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No logs yet',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Tap the + button to add your first log',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[500],
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : ListView.builder(
+              itemCount: logs.length,
+              physics: const BouncingScrollPhysics(),
+              padding: EdgeInsets.only(bottom: isMobile ? 80 : 0),
+              itemBuilder: (context, i) {
+                final log = logs[i];
+                final isDraft = (log['status'] ?? '') == 'Draft';
+                
+                return Container(
+                  margin: EdgeInsets.only(bottom: isMobile ? 12 : 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
                       ),
-                    )
-                  : ListView.separated(
-                      itemCount: logs.length,
-                      separatorBuilder: (_, __) =>
-                          Divider(color: Colors.grey.shade200),
-                      itemBuilder: (context, i) {
-                        final log = logs[i];
-                        final isDraft = (log['status'] ?? '') == 'Draft';
-                        return Container(
-                          margin: const EdgeInsets.symmetric(vertical: 6),
-                          child: Material(
-                            color: isDraft
-                                ? Colors.orange.shade50
-                                : Colors.green.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                            child: ListTile(
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 10,
-                              ),
-                              leading: CircleAvatar(
-                                radius: 22,
-                                backgroundColor: isDraft
-                                    ? Colors.orange.shade100
-                                    : Colors.green.shade100,
-                                child: Icon(
-                                  isDraft ? Icons.edit : Icons.check_circle,
-                                  color: isDraft ? Colors.orange : Colors.green,
+                    ],
+                  ),
+                  child: InkWell(
+                    onTap: () => _showLogDetails(log),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: EdgeInsets.all(isMobile ? 12 : 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Header row
+                          Row(
+                            children: [
+                              // Status indicator
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
                                 ),
-                              ),
-                              title: Text(
-                                log['task'] ?? '',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
+                                decoration: BoxDecoration(
+                                  color: isDraft
+                                      ? Colors.orange.withOpacity(0.1)
+                                      : Colors.green.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(6),
                                 ),
-                              ),
-                              subtitle: Text(
-                                '${log['worker'] ?? ''} • ${log['time'] ?? ''}',
-                                style: TextStyle(
-                                  color: Colors.grey[600],
-                                  fontSize: 12,
-                                ),
-                              ),
-                              trailing: Wrap(
-                                spacing: 8,
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 6,
-                                    ),
-                                    decoration: BoxDecoration(
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      isDraft ? Icons.edit : Icons.check_circle,
+                                      size: 14,
                                       color: isDraft
-                                          ? Colors.orange.withOpacity(0.12)
-                                          : Colors.green.withOpacity(0.12),
-                                      borderRadius: BorderRadius.circular(12),
+                                          ? Colors.orange
+                                          : Colors.green,
                                     ),
-                                    child: Text(
+                                    const SizedBox(width: 6),
+                                    Text(
                                       log['status'] ?? '',
                                       style: TextStyle(
-                                        fontWeight: FontWeight.w700,
+                                        fontWeight: FontWeight.w600,
                                         fontSize: 12,
                                         color: isDraft
                                             ? Colors.orange
                                             : Colors.green,
                                       ),
                                     ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              // Time
+                              Text(
+                                log['time'] ?? '',
+                                style: TextStyle(
+                                  color: Colors.grey[600],
+                                  fontSize: 13,
+                                ),
+                              ),
+                              const Spacer(),
+                              // Menu button
+                              if (!isMobile)
+                                PopupMenuButton<String>(
+                                  icon: Icon(Icons.more_vert, size: 20),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
-                                  if (isDraft) ...[
-                                    IconButton(
-                                      onPressed: () => _editDraft(i),
-                                      icon: const Icon(Icons.edit, size: 18),
-                                    ),
-                                    IconButton(
-                                      onPressed: () => _showLogDetails(log),
-                                      icon: const Icon(
-                                        Icons.remove_red_eye,
-                                        size: 18,
+                                  onSelected: (value) {
+                                    if (value == 'edit' && isDraft) {
+                                      _editDraft(i);
+                                    } else if (value == 'view') {
+                                      _showLogDetails(log);
+                                    } else if (value == 'submit' && isDraft) {
+                                      _submitDraft(i);
+                                    }
+                                  },
+                                  itemBuilder: (context) => [
+                                    if (isDraft)
+                                      const PopupMenuItem(
+                                        value: 'edit',
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.edit, size: 18),
+                                            SizedBox(width: 12),
+                                            Text('Edit'),
+                                          ],
+                                        ),
+                                      ),
+                                    const PopupMenuItem(
+                                      value: 'view',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.visibility, size: 18),
+                                          SizedBox(width: 12),
+                                          Text('View Details'),
+                                        ],
                                       ),
                                     ),
-                                    ElevatedButton(
-                                      onPressed: () => _submitDraft(i),
-                                      child: const Text('Submit'),
-                                    ),
-                                  ] else ...[
-                                    TextButton(
-                                      onPressed: () => _showLogDetails(log),
-                                      child: const Text('View'),
-                                    ),
+                                    if (isDraft)
+                                      const PopupMenuItem(
+                                        value: 'submit',
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.send, size: 18),
+                                            SizedBox(width: 12),
+                                            Text('Submit'),
+                                          ],
+                                        ),
+                                      ),
                                   ],
-                                ],
-                              ),
-                            ),
+                                ),
+                            ],
                           ),
-                        );
-                      },
+                          const SizedBox(height: 12),
+                          // Task title
+                          Text(
+                            log['task'] ?? '',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: isMobile ? 15 : 16,
+                              color: darkAction,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 8),
+                          // Workers
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.person_outline,
+                                size: 16,
+                                color: Colors.grey[600],
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  log['worker'] ?? '',
+                                  style: TextStyle(
+                                    color: Colors.grey[700],
+                                    fontSize: 13,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                          // Mobile action buttons
+                          if (isMobile && isDraft) ...[
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: () => _editDraft(i),
+                                    icon: const Icon(Icons.edit, size: 16),
+                                    label: const Text('Edit'),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 8,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: () => _submitDraft(i),
+                                    icon: const Icon(
+                                      Icons.send,
+                                      size: 16,
+                                      color: Colors.white,
+                                    ),
+                                    label: const Text(
+                                      'Submit',
+                                      style: TextStyle(color: Colors.white),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: primary,
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 8,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
+                  ),
+                );
+              },
             ),
-            const SizedBox(height: 12),
-            // summary
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Summary',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Total Logs',
-                        style: TextStyle(color: Colors.grey[700]),
-                      ),
-                      Text(
-                        '${logs.length}',
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Drafts', style: TextStyle(color: Colors.grey[700])),
-                      Text(
-                        '${logs.where((l) => (l['status'] ?? '') == 'Draft').length}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: Colors.orange,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Submitted',
-                        style: TextStyle(color: Colors.grey[700]),
-                      ),
-                      Text(
-                        '${logs.where((l) => (l['status'] ?? '') == 'Submitted').length}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: Colors.green,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
