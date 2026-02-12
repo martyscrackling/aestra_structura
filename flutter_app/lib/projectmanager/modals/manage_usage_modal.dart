@@ -82,12 +82,19 @@ class _ManageUsageModalState extends State<ManageUsageModal> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 768;
+    final dialogWidth = isMobile ? screenWidth * 0.95 : 600.0;
+    final dialogPadding = isMobile ? 16.0 : 24.0;
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
-        width: 600,
-        constraints: const BoxConstraints(maxHeight: 700),
-        padding: const EdgeInsets.all(24),
+        width: dialogWidth,
+        constraints: BoxConstraints(
+          maxHeight: isMobile ? screenWidth * 1.2 : 700,
+        ),
+        padding: EdgeInsets.all(dialogPadding),
         child: Form(
           key: _formKey,
           child: Column(
@@ -96,22 +103,25 @@ class _ManageUsageModalState extends State<ManageUsageModal> {
             children: [
               Row(
                 children: [
-                  const Text(
-                    'Manage Tool Usage',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF0C1935),
+                  Expanded(
+                    child: Text(
+                      'Manage Tool Usage',
+                      style: TextStyle(
+                        fontSize: isMobile ? 18 : 20,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF0C1935),
+                      ),
                     ),
                   ),
-                  const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.close),
                     onPressed: () => Navigator.of(context).pop(),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: isMobile ? 16 : 20),
               Expanded(
                 child: SingleChildScrollView(
                   child: Column(
@@ -119,7 +129,7 @@ class _ManageUsageModalState extends State<ManageUsageModal> {
                     children: [
                       // Tool Info Card
                       Container(
-                        padding: const EdgeInsets.all(16),
+                        padding: EdgeInsets.all(isMobile ? 12 : 16),
                         decoration: BoxDecoration(
                           color: const Color(0xFFFFF5E6),
                           borderRadius: BorderRadius.circular(12),
@@ -130,8 +140,8 @@ class _ManageUsageModalState extends State<ManageUsageModal> {
                         child: Row(
                           children: [
                             Container(
-                              width: 60,
-                              height: 60,
+                              width: isMobile ? 50 : 60,
+                              height: isMobile ? 50 : 60,
                               decoration: BoxDecoration(
                                 color: Colors.grey[100],
                                 borderRadius: BorderRadius.circular(8),
@@ -144,9 +154,9 @@ class _ManageUsageModalState extends State<ManageUsageModal> {
                                         fit: BoxFit.cover,
                                       ),
                                     )
-                                  : const Icon(
+                                  : Icon(
                                       Icons.construction,
-                                      size: 30,
+                                      size: isMobile ? 24 : 30,
                                       color: Colors.grey,
                                     ),
                             ),
@@ -157,18 +167,18 @@ class _ManageUsageModalState extends State<ManageUsageModal> {
                                 children: [
                                   Text(
                                     widget.activeUsage.tool.name,
-                                    style: const TextStyle(
-                                      fontSize: 16,
+                                    style: TextStyle(
+                                      fontSize: isMobile ? 14 : 16,
                                       fontWeight: FontWeight.w700,
-                                      color: Color(0xFF0C1935),
+                                      color: const Color(0xFF0C1935),
                                     ),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
                                     widget.activeUsage.tool.category,
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Color(0xFF6B7280),
+                                    style: TextStyle(
+                                      fontSize: isMobile ? 11 : 12,
+                                      color: const Color(0xFF6B7280),
                                     ),
                                   ),
                                 ],
@@ -177,7 +187,7 @@ class _ManageUsageModalState extends State<ManageUsageModal> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 24),
+                      SizedBox(height: isMobile ? 20 : 24),
 
                       // Usage Status
                       const Text(
@@ -310,94 +320,187 @@ class _ManageUsageModalState extends State<ManageUsageModal> {
                       const SizedBox(height: 16),
 
                       // Dates Row
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
+                      isMobile
+                          ? Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text(
-                                  'Checkout Date',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF6B7280),
-                                  ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Checkout Date',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF6B7280),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    InkWell(
+                                      onTap: () => _pickDate(true),
+                                      child: Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF9FAFB),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            const Icon(
+                                              Icons.calendar_today,
+                                              size: 16,
+                                              color: Color(0xFF6B7280),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              _checkoutDate != null
+                                                  ? '${_checkoutDate!.day}/${_checkoutDate!.month}/${_checkoutDate!.year}'
+                                                  : 'Select date',
+                                              style: const TextStyle(
+                                                color: Color(0xFF0C1935),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(height: 6),
-                                InkWell(
-                                  onTap: () => _pickDate(true),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFF9FAFB),
-                                      borderRadius: BorderRadius.circular(10),
+                                const SizedBox(height: 12),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Expected Return',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF6B7280),
+                                      ),
                                     ),
-                                    child: Row(
-                                      children: [
-                                        const Icon(
-                                          Icons.calendar_today,
-                                          size: 16,
-                                          color: Color(0xFF6B7280),
+                                    const SizedBox(height: 6),
+                                    InkWell(
+                                      onTap: () => _pickDate(false),
+                                      child: Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF9FAFB),
+                                          borderRadius: BorderRadius.circular(10),
                                         ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          _checkoutDate != null
-                                              ? '${_checkoutDate!.day}/${_checkoutDate!.month}/${_checkoutDate!.year}'
-                                              : 'Select date',
-                                          style: const TextStyle(
-                                            color: Color(0xFF0C1935),
-                                          ),
+                                        child: Row(
+                                          children: [
+                                            const Icon(
+                                              Icons.calendar_today,
+                                              size: 16,
+                                              color: Color(0xFF6B7280),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              _expectedReturnDate != null
+                                                  ? '${_expectedReturnDate!.day}/${_expectedReturnDate!.month}/${_expectedReturnDate!.year}'
+                                                  : 'Select date',
+                                              style: const TextStyle(
+                                                color: Color(0xFF0C1935),
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                      ],
+                                      ),
                                     ),
-                                  ),
+                                  ],
                                 ),
                               ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            )
+                          : Row(
                               children: [
-                                const Text(
-                                  'Expected Return',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF6B7280),
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                InkWell(
-                                  onTap: () => _pickDate(false),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFF9FAFB),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        const Icon(
-                                          Icons.calendar_today,
-                                          size: 16,
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Checkout Date',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
                                           color: Color(0xFF6B7280),
                                         ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          _expectedReturnDate != null
-                                              ? '${_expectedReturnDate!.day}/${_expectedReturnDate!.month}/${_expectedReturnDate!.year}'
-                                              : 'Select date',
-                                          style: const TextStyle(
-                                            color: Color(0xFF0C1935),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      InkWell(
+                                        onTap: () => _pickDate(true),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFF9FAFB),
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              const Icon(
+                                                Icons.calendar_today,
+                                                size: 16,
+                                                color: Color(0xFF6B7280),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                _checkoutDate != null
+                                                    ? '${_checkoutDate!.day}/${_checkoutDate!.month}/${_checkoutDate!.year}'
+                                                    : 'Select date',
+                                                style: const TextStyle(
+                                                  color: Color(0xFF0C1935),
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
-                                      ],
-                                    ),
+                                      ),
+                                    ],
                                   ),
                                 ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Expected Return',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF6B7280),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      InkWell(
+                                        onTap: () => _pickDate(false),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFF9FAFB),
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              const Icon(
+                                                Icons.calendar_today,
+                                                size: 16,
+                                                color: Color(0xFF6B7280),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                _expectedReturnDate != null
+                                                    ? '${_expectedReturnDate!.day}/${_expectedReturnDate!.month}/${_expectedReturnDate!.year}'
+                                                    : 'Select date',
+                                                style: const TextStyle(
+                                                  color: Color(0xFF0C1935),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
                               ],
                             ),
                           ),
@@ -459,72 +562,148 @@ class _ManageUsageModalState extends State<ManageUsageModal> {
               const SizedBox(height: 24),
 
               // Action Buttons
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      // Return tool action
-                      Navigator.of(context).pop({'action': 'return'});
-                    },
-                    icon: const Icon(Icons.assignment_return),
-                    label: const Text('Return Tool'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.green,
-                      side: const BorderSide(color: Colors.green),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 12,
-                      ),
+              isMobile
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            // Return tool action
+                            Navigator.of(context).pop({'action': 'return'});
+                          },
+                          icon: const Icon(Icons.assignment_return, size: 18),
+                          label: const Text('Return Tool'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.green,
+                            side: const BorderSide(color: Colors.green),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 12,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextButton(
+                                onPressed: () => Navigator.of(context).pop(),
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                ),
+                                child: const Text(
+                                  'Cancel',
+                                  style: TextStyle(color: Color(0xFF6B7280)),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              flex: 2,
+                              child: ElevatedButton(
+                                onPressed: () {
+                                  if (_formKey.currentState!.validate()) {
+                                    Navigator.of(context).pop({
+                                      'action': 'update',
+                                      'status': _usageStatus,
+                                      'users': _currentUsers,
+                                      'checkoutDate': _checkoutDate,
+                                      'returnDate': _expectedReturnDate,
+                                      'purpose': _purposeController.text,
+                                      'notes': _notesController.text,
+                                    });
+                                  }
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFFF7A18),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'Save Changes',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    )
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            // Return tool action
+                            Navigator.of(context).pop({'action': 'return'});
+                          },
+                          icon: const Icon(Icons.assignment_return),
+                          label: const Text('Return Tool'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.green,
+                            side: const BorderSide(color: Colors.green),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 12,
+                            ),
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              child: const Text(
+                                'Cancel',
+                                style: TextStyle(color: Color(0xFF6B7280)),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            ElevatedButton(
+                              onPressed: () {
+                                if (_formKey.currentState!.validate()) {
+                                  Navigator.of(context).pop({
+                                    'action': 'update',
+                                    'status': _usageStatus,
+                                    'users': _currentUsers,
+                                    'checkoutDate': _checkoutDate,
+                                    'returnDate': _expectedReturnDate,
+                                    'purpose': _purposeController.text,
+                                    'notes': _notesController.text,
+                                  });
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFFF7A18),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 32,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              child: const Text(
+                                'Save Changes',
+                                style: TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                  ),
-                  Row(
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: const Text(
-                          'Cancel',
-                          style: TextStyle(color: Color(0xFF6B7280)),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      ElevatedButton(
-                        onPressed: () {
-                          if (_formKey.currentState!.validate()) {
-                            Navigator.of(context).pop({
-                              'action': 'update',
-                              'status': _usageStatus,
-                              'users': _currentUsers,
-                              'checkoutDate': _checkoutDate,
-                              'returnDate': _expectedReturnDate,
-                              'purpose': _purposeController.text,
-                              'notes': _notesController.text,
-                            });
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFFF7A18),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 32,
-                            vertical: 12,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        child: const Text(
-                          'Save Changes',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
             ],
           ),
         ),

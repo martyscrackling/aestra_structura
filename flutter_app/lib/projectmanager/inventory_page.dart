@@ -5,6 +5,7 @@ import 'widgets/responsive_page_layout.dart';
 import 'modals/tool_details_modal.dart';
 import 'modals/add_inventory_item_modal.dart';
 import 'modals/manage_usage_modal.dart';
+import 'materials_page.dart';
 
 class ToolItem {
   final String id;
@@ -163,15 +164,28 @@ class _InventoryPageState extends State<InventoryPage> {
                         );
                       }
                     },
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Add Item'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFF7A18),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
+                    icon: const Icon(Icons.add, color: Colors.white),
+                    label: const Text(
+                      'Add Item',
+                      style: TextStyle(color: Colors.white),
                     ),
+                    style: ElevatedButton.styleFrom(backgroundColor: primary),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const MaterialsPage(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.layers),
+                    label: const Text('Materials'),
+                    style: TextButton.styleFrom(foregroundColor: primary),
                   ),
                 ),
               ] else
@@ -194,6 +208,19 @@ class _InventoryPageState extends State<InventoryPage> {
                           fillColor: Colors.grey[100],
                         ),
                       ),
+                    ),
+                    const SizedBox(width: 12),
+                    TextButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const MaterialsPage(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.layers),
+                      label: const Text('Materials'),
+                      style: TextButton.styleFrom(foregroundColor: primary),
                     ),
                     const SizedBox(width: 12),
                     ElevatedButton.icon(
@@ -220,37 +247,108 @@ class _InventoryPageState extends State<InventoryPage> {
 
               const SizedBox(height: 18),
 
-              // Grid of all items
-              Text(
-                'All Tools & Machines',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.grey[800],
-                ),
+              // Table of all items
+              Row(
+                children: [
+                  Text(
+                    'All Tools & Machines',
+                    style: TextStyle(
+                      fontSize: isMobile ? 14 : 16,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.grey[800],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    '${_filtered.length} items',
+                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
-              LayoutBuilder(
-                builder: (context, c) {
-                  final maxWidth = c.maxWidth;
-                  final crossAxis = maxWidth ~/ 260; // each card ~260px
-                  final crossAxisCount = crossAxis.clamp(1, 4);
-                  return GridView.builder(
-                    physics: const NeverScrollableScrollPhysics(),
-                    shrinkWrap: true,
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: crossAxisCount,
-                      mainAxisExtent: 250,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
+
+              // Table Container
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    // Table Header
+                    Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isMobile ? 12 : 16,
+                        vertical: isMobile ? 10 : 14,
+                      ),
+                      decoration: BoxDecoration(
+                        color: primary.withOpacity(0.05),
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(12),
+                          topRight: Radius.circular(12),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              'Tool/Machine Name',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: isMobile ? 12 : 13,
+                              ),
+                            ),
+                          ),
+                          if (!isMobile)
+                            const Expanded(
+                              flex: 2,
+                              child: Text(
+                                'Category',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          Expanded(
+                            flex: isMobile ? 1 : 2,
+                            child: Text(
+                              'Status',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: isMobile ? 12 : 13,
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: isMobile ? 22 : 40), // for icon
+                        ],
+                      ),
                     ),
-                    itemCount: _filtered.length,
-                    itemBuilder: (context, i) {
-                      final t = _filtered[i];
-                      return _toolCard(t);
-                    },
-                  );
-                },
+
+                    // Table Body
+                    _filtered.isEmpty
+                        ? Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Center(
+                              child: Text(
+                                'No tools found',
+                                style: TextStyle(color: Colors.grey[600]),
+                              ),
+                            ),
+                          )
+                        : ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: _filtered.length,
+                            itemBuilder: (context, i) {
+                              final t = _filtered[i];
+                              final isEven = i.isEven;
+                              return _tableRow(t, isEven, isMobile);
+                            },
+                          ),
+                  ],
+                ),
               ),
               const SizedBox(height: 22),
 
@@ -273,6 +371,7 @@ class _InventoryPageState extends State<InventoryPage> {
                 ],
               ),
               const SizedBox(height: 12),
+              // Currently In Use Table
               _active.isEmpty
                   ? Container(
                       padding: const EdgeInsets.all(18),
@@ -282,12 +381,89 @@ class _InventoryPageState extends State<InventoryPage> {
                       ),
                       child: const Text('No active tools currently'),
                     )
-                  : Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: _active
-                          .map((a) => _activeCard(a, context))
-                          .toList(),
+                  : Card(
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        children: [
+                          // Table Header
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: isMobile ? 12 : 16,
+                              vertical: isMobile ? 10 : 14,
+                            ),
+                            decoration: BoxDecoration(
+                              color: primary.withOpacity(0.05),
+                              borderRadius: const BorderRadius.only(
+                                topLeft: Radius.circular(12),
+                                topRight: Radius.circular(12),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  flex: 4,
+                                  child: Text(
+                                    'Tool/Machine',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: isMobile ? 12 : 13,
+                                    ),
+                                  ),
+                                ),
+                                if (!isMobile)
+                                  const Expanded(
+                                    flex: 3,
+                                    child: Text(
+                                      'Category',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                const Expanded(
+                                  flex: 3,
+                                  child: Text(
+                                    'Used By',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: isMobile ? 2 : 3,
+                                  child: Text(
+                                    'Status',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: isMobile ? 12 : 13,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: isMobile ? 70 : 110,
+                                ), // for manage button
+                              ],
+                            ),
+                          ),
+
+                          // Table Body
+                          ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: _active.length,
+                            itemBuilder: (context, i) {
+                              final a = _active[i];
+                              final isEven = i.isEven;
+                              return _activeUsageRow(a, isEven, isMobile);
+                            },
+                          ),
+                        ],
+                      ),
                     ),
               SizedBox(height: isMobile ? 100 : 28),
             ],
@@ -297,80 +473,92 @@ class _InventoryPageState extends State<InventoryPage> {
     );
   }
 
-  Widget _toolCard(ToolItem t) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: () => _showToolDetails(t),
-        borderRadius: BorderRadius.circular(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget _tableRow(ToolItem t, bool isEven, bool isMobile) {
+    return InkWell(
+      onTap: () => _showToolDetails(t),
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: isMobile ? 12 : 16,
+          vertical: isMobile ? 10 : 12,
+        ),
+        decoration: BoxDecoration(
+          color: isEven ? Colors.grey.shade50 : Colors.white,
+          border: Border(
+            bottom: BorderSide(color: Colors.grey.shade200, width: 1),
+          ),
+        ),
+        child: Row(
           children: [
-            // image area
-            Container(
-              height: 120,
-              decoration: BoxDecoration(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(12),
-                ),
-                color: Colors.grey[100],
-              ),
-              child: t.photoAsset != null
-                  ? ClipRRect(
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(12),
-                      ),
-                      child: Image.asset(t.photoAsset!, fit: BoxFit.cover),
-                    )
-                  : Center(
-                      child: Icon(
-                        Icons.construction,
-                        size: 48,
-                        color: Colors.grey[400],
-                      ),
-                    ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            // Tool name with icon
+            Expanded(
+              flex: 3,
+              child: Row(
                 children: [
-                  Text(
-                    t.name,
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[100],
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          t.category,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey,
-                          ),
-                        ),
+                  if (!isMobile) ...[
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      const SizedBox(width: 8),
-                      _statusChip(t.status),
-                      const Spacer(),
-                      IconButton(
-                        onPressed: () => _showToolDetails(t),
-                        icon: const Icon(Icons.more_horiz),
+                      child: Icon(Icons.construction, color: primary, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  Expanded(
+                    child: Text(
+                      t.name,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: isMobile ? 13 : 14,
                       ),
-                    ],
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
+            ),
+
+            // Category (hidden on mobile)
+            if (!isMobile)
+              Expanded(
+                flex: 2,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      t.category,
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ),
+
+            // Status
+            Expanded(
+              flex: isMobile ? 1 : 2,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _statusChip(t.status),
+              ),
+            ),
+
+            // View details icon
+            SizedBox(width: isMobile ? 22 : 40),
+            Icon(
+              Icons.chevron_right,
+              color: Colors.grey[400],
+              size: isMobile ? 18 : 20,
             ),
           ],
         ),
@@ -385,102 +573,152 @@ class _InventoryPageState extends State<InventoryPage> {
               ? Colors.orange
               : Colors.redAccent);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       decoration: BoxDecoration(
         color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
         status,
         style: TextStyle(
           color: color,
           fontWeight: FontWeight.w700,
-          fontSize: 12,
+          fontSize: 11,
         ),
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }
 
-  Widget _activeCard(ActiveUsage a, BuildContext ctx) {
-    return SizedBox(
-      width: 320,
-      child: Card(
-        elevation: 3,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // small photo
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: a.tool.photoAsset != null
-                    ? Image.asset(a.tool.photoAsset!, fit: BoxFit.cover)
-                    : const Icon(Icons.build, size: 36, color: Colors.grey),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      a.tool.name,
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Used by: ${a.users.join(', ')}',
-                      style: const TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        _statusChip(a.usageStatus),
-                        const SizedBox(width: 8),
-                        TextButton(
-                          onPressed: () async {
-                            final result = await showDialog(
-                              context: context,
-                              builder: (ctx) =>
-                                  ManageUsageModal(activeUsage: a),
-                            );
-                            if (result != null) {
-                              if (result['action'] == 'return') {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      '${a.tool.name} returned successfully',
-                                    ),
-                                  ),
-                                );
-                              } else if (result['action'] == 'update') {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Usage updated successfully'),
-                                  ),
-                                );
-                              }
-                            }
-                          },
-                          child: const Text(
-                            'Manage',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+  Widget _activeUsageRow(ActiveUsage a, bool isEven, bool isMobile) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 12 : 16,
+        vertical: isMobile ? 12 : 14,
+      ),
+      decoration: BoxDecoration(
+        color: isEven ? Colors.grey.shade50 : Colors.white,
+        border: Border(
+          bottom: BorderSide(color: Colors.grey.shade200, width: 1),
         ),
+      ),
+      child: Row(
+        children: [
+          // Tool name with icon
+          Expanded(
+            flex: 4,
+            child: Row(
+              children: [
+                if (!isMobile) ...[
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(Icons.build, color: primary, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                Expanded(
+                  child: Text(
+                    a.tool.name,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: isMobile ? 13 : 14,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Category (hidden on mobile)
+          if (!isMobile)
+            Expanded(
+              flex: 3,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    a.tool.category,
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ),
+
+          const SizedBox(width: 8),
+
+          // Users
+          Expanded(
+            flex: 3,
+            child: Text(
+              a.users.join(', '),
+              style: TextStyle(
+                fontSize: isMobile ? 11 : 12,
+                color: Colors.grey[700],
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // Status
+          Expanded(
+            flex: isMobile ? 2 : 3,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _statusChip(a.usageStatus),
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // Manage button
+          SizedBox(
+            width: isMobile ? 70 : 110,
+            child: TextButton(
+              onPressed: () async {
+                final result = await showDialog(
+                  context: context,
+                  builder: (ctx) => ManageUsageModal(activeUsage: a),
+                );
+                if (result != null) {
+                  if (result['action'] == 'return') {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('${a.tool.name} returned successfully'),
+                      ),
+                    );
+                  } else if (result['action'] == 'update') {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Usage updated successfully'),
+                      ),
+                    );
+                  }
+                }
+              },
+              child: Text(
+                'Manage',
+                style: TextStyle(fontSize: isMobile ? 11 : 12),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
