@@ -133,34 +133,51 @@ class _BottomNavBar extends StatelessWidget {
       {"label": "Projects", "icon": Icons.folder},
       {"label": "Workforce", "icon": Icons.people},
       {"label": "Clients", "icon": Icons.person},
-      {"label": "More", "icon": Icons.menu},
+      {"label": "More", "icon": Icons.more_horiz},
     ];
+
+    // Check if current page is in the "More" submenu
+    final morePages = ['Inventory', 'Reports', 'Settings'];
+    final isOnMorePage = morePages.contains(currentPage);
 
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF0C1935),
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, -2),
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
+            spreadRadius: 2,
           ),
         ],
       ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: menuItems.map((item) {
-              final isActive = item["label"] == currentPage;
-              return _buildNavItem(
-                context,
-                item["label"] as String,
-                item["icon"] as IconData,
-                isActive,
-              );
-            }).toList(),
+      child: ClipRRect(
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: menuItems.map((item) {
+                final label = item["label"] as String;
+                final isActive =
+                    label == currentPage || (label == "More" && isOnMorePage);
+                return _buildNavItem(
+                  context,
+                  label,
+                  item["icon"] as IconData,
+                  isActive,
+                );
+              }).toList(),
+            ),
           ),
         ),
       ),
@@ -173,45 +190,39 @@ class _BottomNavBar extends StatelessWidget {
     IconData icon,
     bool isActive,
   ) {
-    if (label == "More") {
-      return InkWell(
-        onTap: () => _showMoreMenu(context),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: Colors.white70, size: 24),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: const TextStyle(color: Colors.white70, fontSize: 10),
-            ),
-          ],
-        ),
-      );
-    }
+    final color = isActive ? const Color(0xFFFF6F00) : Colors.white70;
 
     return InkWell(
       onTap: () {
-        print('Bottom nav tapped: $label'); // Debug log
-        _navigateToPage(context, label);
+        if (label == "More") {
+          _showMoreMenu(context);
+        } else {
+          print('Bottom nav tapped: $label'); // Debug log
+          _navigateToPage(context, label);
+        }
       },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      borderRadius: BorderRadius.circular(12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive
+              ? const Color(0xFFFF6F00).withOpacity(0.15)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              color: isActive ? const Color(0xFF1396E9) : Colors.white70,
-              size: 24,
-            ),
+            Icon(icon, color: color, size: 24),
             const SizedBox(height: 4),
             Text(
               label,
               style: TextStyle(
-                color: isActive ? const Color(0xFF1396E9) : Colors.white70,
-                fontSize: 10,
-                fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                color: color,
+                fontSize: 11,
+                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                letterSpacing: 0.3,
               ),
             ),
           ],

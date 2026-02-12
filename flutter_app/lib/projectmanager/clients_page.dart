@@ -17,11 +17,23 @@ class ClientsPage extends StatefulWidget {
 
 class _ClientsPageState extends State<ClientsPage> {
   late Future<List<ClientInfo>> _clientsFuture;
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _clientsFuture = _fetchClients();
+  }
+
+  List<ClientInfo> _filterClients(List<ClientInfo> clients) {
+    if (_searchQuery.isEmpty) return clients;
+    final query = _searchQuery.toLowerCase();
+    return clients.where((client) {
+      return client.name.toLowerCase().contains(query) ||
+          client.email.toLowerCase().contains(query) ||
+          client.company.toLowerCase().contains(query) ||
+          client.phone.toLowerCase().contains(query);
+    }).toList();
   }
 
   Future<List<ClientInfo>> _fetchClients() async {
@@ -61,7 +73,13 @@ class _ClientsPageState extends State<ClientsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _ClientsHeader(),
+          _ClientsHeader(
+            onSearchChanged: (query) {
+              setState(() {
+                _searchQuery = query;
+              });
+            },
+          ),
           const SizedBox(height: 24),
           FutureBuilder<List<ClientInfo>>(
             future: _clientsFuture,
@@ -73,7 +91,8 @@ class _ClientsPageState extends State<ClientsPage> {
               } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
                 return const Center(child: Text('No clients found'));
               } else {
-                return _ActiveClientsSection(clients: snapshot.data!);
+                final filteredClients = _filterClients(snapshot.data!);
+                return _ActiveClientsSection(clients: filteredClients);
               }
             },
           ),
@@ -85,6 +104,10 @@ class _ClientsPageState extends State<ClientsPage> {
 }
 
 class _ClientsHeader extends StatelessWidget {
+  final Function(String) onSearchChanged;
+
+  const _ClientsHeader({required this.onSearchChanged});
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -93,7 +116,7 @@ class _ClientsHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (!isMobile)
+        if (!isMobile) ...[
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -116,10 +139,33 @@ class _ClientsHeader extends StatelessWidget {
                 ],
               ),
               const Spacer(),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              const Spacer(),
+              SizedBox(
+                width: 360,
+                child: TextField(
+                  onChanged: onSearchChanged,
+                  decoration: InputDecoration(
+                    hintText: 'Search clients...',
+                    isDense: true,
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey[100],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
               SizedBox(height: 40, child: _AddClientButton()),
             ],
-          )
-        else ...[
+          ),
+        ] else ...[
           const Text(
             'Clients',
             style: TextStyle(
@@ -134,6 +180,20 @@ class _ClientsHeader extends StatelessWidget {
             style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
           ),
           const SizedBox(height: 16),
+          TextField(
+            onChanged: onSearchChanged,
+            decoration: InputDecoration(
+              hintText: 'Search clients...',
+              isDense: true,
+              prefixIcon: const Icon(Icons.search, size: 20),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              filled: true,
+              fillColor: Colors.grey[100],
+            ),
+          ),
+          const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
             height: 40,
@@ -149,22 +209,15 @@ class _AddClientButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ElevatedButton.icon(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFFFF7A18),
-        padding: const EdgeInsets.symmetric(horizontal: 18),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
       onPressed: () {
         showDialog(
           context: context,
           builder: (context) => const AddClientModal(),
         );
       },
-      icon: const Icon(Icons.person_add, size: 18),
-      label: const Text(
-        'Add Client',
-        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-      ),
+      icon: const Icon(Icons.add, color: Colors.white),
+      label: const Text('Add Client', style: TextStyle(color: Colors.white)),
+      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF7A18)),
     );
   }
 }

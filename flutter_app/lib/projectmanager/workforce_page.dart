@@ -342,7 +342,7 @@ class WorkerGroupSection extends StatelessWidget {
                       ),
                       const Spacer(),
                       SizedBox(
-                        height: 36,
+                        height: 40,
                         child: ElevatedButton.icon(
                           onPressed: () async {
                             final result = await showDialog<String>(
@@ -375,25 +375,13 @@ class WorkerGroupSection extends StatelessWidget {
                               }
                             }
                           },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFFF7A18),
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          icon: const Icon(
-                            Icons.add,
-                            size: 16,
-                            color: Colors.white,
-                          ),
+                          icon: const Icon(Icons.add, color: Colors.white),
                           label: const Text(
                             'Add',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
+                            style: TextStyle(color: Colors.white),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFF7A18),
                           ),
                         ),
                       ),
@@ -499,7 +487,7 @@ class WorkerGroupSection extends StatelessWidget {
                   ),
                   const Spacer(),
                   SizedBox(
-                    height: 36,
+                    height: 40,
                     child: ElevatedButton.icon(
                       onPressed: () async {
                         final result = await showDialog<String>(
@@ -531,25 +519,13 @@ class WorkerGroupSection extends StatelessWidget {
                           }
                         }
                       },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFF7A18),
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      icon: const Icon(
-                        Icons.add,
-                        size: 16,
-                        color: Colors.white,
-                      ),
+                      icon: const Icon(Icons.add, color: Colors.white),
                       label: const Text(
                         'Add new',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                        ),
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFFF7A18),
                       ),
                     ),
                   ),

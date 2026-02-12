@@ -133,21 +133,42 @@ class _InventoryPageState extends State<InventoryPage> {
               const SizedBox(height: 18),
               // Search and Add button row
               if (isMobile) ...[
-                SizedBox(
-                  width: double.infinity,
-                  child: TextField(
-                    onChanged: (v) => setState(() => _query = v),
-                    decoration: InputDecoration(
-                      hintText: 'Search tools',
-                      isDense: true,
-                      prefixIcon: const Icon(Icons.search, size: 20),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        onChanged: (v) => setState(() => _query = v),
+                        decoration: InputDecoration(
+                          hintText: 'Search tools...',
+                          isDense: true,
+                          prefixIcon: const Icon(Icons.search, size: 20),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          filled: true,
+                          fillColor: Colors.grey[100],
+                        ),
                       ),
-                      filled: true,
-                      fillColor: Colors.grey[100],
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    OutlinedButton(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const MaterialsPage(),
+                          ),
+                        );
+                      },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: primary,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                      ),
+                      child: const Icon(Icons.layers, size: 20),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
@@ -173,21 +194,6 @@ class _InventoryPageState extends State<InventoryPage> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: TextButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const MaterialsPage(),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.layers),
-                    label: const Text('Materials'),
-                    style: TextButton.styleFrom(foregroundColor: primary),
-                  ),
-                ),
               ] else
                 Row(
                   children: [

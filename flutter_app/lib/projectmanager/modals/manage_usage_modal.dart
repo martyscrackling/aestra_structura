@@ -343,7 +343,9 @@ class _ManageUsageModalState extends State<ManageUsageModal> {
                                         padding: const EdgeInsets.all(12),
                                         decoration: BoxDecoration(
                                           color: const Color(0xFFF9FAFB),
-                                          borderRadius: BorderRadius.circular(10),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
                                         ),
                                         child: Row(
                                           children: [
@@ -387,7 +389,9 @@ class _ManageUsageModalState extends State<ManageUsageModal> {
                                         padding: const EdgeInsets.all(12),
                                         decoration: BoxDecoration(
                                           color: const Color(0xFFF9FAFB),
-                                          borderRadius: BorderRadius.circular(10),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
                                         ),
                                         child: Row(
                                           children: [
@@ -417,7 +421,8 @@ class _ManageUsageModalState extends State<ManageUsageModal> {
                               children: [
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       const Text(
                                         'Checkout Date',
@@ -434,7 +439,9 @@ class _ManageUsageModalState extends State<ManageUsageModal> {
                                           padding: const EdgeInsets.all(12),
                                           decoration: BoxDecoration(
                                             color: const Color(0xFFF9FAFB),
-                                            borderRadius: BorderRadius.circular(10),
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
                                           ),
                                           child: Row(
                                             children: [
@@ -462,7 +469,8 @@ class _ManageUsageModalState extends State<ManageUsageModal> {
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       const Text(
                                         'Expected Return',
@@ -479,7 +487,9 @@ class _ManageUsageModalState extends State<ManageUsageModal> {
                                           padding: const EdgeInsets.all(12),
                                           decoration: BoxDecoration(
                                             color: const Color(0xFFF9FAFB),
-                                            borderRadius: BorderRadius.circular(10),
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
                                           ),
                                           child: Row(
                                             children: [
@@ -501,11 +511,11 @@ class _ManageUsageModalState extends State<ManageUsageModal> {
                                           ),
                                         ),
                                       ),
+                                    ],
+                                  ),
+                                ),
                               ],
                             ),
-                          ),
-                        ],
-                      ),
                       const SizedBox(height: 16),
 
                       // Purpose
@@ -579,9 +589,7 @@ class _ManageUsageModalState extends State<ManageUsageModal> {
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 12,
-                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
                         ),
                         const SizedBox(height: 12),

@@ -101,19 +101,42 @@ class _MaterialsPageState extends State<MaterialsPage> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Search bar
-            TextField(
-              onChanged: (v) => setState(() => _searchQuery = v),
-              decoration: InputDecoration(
-                hintText: 'Search materials...',
-                isDense: true,
-                prefixIcon: const Icon(Icons.search, size: 20),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
+            if (isMobile)
+              TextField(
+                onChanged: (v) => setState(() => _searchQuery = v),
+                decoration: InputDecoration(
+                  hintText: 'Search materials...',
+                  isDense: true,
+                  prefixIcon: const Icon(Icons.search, size: 20),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[100],
                 ),
-                filled: true,
-                fillColor: Colors.grey[100],
+              )
+            else
+              Row(
+                children: [
+                  const Spacer(),
+                  SizedBox(
+                    width: 360,
+                    child: TextField(
+                      onChanged: (v) => setState(() => _searchQuery = v),
+                      decoration: InputDecoration(
+                        hintText: 'Search materials...',
+                        isDense: true,
+                        prefixIcon: const Icon(Icons.search, size: 20),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey[100],
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
             const SizedBox(height: 16),
 
             // Header
