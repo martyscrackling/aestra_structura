@@ -1,14 +1,86 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
-class Tasks extends StatelessWidget {
-  const Tasks({super.key});
+import '../../services/app_config.dart';
 
-  final List<Map<String, String>> tasks = const [
-    {"title": "Site survey, layout, soil test, clear site.", "status": "In Progress"},
-    {"title": "Mobilize equipment, set up temporary facilities (storage, worker quarters).", "status": "Completed"},
-    {"title": "Excavation for foundation.", "status": "Pending"},
-    {"title": "Continue excavation, soil compaction.", "status": "In Review"},
-  ];
+class Tasks extends StatefulWidget {
+  final int? projectId;
+
+  const Tasks({super.key, required this.projectId});
+
+  @override
+  State<Tasks> createState() => _TasksState();
+}
+
+class _TasksState extends State<Tasks> {
+  Future<List<Map<String, dynamic>>>? _tasksFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _tasksFuture = _fetchTasks();
+  }
+
+  @override
+  void didUpdateWidget(covariant Tasks oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.projectId != widget.projectId) {
+      _tasksFuture = _fetchTasks();
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchTasks() async {
+    final projectId = widget.projectId;
+    if (projectId == null) return [];
+
+    try {
+      final response = await http.get(
+        AppConfig.apiUri('subtasks/?project_id=$projectId'),
+      );
+
+      if (response.statusCode != 200) return [];
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! List) return [];
+
+      final tasks = decoded
+          .whereType<Map<String, dynamic>>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+
+      tasks.sort((a, b) {
+        final aUpdated = (a['updated_at'] as String?) ?? '';
+        final bUpdated = (b['updated_at'] as String?) ?? '';
+        return bUpdated.compareTo(aUpdated);
+      });
+
+      // Keep the widget compact
+      return tasks.take(4).toList(growable: false);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  String _statusLabel(String raw) {
+    switch (raw.toLowerCase()) {
+      case 'completed':
+        return 'Completed';
+      case 'in_progress':
+      case 'in progress':
+        return 'In Progress';
+      case 'pending':
+        return 'Pending';
+      case 'assigned':
+        return 'Assigned';
+      case 'in_review':
+      case 'in review':
+        return 'In Review';
+      default:
+        return raw.isEmpty ? 'Pending' : raw;
+    }
+  }
 
   Color getStatusColor(String status) {
     switch (status) {
@@ -20,6 +92,8 @@ class Tasks extends StatelessWidget {
         return const Color.fromARGB(255, 253, 207, 1); // Light Grey
       case "In Review":
         return const Color(0xFFFF8F00); // Light Orange
+      case "Assigned":
+        return const Color(0xFF2563EB);
       default:
         return Colors.grey;
     }
@@ -35,6 +109,8 @@ class Tasks extends StatelessWidget {
         return 0.78;
       case "Pending":
         return 0.12;
+      case "Assigned":
+        return 0.2;
       default:
         return 0.0;
     }
@@ -57,7 +133,11 @@ class Tasks extends StatelessWidget {
       ),
       child: Text(
         status,
-        style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12),
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w700,
+          fontSize: 12,
+        ),
       ),
     );
   }
@@ -72,7 +152,6 @@ class Tasks extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header row
             Row(
               children: [
                 const Expanded(
@@ -91,113 +170,169 @@ class Tasks extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
+            if (widget.projectId == null)
+              const Text(
+                'No project assigned.',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              )
+            else
+              FutureBuilder<List<Map<String, dynamic>>>(
+                future: _tasksFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
 
-            // Tasks list
-            Column(
-              children: tasks.map((task) {
-                final title = task["title"]!;
-                final status = task["status"]!;
-                final color = getStatusColor(status);
-                final progress = _progressFor(status);
+                  final tasks = snapshot.data ?? const [];
+                  if (tasks.isEmpty) {
+                    return const Text(
+                      'No tasks found.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    );
+                  }
 
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: const [
-                        BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 3))
-                      ],
-                      border: Border.all(color: Colors.grey.shade100),
-                    ),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            // Avatar / initials
-                            Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: Colors.blueGrey.shade50,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.white, width: 1.5),
+                  return Column(
+                    children: tasks.map((task) {
+                      final title =
+                          (task['title'] as String?) ?? 'Untitled task';
+                      final rawStatus =
+                          (task['status'] as String?) ?? 'pending';
+                      final status = _statusLabel(rawStatus);
+                      final color = getStatusColor(status);
+                      final progress = _progressFor(status);
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Colors.black12,
+                                blurRadius: 6,
+                                offset: Offset(0, 3),
                               ),
-                              child: Center(
-                                child: Text(
-                                  _initials(title),
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF2E3A44)),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-
-                            // Title and small meta
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                            ],
+                            border: Border.all(color: Colors.grey.shade100),
+                          ),
+                          child: Column(
+                            children: [
+                              Row(
                                 children: [
-                                  Text(
-                                    title,
-                                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF2E3A44)),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Row(
-                                    children: [
-                                      Icon(Icons.calendar_today_outlined, size: 12, color: Colors.grey[500]),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        status == "Completed" ? "Done" : "Due soon",
-                                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                                  Container(
+                                    width: 40,
+                                    height: 40,
+                                    decoration: BoxDecoration(
+                                      color: Colors.blueGrey.shade50,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 1.5,
                                       ),
-                                      const SizedBox(width: 12),
-                                      _statusChip(status),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        _initials(title),
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFF2E3A44),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          title,
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w700,
+                                            color: Color(0xFF2E3A44),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              Icons.calendar_today_outlined,
+                                              size: 12,
+                                              color: Colors.grey[500],
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              status == "Completed"
+                                                  ? "Done"
+                                                  : "Due soon",
+                                              style: TextStyle(
+                                                color: Colors.grey[600],
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            _statusChip(status),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  PopupMenuButton<int>(
+                                    padding: EdgeInsets.zero,
+                                    icon: const Icon(
+                                      Icons.more_horiz,
+                                      color: Colors.grey,
+                                    ),
+                                    itemBuilder: (_) => const [
+                                      PopupMenuItem(
+                                        value: 0,
+                                        child: Text('Edit'),
+                                      ),
+                                      PopupMenuItem(
+                                        value: 1,
+                                        child: Text('Delete'),
+                                      ),
                                     ],
                                   ),
                                 ],
                               ),
-                            ),
-
-                            // Menu
-                            PopupMenuButton<int>(
-                              padding: EdgeInsets.zero,
-                              icon: const Icon(Icons.more_horiz, color: Colors.grey),
-                              itemBuilder: (_) => const [
-                                PopupMenuItem(value: 0, child: Text('Edit')),
-                                PopupMenuItem(value: 1, child: Text('Delete')),
-                              ],
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 10),
-
-                        // Progress row
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: LinearProgressIndicator(
-                                  value: progress,
-                                  minHeight: 8,
-                                  color: color,
-                                  backgroundColor: Colors.grey[200],
-                                ),
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: LinearProgressIndicator(
+                                        value: progress,
+                                        minHeight: 8,
+                                        color: color,
+                                        backgroundColor: Colors.grey[200],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    '${(progress * 100).toInt()}%',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: color,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            Text('${(progress * 100).toInt()}%', style: TextStyle(fontWeight: FontWeight.w700, color: color)),
-                          ],
+                            ],
+                          ),
                         ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
+                      );
+                    }).toList(),
+                  );
+                },
+              ),
           ],
         ),
       ),

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../cl_notifications.dart';
 import '../cl_settings.dart';
+import '../../services/auth_service.dart';
+import '../../services/client_dashboard_service.dart';
 
 class ClientDashboardHeader extends StatelessWidget {
   const ClientDashboardHeader({super.key, this.title = 'Dashboard'});
@@ -12,12 +15,20 @@ class ClientDashboardHeader extends StatelessWidget {
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 600;
 
+    final auth = AuthService();
+    final user = auth.currentUser;
+    final first = (user?['first_name'] as String? ?? '').trim();
+    final last = (user?['last_name'] as String? ?? '').trim();
+    final fullName = ('$first $last').trim();
+    final displayName = fullName.isNotEmpty ? fullName : 'AESTRA';
+    final role = (user?['role'] as String? ?? 'Client').trim();
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withAlpha(13),
             offset: const Offset(0, 2),
             blurRadius: 4,
           ),
@@ -47,7 +58,11 @@ class ClientDashboardHeader extends StatelessWidget {
               _ClientNotificationMenu(isMobile: isMobile),
               SizedBox(width: isMobile ? 8 : 16),
               // User profile (simple)
-              _ClientProfileMenu(isMobile: isMobile),
+              _ClientProfileMenu(
+                isMobile: isMobile,
+                displayName: displayName,
+                role: role.isEmpty ? 'Client' : role,
+              ),
             ],
           ),
         ),
@@ -56,13 +71,59 @@ class ClientDashboardHeader extends StatelessWidget {
   }
 }
 
-class _ClientNotificationMenu extends StatelessWidget {
+class _ClientNotificationMenu extends StatefulWidget {
   const _ClientNotificationMenu({this.isMobile = false});
 
   final bool isMobile;
 
   @override
+  State<_ClientNotificationMenu> createState() =>
+      _ClientNotificationMenuState();
+}
+
+class _ClientNotificationMenuState extends State<_ClientNotificationMenu> {
+  final _service = ClientDashboardService();
+
+  bool _loading = true;
+  String? _error;
+  int _count = 0;
+  List<ClientNotificationItem> _items = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final payload = await _service.fetchClientNotifications(previewLimit: 3);
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _count = payload.count;
+        _items = payload.items;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _count = 0;
+        _items = const [];
+        _error = e.toString();
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final isMobile = widget.isMobile;
+
     return PopupMenuButton<int>(
       tooltip: 'Notifications',
       offset: Offset(0, isMobile ? 8 : 12),
@@ -78,13 +139,14 @@ class _ClientNotificationMenu extends StatelessWidget {
           );
         }
       },
+      onOpened: _refresh,
       itemBuilder: (context) => [
         PopupMenuItem(
           enabled: false,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              Text(
+            children: [
+              const Text(
                 'Notifications',
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
@@ -92,10 +154,16 @@ class _ClientNotificationMenu extends StatelessWidget {
                   color: Color(0xFF0C1935),
                 ),
               ),
-              SizedBox(height: 4),
+              const SizedBox(height: 4),
               Text(
-                'Client notifications',
-                style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+                _loading
+                    ? 'Loading…'
+                    : _error != null
+                    ? 'Failed to load'
+                    : _count == 0
+                    ? 'No updates'
+                    : '$_count task${_count == 1 ? '' : 's'} need attention',
+                style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
               ),
             ],
           ),
@@ -106,17 +174,30 @@ class _ClientNotificationMenu extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _NotificationTile(
-                title: 'Super Highway progress updated',
-                time: '3 mins ago',
-                color: const Color(0xFFFF7A18),
-              ),
-              const SizedBox(height: 12),
-              _NotificationTile(
-                title: 'Diversion Road report approved',
-                time: '1 hr ago',
-                color: const Color(0xFF22C55E),
-              ),
+              if (_loading)
+                const Text(
+                  'Loading…',
+                  style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+                )
+              else if (_error != null)
+                const Text(
+                  'Unable to load notifications.',
+                  style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+                )
+              else if (_items.isEmpty)
+                const Text(
+                  'No notifications.',
+                  style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+                )
+              else
+                for (final n in _items) ...[
+                  _NotificationTile(
+                    title: n.title,
+                    time: n.time,
+                    color: const Color(0xFFFF7A18),
+                  ),
+                  if (n != _items.last) const SizedBox(height: 12),
+                ],
             ],
           ),
         ),
@@ -147,18 +228,28 @@ class _ClientNotificationMenu extends StatelessWidget {
             size: isMobile ? 22 : 24,
             color: Colors.grey[600],
           ),
-          Positioned(
-            right: 0,
-            top: 0,
-            child: Container(
-              width: isMobile ? 7 : 8,
-              height: isMobile ? 7 : 8,
-              decoration: const BoxDecoration(
-                color: Colors.red,
-                shape: BoxShape.circle,
+          if (!_loading && _error == null && _count > 0)
+            Positioned(
+              right: -6,
+              top: -6,
+              child: Container(
+                constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF6B6B),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  _count > 99 ? '99+' : '$_count',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -214,9 +305,15 @@ class _NotificationTile extends StatelessWidget {
 }
 
 class _ClientProfileMenu extends StatelessWidget {
-  const _ClientProfileMenu({this.isMobile = false});
+  const _ClientProfileMenu({
+    required this.displayName,
+    required this.role,
+    this.isMobile = false,
+  });
 
   final bool isMobile;
+  final String displayName;
+  final String role;
 
   @override
   Widget build(BuildContext context) {
@@ -253,7 +350,9 @@ class _ClientProfileMenu extends StatelessWidget {
             ),
           );
           if (confirm == true) {
-            Navigator.of(context).popUntil((route) => route.isFirst);
+            await AuthService().logout();
+            if (!context.mounted) return;
+            context.go('/login');
           }
         }
       },
@@ -311,18 +410,18 @@ class _ClientProfileMenu extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
-              children: const [
+              children: [
                 Text(
-                  'AESTRA',
-                  style: TextStyle(
+                  displayName,
+                  style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: Color(0xFF0C1935),
                   ),
                 ),
                 Text(
-                  'Client',
-                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                  role,
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
                 ),
               ],
             ),

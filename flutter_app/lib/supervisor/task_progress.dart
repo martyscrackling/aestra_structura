@@ -1208,7 +1208,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                           if (!isMobile) const SizedBox(width: 8),
                           if (!isMobile)
                             PopupMenuButton<String>(
-                              onSelected: (value) {
+                              onSelected: (value) async {
                                 if (value == 'switch') {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
@@ -1216,11 +1216,9 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                                     ),
                                   );
                                 } else if (value == 'logout') {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Logout (demo)'),
-                                    ),
-                                  );
+                                  await AuthService().logout();
+                                  if (!context.mounted) return;
+                                  context.go('/login');
                                 }
                               },
                               offset: const Offset(0, 48),

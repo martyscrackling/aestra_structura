@@ -1,8 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
 
 class TaskSummaryWidget extends StatelessWidget {
-  const TaskSummaryWidget({super.key});
+  final int totalProjects;
+  final int assignedTasks;
+  final int totalTasks;
+  final double completionRate;
+
+  const TaskSummaryWidget({
+    super.key,
+    required this.totalProjects,
+    required this.assignedTasks,
+    required this.totalTasks,
+    required this.completionRate,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -17,6 +27,10 @@ class TaskSummaryWidget extends StatelessWidget {
         : isMobile
         ? 16.0
         : 20.0;
+
+    final displayedCompletion = completionRate.isNaN
+        ? 0
+        : completionRate.clamp(0, 100).round();
 
     return Container(
       padding: EdgeInsets.all(padding),
@@ -94,7 +108,7 @@ class TaskSummaryWidget extends StatelessWidget {
                       ),
                       SizedBox(height: isSmallPhone ? 2.0 : 4.0),
                       Text(
-                        '40',
+                        totalProjects.toString(),
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: isSmallPhone ? 18.0 : 24.0,
@@ -142,7 +156,7 @@ class TaskSummaryWidget extends StatelessWidget {
                       ),
                       SizedBox(height: isSmallPhone ? 2.0 : 4.0),
                       Text(
-                        '79',
+                        assignedTasks.toString(),
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: isSmallPhone ? 18.0 : 24.0,
@@ -190,7 +204,7 @@ class TaskSummaryWidget extends StatelessWidget {
                       ),
                       SizedBox(height: isSmallPhone ? 2.0 : 4.0),
                       Text(
-                        '89',
+                        totalTasks.toString(),
                         style: TextStyle(
                           color: Colors.grey[800],
                           fontSize: isSmallPhone ? 18.0 : 24.0,
@@ -212,63 +226,12 @@ class TaskSummaryWidget extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              const Text(
-                '95%',
-                style: TextStyle(
+              Text(
+                '$displayedCompletion%',
+                style: const TextStyle(
                   fontSize: 36,
                   fontWeight: FontWeight.w700,
                   color: Color(0xFF0C1935),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: Text(
-                  '+2.5%',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.green[600],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: SizedBox(
-                  height: 40,
-                  child: LineChart(
-                    LineChartData(
-                      gridData: FlGridData(show: false),
-                      titlesData: FlTitlesData(show: false),
-                      borderData: FlBorderData(show: false),
-                      minX: 0,
-                      maxX: 6,
-                      minY: 0,
-                      maxY: 100,
-                      lineBarsData: [
-                        LineChartBarData(
-                          spots: const [
-                            FlSpot(0, 85),
-                            FlSpot(1, 88),
-                            FlSpot(2, 86),
-                            FlSpot(3, 90),
-                            FlSpot(4, 92),
-                            FlSpot(5, 93),
-                            FlSpot(6, 95),
-                          ],
-                          isCurved: true,
-                          color: Colors.blue,
-                          barWidth: 2,
-                          isStrokeCapRound: true,
-                          dotData: FlDotData(show: false),
-                          belowBarData: BarAreaData(
-                            show: true,
-                            color: Colors.blue.withOpacity(0.1),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ),
               ),
             ],

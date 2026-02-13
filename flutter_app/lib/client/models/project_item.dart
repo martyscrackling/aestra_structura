@@ -1,5 +1,6 @@
 class ProjectItem {
   const ProjectItem({
+    required this.projectId,
     required this.title,
     required this.location,
     required this.progress,
@@ -10,6 +11,7 @@ class ProjectItem {
     required this.imageUrl,
   });
 
+  final int projectId;
   final String title;
   final String location;
   final double progress;

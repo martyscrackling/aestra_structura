@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
 import 'dart:convert';
 import '../services/auth_service.dart';
 import '../services/app_config.dart';
@@ -1488,7 +1489,20 @@ class _WorkersHeaderState extends State<WorkersHeader> {
                 ),
                 const SizedBox(width: 24),
                 PopupMenuButton<String>(
-                  onSelected: (value) {},
+                  onSelected: (value) async {
+                    if (value == 'switch') {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Switch Account (demo)')),
+                      );
+                      return;
+                    }
+
+                    if (value == 'logout') {
+                      await AuthService().logout();
+                      if (!context.mounted) return;
+                      context.go('/login');
+                    }
+                  },
                   offset: const Offset(0, 48),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),

@@ -334,7 +334,7 @@ class _AttendancePageState extends State<AttendancePage> {
                             ),
                             const SizedBox(width: 12),
                             PopupMenuButton<String>(
-                              onSelected: (value) {
+                              onSelected: (value) async {
                                 if (value == 'switch') {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
@@ -342,11 +342,9 @@ class _AttendancePageState extends State<AttendancePage> {
                                     ),
                                   );
                                 } else if (value == 'logout') {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Logout (demo)'),
-                                    ),
-                                  );
+                                  await AuthService().logout();
+                                  if (!context.mounted) return;
+                                  context.go('/login');
                                 }
                               },
                               offset: const Offset(0, 48),

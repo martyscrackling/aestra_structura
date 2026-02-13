@@ -1,15 +1,38 @@
 import 'package:flutter/material.dart';
 
 class ActiveWorkersWidget extends StatelessWidget {
-  const ActiveWorkersWidget({super.key});
+  final int supervisorsCount;
+  final int fieldWorkersTotal;
+  final Map<String, int> fieldWorkersByRole;
+
+  const ActiveWorkersWidget({
+    super.key,
+    required this.supervisorsCount,
+    required this.fieldWorkersTotal,
+    required this.fieldWorkersByRole,
+  });
+
+  int _countRole(String roleContains) {
+    final needle = roleContains.toLowerCase();
+    var total = 0;
+    for (final entry in fieldWorkersByRole.entries) {
+      if (entry.key.toLowerCase().contains(needle)) {
+        total += entry.value;
+      }
+    }
+    return total;
+  }
 
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    
+
     final isSmallPhone = screenWidth < 375;
     final isMobile = screenWidth < 768;
     final isTablet = screenWidth >= 768 && screenWidth < 1024;
+
+    final architects = _countRole('architect');
+    final engineers = _countRole('engineer');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -17,28 +40,34 @@ class ActiveWorkersWidget extends StatelessWidget {
         Text(
           'Active Workers',
           style: TextStyle(
-            fontSize: isSmallPhone ? 14.0 : isMobile ? 16.0 : isTablet ? 17.0 : 18.0,
+            fontSize: isSmallPhone
+                ? 14.0
+                : isMobile
+                ? 16.0
+                : isTablet
+                ? 17.0
+                : 18.0,
             fontWeight: FontWeight.w700,
             color: const Color(0xFF0C1935),
           ),
         ),
         const SizedBox(height: 16),
         Row(
-          children: const [
+          children: [
             Expanded(
               child: WorkerCard(
-                icon: Icons.business_center_outlined,
-                title: 'Project Managers',
-                count: 32,
+                icon: Icons.groups_2_outlined,
+                title: 'Field Workers',
+                count: fieldWorkersTotal,
                 color: Colors.orange,
               ),
             ),
-            SizedBox(width: 12),
+            const SizedBox(width: 12),
             Expanded(
               child: WorkerCard(
                 icon: Icons.architecture_outlined,
                 title: 'Architects',
-                count: 32,
+                count: architects,
                 color: Colors.orange,
               ),
             ),
@@ -46,21 +75,21 @@ class ActiveWorkersWidget extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         Row(
-          children: const [
+          children: [
             Expanded(
               child: WorkerCard(
                 icon: Icons.engineering_outlined,
                 title: 'Engineers',
-                count: 32,
+                count: engineers,
                 color: Colors.orange,
               ),
             ),
-            SizedBox(width: 12),
+            const SizedBox(width: 12),
             Expanded(
               child: WorkerCard(
                 icon: Icons.supervisor_account_outlined,
                 title: 'Supervisors',
-                count: 32,
+                count: supervisorsCount,
                 color: Colors.orange,
               ),
             ),
@@ -88,16 +117,44 @@ class WorkerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    
+
     final isSmallPhone = screenWidth < 375;
     final isMobile = screenWidth < 768;
     final isTablet = screenWidth >= 768 && screenWidth < 1024;
-    
-    final padding = isSmallPhone ? 10.0 : isMobile ? 12.0 : isTablet ? 14.0 : 16.0;
-    final iconSize = isSmallPhone ? 32.0 : isMobile ? 36.0 : isTablet ? 40.0 : 48.0;
-    final spacing = isSmallPhone ? 6.0 : isMobile ? 8.0 : 12.0;
-    final titleSize = isSmallPhone ? 10.0 : isMobile ? 11.0 : isTablet ? 12.0 : 13.0;
-    final countSize = isSmallPhone ? 18.0 : isMobile ? 20.0 : isTablet ? 22.0 : 24.0;
+
+    final padding = isSmallPhone
+        ? 10.0
+        : isMobile
+        ? 12.0
+        : isTablet
+        ? 14.0
+        : 16.0;
+    final iconSize = isSmallPhone
+        ? 32.0
+        : isMobile
+        ? 36.0
+        : isTablet
+        ? 40.0
+        : 48.0;
+    final spacing = isSmallPhone
+        ? 6.0
+        : isMobile
+        ? 8.0
+        : 12.0;
+    final titleSize = isSmallPhone
+        ? 10.0
+        : isMobile
+        ? 11.0
+        : isTablet
+        ? 12.0
+        : 13.0;
+    final countSize = isSmallPhone
+        ? 18.0
+        : isMobile
+        ? 20.0
+        : isTablet
+        ? 22.0
+        : 24.0;
 
     return Container(
       padding: EdgeInsets.all(padding),

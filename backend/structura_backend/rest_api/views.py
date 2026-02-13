@@ -4,7 +4,11 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.contrib.auth.hashers import check_password
 from django.views.decorators.csrf import csrf_exempt
+from django.db.models import Count, Q
+from django.db.models.functions import TruncDate
+from django.utils import timezone
 import json
+from datetime import timedelta
 
 # Create your views here.
 from app import models
@@ -191,10 +195,16 @@ class ProjectViewSet(viewsets.ModelViewSet):
         # For now, get user_id from request headers or query params
         # In production, use authentication tokens
         user_id = self.request.query_params.get('user_id')
+        client_id = self.request.query_params.get('client_id')
         
         print(f"🔍 ProjectViewSet get_queryset called")
         print(f"🔍 Received user_id: {user_id}")
         
+        if client_id:
+            queryset = models.Project.objects.filter(client_id=client_id).order_by('-created_at')
+            print(f"✅ Filtered projects by client_id count: {queryset.count()}")
+            return queryset
+
         if user_id:
             queryset = models.Project.objects.filter(user_id=user_id).order_by('-created_at')
             print(f"✅ Filtered projects count: {queryset.count()}")
@@ -297,8 +307,11 @@ class SubtaskViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = models.Subtask.objects.all()
         phase_id = self.request.query_params.get('phase_id')
+        project_id = self.request.query_params.get('project_id')
         if phase_id:
             queryset = queryset.filter(phase_id=phase_id)
+        if project_id:
+            queryset = queryset.filter(phase__project_id=project_id)
         return queryset
 
 
@@ -356,3 +369,186 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(field_worker_id=field_worker_id)
         
         return queryset.order_by('-attendance_date')
+
+
+@csrf_exempt
+@api_view(['GET'])
+def pm_dashboard_summary(request):
+    """Return a summary payload for the Project Manager dashboard."""
+    user_id_raw = request.query_params.get('user_id')
+    if not user_id_raw:
+        return Response(
+            {'success': False, 'message': 'user_id is required'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        user_id = int(user_id_raw)
+    except (TypeError, ValueError):
+        return Response(
+            {'success': False, 'message': 'user_id must be an integer'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Projects (recent)
+    projects_qs = (
+        models.Project.objects.filter(user_id=user_id)
+        .annotate(
+            total_subtasks=Count('phases__subtasks', distinct=True),
+            completed_subtasks=Count(
+                'phases__subtasks',
+                filter=Q(phases__subtasks__status='completed'),
+                distinct=True,
+            ),
+        )
+        .order_by('-created_at')
+    )
+
+    total_projects = projects_qs.count()
+    recent_projects = []
+    for p in projects_qs[:3]:
+        location_parts = []
+        if p.street:
+            location_parts.append(p.street)
+        if p.barangay_id and getattr(p.barangay, 'name', None):
+            location_parts.append(p.barangay.name)
+        if p.city_id and getattr(p.city, 'name', None):
+            location_parts.append(p.city.name)
+        if p.province_id and getattr(p.province, 'name', None):
+            location_parts.append(p.province.name)
+        location = ', '.join(location_parts) if location_parts else 'N/A'
+
+        total_subtasks = int(getattr(p, 'total_subtasks', 0) or 0)
+        completed_subtasks = int(getattr(p, 'completed_subtasks', 0) or 0)
+        progress = (completed_subtasks / total_subtasks) if total_subtasks else 0.0
+
+        recent_projects.append(
+            {
+                'project_id': p.project_id,
+                'project_name': p.project_name,
+                'location': location,
+                'progress': float(progress),
+                'tasks_completed': completed_subtasks,
+                'total_tasks': total_subtasks,
+                'created_at': p.created_at.isoformat() if p.created_at else None,
+            }
+        )
+
+    # Tasks summary
+    subtasks_qs = models.Subtask.objects.filter(phase__project__user_id=user_id)
+    total_subtasks = subtasks_qs.count()
+    completed_subtasks = subtasks_qs.filter(status='completed').count()
+    in_progress_subtasks = subtasks_qs.filter(status='in_progress').count()
+    pending_subtasks = subtasks_qs.filter(status='pending').count()
+    assigned_subtasks = (
+        subtasks_qs.filter(assigned_workers__isnull=False).distinct().count()
+    )
+
+    completion_rate = (
+        (completed_subtasks / total_subtasks) * 100.0 if total_subtasks else 0.0
+    )
+
+    # Activity (completed tasks per day for last 7 days)
+    start_day = timezone.localdate() - timedelta(days=6)
+    end_day = timezone.localdate()
+
+    completed_by_day = (
+        subtasks_qs.filter(status='completed', updated_at__date__gte=start_day)
+        .annotate(day=TruncDate('updated_at'))
+        .values('day')
+        .annotate(count=Count('subtask_id'))
+        .order_by('day')
+    )
+    completed_map = {
+        row['day'].isoformat(): int(row['count']) for row in completed_by_day
+    }
+
+    activity_series = []
+    for i in range(7):
+        day = start_day + timedelta(days=i)
+        day_key = day.isoformat()
+        activity_series.append({'day': day_key, 'completed': completed_map.get(day_key, 0)})
+
+    # Workers summary
+    supervisors_count = models.Supervisors.objects.filter(project_id__user_id=user_id).count()
+    field_workers_qs = models.FieldWorker.objects.filter(project_id__user_id=user_id)
+    field_workers_total = field_workers_qs.count()
+    field_workers_by_role = (
+        field_workers_qs.values('role')
+        .annotate(count=Count('fieldworker_id'))
+        .order_by('-count')
+    )
+    by_role = {row['role']: int(row['count']) for row in field_workers_by_role}
+
+    # Notifications / Task Today are derived from most recently updated open subtasks
+    open_subtasks_count = subtasks_qs.exclude(status='completed').count()
+
+    recent_open_subtasks = list(
+        subtasks_qs.exclude(status='completed')
+        .select_related('phase__project')
+        .prefetch_related('assigned_workers__field_worker')
+        .order_by('-updated_at')[:20]
+    )
+
+    recent_open_items = []
+    for st in recent_open_subtasks:
+        assigned_workers = []
+        for assignment in st.assigned_workers.select_related('field_worker').all():
+            w = assignment.field_worker
+            assigned_workers.append(
+                {
+                    'assignment_id': assignment.assignment_id,
+                    'fieldworker_id': w.fieldworker_id,
+                    'first_name': w.first_name,
+                    'last_name': w.last_name,
+                    'role': w.role,
+                }
+            )
+
+        recent_open_items.append(
+            {
+                'subtask_id': st.subtask_id,
+                'title': st.title,
+                'status': st.status,
+                'project_id': st.phase.project.project_id if st.phase_id else None,
+                'project_name': st.phase.project.project_name if st.phase_id else None,
+                'updated_at': st.updated_at.isoformat() if st.updated_at else None,
+                'assigned_workers': assigned_workers,
+            }
+        )
+
+    tasks_today = recent_open_items[:5]
+
+    return Response(
+        {
+            'success': True,
+            'projects': {
+                'total': total_projects,
+                'recent': recent_projects,
+            },
+            'tasks': {
+                'total': total_subtasks,
+                'completed': completed_subtasks,
+                'in_progress': in_progress_subtasks,
+                'pending': pending_subtasks,
+                'assigned': assigned_subtasks,
+                'completion_rate': float(completion_rate),
+            },
+            'activity': {
+                'start_day': start_day.isoformat(),
+                'end_day': end_day.isoformat(),
+                'series': activity_series,
+            },
+            'workers': {
+                'supervisors': supervisors_count,
+                'field_workers_total': field_workers_total,
+                'by_role': by_role,
+            },
+            'tasks_today': tasks_today,
+            'notifications': {
+                'count': int(open_subtasks_count),
+                'items': recent_open_items,
+            },
+        },
+        status=status.HTTP_200_OK,
+    )

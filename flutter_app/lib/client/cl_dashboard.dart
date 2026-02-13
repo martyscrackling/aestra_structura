@@ -3,45 +3,43 @@ import 'widgets/top_controls.dart';
 import 'widgets/projects_grid.dart';
 import 'models/project_item.dart';
 import 'widgets/dashboard_header.dart';
+import '../services/client_dashboard_service.dart';
 
-class ClDashboardPage extends StatelessWidget {
+class ClDashboardPage extends StatefulWidget {
   const ClDashboardPage({super.key});
 
-  static final List<ProjectItem> _projects = [
-    const ProjectItem(
-      title: 'Super Highway',
-      location: 'Divisoria, Zamboanga City',
-      progress: 0.15,
-      startDate: '08/20/2025',
-      endDate: '08/20/2026',
-      tasksCompleted: 8,
-      totalTasks: 15,
-      imageUrl:
-          'https://images.unsplash.com/photo-1545259742-9e4f2baf2d4d?auto=format&fit=crop&w=800&q=60',
-    ),
-    const ProjectItem(
-      title: "Richmond's House",
-      location: 'Sta. Maria, Zamboanga City',
-      progress: 0.45,
-      startDate: '08/20/2025',
-      endDate: '08/20/2026',
-      tasksCompleted: 8,
-      totalTasks: 40,
-      imageUrl:
-          'https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=800&q=60',
-    ),
-    const ProjectItem(
-      title: 'Diversion Road',
-      location: 'Luyahan, Zamboanga City',
-      progress: 0.9,
-      startDate: '08/20/2025',
-      endDate: '10/25/2025',
-      tasksCompleted: 40,
-      totalTasks: 53,
-      imageUrl:
-          'https://images.unsplash.com/photo-1519710164239-da123dc03ef4?auto=format&fit=crop&w=800&q=60',
-    ),
-  ];
+  @override
+  State<ClDashboardPage> createState() => _ClDashboardPageState();
+}
+
+class _ClDashboardPageState extends State<ClDashboardPage> {
+  final _service = ClientDashboardService();
+  late Future<List<ProjectItem>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  Future<List<ProjectItem>> _load() async {
+    final cards = await _service.fetchClientProjects();
+    return cards
+        .map(
+          (p) => ProjectItem(
+            projectId: p.projectId,
+            title: p.title,
+            location: p.location,
+            progress: p.progress,
+            startDate: p.startDate,
+            endDate: p.endDate,
+            tasksCompleted: p.tasksCompleted,
+            totalTasks: p.totalTasks,
+            imageUrl: p.imageUrl,
+          ),
+        )
+        .toList(growable: false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -54,19 +52,43 @@ class ClDashboardPage extends StatelessWidget {
         children: [
           const ClientDashboardHeader(title: 'Projects'),
           Expanded(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.symmetric(
-                horizontal: isMobile ? 16 : 24,
-                vertical: isMobile ? 16 : 24,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const TopControls(),
-                  SizedBox(height: isMobile ? 16 : 18),
-                  ProjectsGrid(items: _projects),
-                ],
-              ),
+            child: FutureBuilder<List<ProjectItem>>(
+              future: _future,
+              builder: (context, snapshot) {
+                final items = snapshot.data ?? const <ProjectItem>[];
+
+                return RefreshIndicator(
+                  onRefresh: () async {
+                    setState(() {
+                      _future = _load();
+                    });
+                    await _future;
+                  },
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 16 : 24,
+                      vertical: isMobile ? 16 : 24,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const TopControls(),
+                        SizedBox(height: isMobile ? 16 : 18),
+                        if (snapshot.connectionState == ConnectionState.waiting)
+                          const Center(child: CircularProgressIndicator())
+                        else if (snapshot.hasError)
+                          const Text(
+                            'Unable to load projects.',
+                            style: TextStyle(color: Color(0xFF6B7280)),
+                          )
+                        else
+                          ProjectsGrid(items: items),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         ],

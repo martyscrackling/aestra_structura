@@ -17,6 +17,7 @@ from .views import (
     SubtaskViewSet,
     SubtaskFieldWorkerViewSet,
     AttendanceViewSet,
+    pm_dashboard_summary,
     debug_projects,
     debug_all_data
 )
@@ -40,6 +41,7 @@ urlpatterns = [
     path('users/', ListUser.as_view()),
     path('users/<int:pk>/', DetailUser.as_view()),
     path('login/', login_user, name='login'),
+    path('pm/dashboard/', pm_dashboard_summary, name='pm_dashboard_summary'),
     path('debug/projects/', debug_projects, name='debug_projects'),
     path('debug/all/', debug_all_data, name='debug_all_data'),
 ]

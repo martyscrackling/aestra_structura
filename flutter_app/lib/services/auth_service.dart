@@ -22,6 +22,14 @@ class AuthService extends ChangeNotifier {
   bool get isLoggedIn => _isLoggedIn;
   Map<String, dynamic>? get currentUser => _currentUser;
 
+  /// Update locally cached user fields and persist them.
+  Future<void> updateLocalUserFields(Map<String, dynamic> updates) async {
+    if (_currentUser == null) return;
+    _currentUser = {..._currentUser!, ...updates};
+    await _saveAuthState();
+    notifyListeners();
+  }
+
   /// Initialize auth state from local storage
   Future<void> initializeAuth() async {
     try {

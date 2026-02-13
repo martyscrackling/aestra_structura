@@ -1,19 +1,37 @@
 import 'package:flutter/material.dart';
 
+import '../../services/pm_dashboard_service.dart';
+
 class RecentProjects extends StatelessWidget {
-  const RecentProjects({super.key});
+  final List<PmRecentProject> projects;
+
+  const RecentProjects({super.key, required this.projects});
 
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    
+
     final isExtraSmallPhone = screenWidth <= 320;
     final isSmallPhone = screenWidth < 375;
     final isMobile = screenWidth < 768;
     final isTablet = screenWidth >= 768 && screenWidth < 1024;
-    
-    final titleSize = isExtraSmallPhone ? 13.0 : isSmallPhone ? 14.0 : isMobile ? 16.0 : 18.0;
-    final cardSpacing = isExtraSmallPhone ? 8.0 : isSmallPhone ? 12.0 : isMobile ? 16.0 : isTablet ? 16.0 : 16.0;
+
+    final titleSize = isExtraSmallPhone
+        ? 13.0
+        : isSmallPhone
+        ? 14.0
+        : isMobile
+        ? 16.0
+        : 18.0;
+    final cardSpacing = isExtraSmallPhone
+        ? 8.0
+        : isSmallPhone
+        ? 12.0
+        : isMobile
+        ? 16.0
+        : isTablet
+        ? 16.0
+        : 16.0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -40,124 +58,112 @@ class RecentProjects extends StatelessWidget {
           ],
         ),
         SizedBox(height: cardSpacing),
+        if (projects.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.1),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Text(
+              'No projects yet.',
+              style: TextStyle(color: Colors.grey[700]),
+            ),
+          )
+        else
         // Responsive layout
         if (isMobile)
           // Mobile: Stack vertically
           Column(
             children: [
-              const SizedBox(
-                width: double.infinity,
-                child: ProjectCard(
-                  title: 'Super Highway',
-                  location: 'Divisoria, Zamboanga City',
-                  progress: 0.55,
-                  tasksCompleted: 8,
-                  totalTasks: 15,
+              for (final project in projects) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: ProjectCard(
+                    title: project.name,
+                    location: project.location,
+                    progress: project.progress,
+                    tasksCompleted: project.tasksCompleted,
+                    totalTasks: project.totalTasks,
+                  ),
                 ),
-              ),
-              SizedBox(height: cardSpacing),
-              const SizedBox(
-                width: double.infinity,
-                child: ProjectCard(
-                  title: 'Richmond\'s House',
-                  location: 'Sta. Maria, Zamboanga City',
-                  progress: 0.30,
-                  tasksCompleted: 8,
-                  totalTasks: 40,
-                ),
-              ),
-              SizedBox(height: cardSpacing),
-              const SizedBox(
-                width: double.infinity,
-                child: ProjectCard(
-                  title: 'Diversion Road',
-                  location: 'Luyahan, Zamboanga City',
-                  progress: 0.89,
-                  tasksCompleted: 40,
-                  totalTasks: 53,
-                ),
-              ),
+                if (project != projects.last) SizedBox(height: cardSpacing),
+              ],
             ],
           )
         else if (isTablet)
           // Tablet: 2 cards per row
           Column(
             children: [
-              Row(
-                children: [
-                  const Expanded(
-                    child: ProjectCard(
-                      title: 'Super Highway',
-                      location: 'Divisoria, Zamboanga City',
-                      progress: 0.55,
-                      tasksCompleted: 8,
-                      totalTasks: 15,
-                    ),
-                  ),
-                  SizedBox(width: cardSpacing),
-                  const Expanded(
-                    child: ProjectCard(
-                      title: 'Richmond\'s House',
-                      location: 'Sta. Maria, Zamboanga City',
-                      progress: 0.30,
-                      tasksCompleted: 8,
-                      totalTasks: 40,
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: cardSpacing),
-              Row(
-                children: [
-                  const Expanded(
-                    child: ProjectCard(
-                      title: 'Diversion Road',
-                      location: 'Luyahan, Zamboanga City',
-                      progress: 0.89,
-                      tasksCompleted: 40,
-                      totalTasks: 53,
-                    ),
-                  ),
-                  Expanded(child: Container()), // Empty space
-                ],
+              _ProjectGrid(
+                projects: projects,
+                columns: 2,
+                spacing: cardSpacing,
               ),
             ],
           )
         else
           // Desktop: 3 cards in a row
+          _ProjectGrid(projects: projects, columns: 3, spacing: cardSpacing),
+      ],
+    );
+  }
+}
+
+class _ProjectGrid extends StatelessWidget {
+  final List<PmRecentProject> projects;
+  final int columns;
+  final double spacing;
+
+  const _ProjectGrid({
+    required this.projects,
+    required this.columns,
+    required this.spacing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = <List<PmRecentProject>>[];
+    for (var i = 0; i < projects.length; i += columns) {
+      final end = (i + columns) > projects.length
+          ? projects.length
+          : (i + columns);
+      rows.add(projects.sublist(i, end));
+    }
+
+    return Column(
+      children: [
+        for (final row in rows) ...[
           Row(
             children: [
-              const Expanded(
-                child: ProjectCard(
-                  title: 'Super Highway',
-                  location: 'Divisoria, Zamboanga City',
-                  progress: 0.55,
-                  tasksCompleted: 8,
-                  totalTasks: 15,
+              for (final project in row) ...[
+                Expanded(
+                  child: ProjectCard(
+                    title: project.name,
+                    location: project.location,
+                    progress: project.progress,
+                    tasksCompleted: project.tasksCompleted,
+                    totalTasks: project.totalTasks,
+                  ),
                 ),
-              ),
-              SizedBox(width: cardSpacing),
-              const Expanded(
-                child: ProjectCard(
-                  title: 'Richmond\'s House',
-                  location: 'Sta. Maria, Zamboanga City',
-                  progress: 0.30,
-                  tasksCompleted: 8,
-                  totalTasks: 40,
-                ),
-              ),
-              SizedBox(width: cardSpacing),
-              const Expanded(
-                child: ProjectCard(
-                  title: 'Diversion Road',
-                  location: 'Luyahan, Zamboanga City',
-                  progress: 0.89,
-                  tasksCompleted: 40,
-                  totalTasks: 53,
-                ),
-              ),
+                if (project != row.last) SizedBox(width: spacing),
+              ],
+              for (var i = row.length; i < columns; i++) ...[
+                SizedBox(width: spacing),
+                const Expanded(child: SizedBox.shrink()),
+              ],
             ],
           ),
+          if (row != rows.last) SizedBox(height: spacing),
+        ],
       ],
     );
   }
@@ -184,11 +190,17 @@ class ProjectCard extends StatelessWidget {
     final screenWidth = MediaQuery.of(context).size.width;
     final isExtraSmallPhone = screenWidth <= 320;
     final isSmallPhone = screenWidth < 375;
-    final padding = isExtraSmallPhone ? 10.0 : isSmallPhone ? 12.0 : 16.0;
+    final padding = isExtraSmallPhone
+        ? 10.0
+        : isSmallPhone
+        ? 12.0
+        : 16.0;
 
     return Container(
       constraints: BoxConstraints(
-        minWidth: isExtraSmallPhone ? 150 : 200, // Adjust for very small screens
+        minWidth: isExtraSmallPhone
+            ? 150
+            : 200, // Adjust for very small screens
       ),
       padding: EdgeInsets.all(padding),
       decoration: BoxDecoration(
@@ -235,10 +247,7 @@ class ProjectCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             location,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-            ),
+            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
@@ -256,8 +265,8 @@ class ProjectCard extends StatelessWidget {
                       progress > 0.7
                           ? Colors.green
                           : progress > 0.4
-                              ? Colors.orange
-                              : Colors.red,
+                          ? Colors.orange
+                          : Colors.red,
                     ),
                   ),
                 ),
@@ -280,10 +289,7 @@ class ProjectCard extends StatelessWidget {
               const SizedBox(width: 4),
               Text(
                 '$tasksCompleted/$totalTasks',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
               ),
               const Spacer(),
               _buildAvatarStack(),

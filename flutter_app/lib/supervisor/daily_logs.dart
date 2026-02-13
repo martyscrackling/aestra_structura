@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
 
 import 'widgets/sidebar.dart';
+import '../services/auth_service.dart';
 
 class DailyLogsPage extends StatefulWidget {
   final bool initialSidebarVisible;
@@ -187,7 +188,123 @@ class _DailyLogsPageState extends State<DailyLogsPage> {
                               setState(() => hasNotifications = false);
                             },
                           ),
-
+                          if (!isMobile) const SizedBox(width: 10),
+                          if (!isMobile)
+                            PopupMenuButton<String>(
+                              onSelected: (value) async {
+                                if (value == 'switch') {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Switch account (demo)'),
+                                    ),
+                                  );
+                                } else if (value == 'logout') {
+                                  await AuthService().logout();
+                                  if (!context.mounted) return;
+                                  context.go('/login');
+                                }
+                              },
+                              offset: const Offset(0, 48),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              itemBuilder: (BuildContext context) =>
+                                  <PopupMenuEntry<String>>[
+                                    const PopupMenuItem<String>(
+                                      value: 'switch',
+                                      height: 48,
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.swap_horiz,
+                                            size: 18,
+                                            color: Colors.black87,
+                                          ),
+                                          SizedBox(width: 12),
+                                          Text('Switch Account'),
+                                        ],
+                                      ),
+                                    ),
+                                    const PopupMenuDivider(height: 1),
+                                    const PopupMenuItem<String>(
+                                      value: 'logout',
+                                      height: 48,
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.logout,
+                                            size: 18,
+                                            color: Color(0xFFFF6B6B),
+                                          ),
+                                          SizedBox(width: 12),
+                                          Text(
+                                            'Logout',
+                                            style: TextStyle(
+                                              color: Color(0xFFFF6B6B),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[100],
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 36,
+                                      height: 36,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFE8D5F2),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Center(
+                                        child: Text(
+                                          "A",
+                                          style: TextStyle(
+                                            color: Color(0xFFB088D9),
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    const Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          "AESTRA",
+                                          style: TextStyle(
+                                            color: Color(0xFF0C1935),
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        Text(
+                                          "Supervisor",
+                                          style: TextStyle(
+                                            color: Colors.grey,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w400,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),

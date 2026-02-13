@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../services/auth_service.dart';
+import '../services/pm_dashboard_service.dart';
 import 'widgets/sidebar.dart';
 import 'widgets/dashboard_header.dart';
 import 'widgets/recent_projects.dart';
@@ -17,8 +21,97 @@ void main() {
   );
 }
 
-class PMDashboardPage extends StatelessWidget {
+class PMDashboardPage extends StatefulWidget {
   const PMDashboardPage({super.key});
+
+  @override
+  State<PMDashboardPage> createState() => _PMDashboardPageState();
+}
+
+class _PMDashboardPageState extends State<PMDashboardPage> {
+  static const _hasSeenWelcomeKey = 'pm_has_seen_dashboard_welcome';
+
+  bool _isLoadingPrefs = true;
+  bool _showWelcome = false;
+
+  bool _isLoadingSummary = true;
+  String? _summaryError;
+  PmDashboardSummary? _summary;
+  final PmDashboardService _dashboardService = PmDashboardService();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadWelcomeState();
+    _loadDashboardSummary();
+  }
+
+  Future<void> _loadDashboardSummary() async {
+    setState(() {
+      _isLoadingSummary = true;
+      _summaryError = null;
+    });
+
+    try {
+      final authService = AuthService();
+      final userIdRaw = authService.currentUser?['user_id'];
+      final userId = userIdRaw is int
+          ? userIdRaw
+          : int.tryParse(userIdRaw?.toString() ?? '');
+
+      if (userId == null) {
+        throw Exception('Missing user id');
+      }
+
+      final summary = await _dashboardService.fetchSummary(userId: userId);
+      if (!mounted) return;
+      setState(() {
+        _summary = summary;
+        _isLoadingSummary = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _summary = null;
+        _summaryError = e.toString();
+        _isLoadingSummary = false;
+      });
+    }
+  }
+
+  Future<void> _loadWelcomeState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final hasSeen = prefs.getBool(_hasSeenWelcomeKey) ?? false;
+      if (!mounted) return;
+      setState(() {
+        _showWelcome = !hasSeen;
+        _isLoadingPrefs = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _showWelcome = false;
+        _isLoadingPrefs = false;
+      });
+    }
+  }
+
+  Future<void> _setHasSeenWelcomeAndMaybeNavigate(String? route) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_hasSeenWelcomeKey, true);
+    } catch (_) {}
+
+    if (!mounted) return;
+    setState(() {
+      _showWelcome = false;
+    });
+
+    if (route != null) {
+      context.go(route);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -70,7 +163,7 @@ class PMDashboardPage extends StatelessWidget {
                     child: SingleChildScrollView(
                       child: Padding(
                         padding: EdgeInsets.all(contentPadding),
-                        child: _buildDashboardContent(
+                        child: _buildBody(
                           screenWidth: screenWidth,
                           layout: LayoutType.desktop,
                         ),
@@ -97,7 +190,7 @@ class PMDashboardPage extends StatelessWidget {
           child: SingleChildScrollView(
             child: Padding(
               padding: const EdgeInsets.all(20),
-              child: _buildDashboardContent(
+              child: _buildBody(
                 screenWidth: MediaQuery.of(context).size.width,
                 layout: LayoutType.tablet,
               ),
@@ -127,7 +220,7 @@ class PMDashboardPage extends StatelessWidget {
           child: SingleChildScrollView(
             child: Padding(
               padding: EdgeInsets.all(padding),
-              child: _buildDashboardContent(
+              child: _buildBody(
                 screenWidth: screenWidth,
                 layout: isExtraSmallPhone
                     ? LayoutType.extraSmallPhone
@@ -142,10 +235,185 @@ class PMDashboardPage extends StatelessWidget {
     );
   }
 
+  Widget _buildBody({required double screenWidth, required LayoutType layout}) {
+    if (_isLoadingPrefs) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 24),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (_showWelcome) {
+      return _buildWelcomeEmptyState(layout: layout);
+    }
+
+    return _buildDashboardContent(screenWidth: screenWidth, layout: layout);
+  }
+
+  Widget _buildWelcomeEmptyState({required LayoutType layout}) {
+    final isMobile =
+        layout == LayoutType.extraSmallPhone ||
+        layout == LayoutType.smallPhone ||
+        layout == LayoutType.mobile;
+
+    final titleSize = layout == LayoutType.extraSmallPhone
+        ? 18.0
+        : layout == LayoutType.smallPhone
+        ? 20.0
+        : isMobile
+        ? 22.0
+        : layout == LayoutType.tablet
+        ? 24.0
+        : 26.0;
+
+    return Container(
+      padding: EdgeInsets.all(isMobile ? 14 : 18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.10),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Welcome to Structura',
+            style: TextStyle(
+              fontSize: titleSize,
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFF0C1935),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Your dashboard is empty because this is a new account. Start by creating your first project, then add clients and workers to track progress here.',
+            style: TextStyle(
+              height: 1.3,
+              color: Colors.grey[700],
+              fontSize: isMobile ? 12 : 13,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              ElevatedButton.icon(
+                onPressed: () =>
+                    _setHasSeenWelcomeAndMaybeNavigate('/projects'),
+                icon: const Icon(Icons.add),
+                label: const Text('Create Project'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0C1935),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => _setHasSeenWelcomeAndMaybeNavigate('/clients'),
+                icon: const Icon(Icons.person_add_alt_1_outlined),
+                label: const Text('Add Clients'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () =>
+                    _setHasSeenWelcomeAndMaybeNavigate('/workforce'),
+                icon: const Icon(Icons.group_add_outlined),
+                label: const Text('Add Workers'),
+              ),
+              TextButton(
+                onPressed: () => _setHasSeenWelcomeAndMaybeNavigate(null),
+                child: const Text('Skip'),
+              ),
+            ],
+          ),
+          if (isMobile) const SizedBox(height: 80),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDashboardContent({
     required double screenWidth,
     required LayoutType layout,
   }) {
+    if (_isLoadingSummary) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 24),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (_summaryError != null) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.10),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Failed to load dashboard data.\n$_summaryError',
+                style: TextStyle(color: Colors.grey[700]),
+              ),
+            ),
+            const SizedBox(width: 12),
+            ElevatedButton(
+              onPressed: _loadDashboardSummary,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0C1935),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final summary = _summary;
+    if (summary == null) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.10),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Text(
+          'No dashboard data available.',
+          style: TextStyle(color: Colors.grey[700]),
+        ),
+      );
+    }
+
     final spacing = layout == LayoutType.extraSmallPhone
         ? 8.0
         : layout == LayoutType.smallPhone
@@ -160,25 +428,37 @@ class PMDashboardPage extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Recent Projects
-        const RecentProjects(),
+        RecentProjects(projects: summary.recentProjects),
         SizedBox(height: spacing),
 
         // Activity and Task Summary
         if (layout == LayoutType.extraSmallPhone ||
             layout == LayoutType.smallPhone ||
             layout == LayoutType.mobile) ...[
-          const ActivityWidget(),
+          ActivityWidget(series: summary.activitySeries),
           SizedBox(height: spacing),
-          const TaskSummaryWidget(),
+          TaskSummaryWidget(
+            totalProjects: summary.totalProjects,
+            assignedTasks: summary.assignedTasks,
+            totalTasks: summary.totalTasks,
+            completionRate: summary.completionRate,
+          ),
           SizedBox(height: spacing),
         ] else if (layout == LayoutType.tablet)
           // Tablet: 1:1 ratio
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Expanded(child: ActivityWidget()),
+              Expanded(child: ActivityWidget(series: summary.activitySeries)),
               SizedBox(width: spacing),
-              const Expanded(child: TaskSummaryWidget()),
+              Expanded(
+                child: TaskSummaryWidget(
+                  totalProjects: summary.totalProjects,
+                  assignedTasks: summary.assignedTasks,
+                  totalTasks: summary.totalTasks,
+                  completionRate: summary.completionRate,
+                ),
+              ),
             ],
           )
         else
@@ -186,9 +466,19 @@ class PMDashboardPage extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Expanded(flex: 2, child: ActivityWidget()),
+              Expanded(
+                flex: 2,
+                child: ActivityWidget(series: summary.activitySeries),
+              ),
               SizedBox(width: spacing),
-              const Expanded(child: TaskSummaryWidget()),
+              Expanded(
+                child: TaskSummaryWidget(
+                  totalProjects: summary.totalProjects,
+                  assignedTasks: summary.assignedTasks,
+                  totalTasks: summary.totalTasks,
+                  completionRate: summary.completionRate,
+                ),
+              ),
             ],
           ),
 
@@ -201,18 +491,28 @@ class PMDashboardPage extends StatelessWidget {
         if (layout == LayoutType.extraSmallPhone ||
             layout == LayoutType.smallPhone ||
             layout == LayoutType.mobile) ...[
-          const TaskTodayWidget(),
+          TaskTodayWidget(tasksToday: summary.tasksToday),
           SizedBox(height: spacing),
-          const ActiveWorkersWidget(),
+          ActiveWorkersWidget(
+            supervisorsCount: summary.supervisorsCount,
+            fieldWorkersTotal: summary.fieldWorkersTotal,
+            fieldWorkersByRole: summary.fieldWorkersByRole,
+          ),
           const SizedBox(height: 80), // Space for bottom navbar
         ] else if (layout == LayoutType.tablet)
           // Tablet: 1:1 ratio
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Expanded(child: TaskTodayWidget()),
+              Expanded(child: TaskTodayWidget(tasksToday: summary.tasksToday)),
               SizedBox(width: spacing),
-              const Expanded(child: ActiveWorkersWidget()),
+              Expanded(
+                child: ActiveWorkersWidget(
+                  supervisorsCount: summary.supervisorsCount,
+                  fieldWorkersTotal: summary.fieldWorkersTotal,
+                  fieldWorkersByRole: summary.fieldWorkersByRole,
+                ),
+              ),
             ],
           )
         else
@@ -220,9 +520,18 @@ class PMDashboardPage extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Expanded(flex: 2, child: TaskTodayWidget()),
+              Expanded(
+                flex: 2,
+                child: TaskTodayWidget(tasksToday: summary.tasksToday),
+              ),
               SizedBox(width: spacing),
-              const Expanded(child: ActiveWorkersWidget()),
+              Expanded(
+                child: ActiveWorkersWidget(
+                  supervisorsCount: summary.supervisorsCount,
+                  fieldWorkersTotal: summary.fieldWorkersTotal,
+                  fieldWorkersByRole: summary.fieldWorkersByRole,
+                ),
+              ),
             ],
           ),
       ],
@@ -389,7 +698,10 @@ class _BottomNavBar extends StatelessWidget {
       title: Text(label, style: const TextStyle(color: Colors.white70)),
       onTap: () {
         Navigator.pop(sheetContext);
-        Future.microtask(() => _navigateToPage(rootContext, label));
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!rootContext.mounted) return;
+          _navigateToPage(rootContext, label);
+        });
       },
     );
   }

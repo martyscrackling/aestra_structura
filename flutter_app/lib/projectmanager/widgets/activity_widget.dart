@@ -1,18 +1,80 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 
+import '../../services/pm_dashboard_service.dart';
+
 class ActivityWidget extends StatelessWidget {
-  const ActivityWidget({super.key});
+  final List<PmActivityPoint> series;
+
+  const ActivityWidget({super.key, required this.series});
+
+  String _weekdayLabel(DateTime day) {
+    const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final idx = (day.weekday - 1).clamp(0, 6);
+    return labels[idx];
+  }
 
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    
+
     final isSmallPhone = screenWidth < 375;
     final isMobile = screenWidth < 768;
     final isTablet = screenWidth >= 768 && screenWidth < 1024;
-    
-    final padding = isSmallPhone ? 12.0 : isMobile ? 16.0 : 20.0;
+
+    final padding = isSmallPhone
+        ? 12.0
+        : isMobile
+        ? 16.0
+        : 20.0;
+
+    if (series.isEmpty) {
+      return Container(
+        padding: EdgeInsets.all(padding),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Activity',
+              style: TextStyle(
+                fontSize: isSmallPhone
+                    ? 14.0
+                    : isMobile
+                    ? 16.0
+                    : isTablet
+                    ? 17.0
+                    : 18.0,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF0C1935),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text('No activity yet.', style: TextStyle(color: Colors.grey[700])),
+          ],
+        ),
+      );
+    }
+
+    final spots = <FlSpot>[];
+    for (var i = 0; i < series.length; i++) {
+      spots.add(FlSpot(i.toDouble(), series[i].completed.toDouble()));
+    }
+
+    final maxValue = series
+        .map((p) => p.completed)
+        .fold<int>(0, (a, b) => a > b ? a : b);
+    final maxY = (maxValue == 0 ? 1 : (maxValue + 1)).toDouble();
 
     return Container(
       padding: EdgeInsets.all(padding),
@@ -36,15 +98,29 @@ class ActivityWidget extends StatelessWidget {
               Text(
                 'Activity',
                 style: TextStyle(
-                  fontSize: isSmallPhone ? 14.0 : isMobile ? 16.0 : isTablet ? 17.0 : 18.0,
+                  fontSize: isSmallPhone
+                      ? 14.0
+                      : isMobile
+                      ? 16.0
+                      : isTablet
+                      ? 17.0
+                      : 18.0,
                   fontWeight: FontWeight.w700,
                   color: const Color(0xFF0C1935),
                 ),
               ),
               Container(
                 padding: EdgeInsets.symmetric(
-                  horizontal: isSmallPhone ? 6.0 : isMobile ? 8.0 : 12.0,
-                  vertical: isSmallPhone ? 3.0 : isMobile ? 4.0 : 6.0,
+                  horizontal: isSmallPhone
+                      ? 6.0
+                      : isMobile
+                      ? 8.0
+                      : 12.0,
+                  vertical: isSmallPhone
+                      ? 3.0
+                      : isMobile
+                      ? 4.0
+                      : 6.0,
                 ),
                 decoration: BoxDecoration(
                   color: Colors.grey[100],
@@ -56,14 +132,22 @@ class ActivityWidget extends StatelessWidget {
                     Text(
                       'Weekly',
                       style: TextStyle(
-                        fontSize: isSmallPhone ? 10.0 : isMobile ? 11.0 : 13.0,
+                        fontSize: isSmallPhone
+                            ? 10.0
+                            : isMobile
+                            ? 11.0
+                            : 13.0,
                         color: const Color(0xFF0C1935),
                       ),
                     ),
                     const SizedBox(width: 4),
                     Icon(
                       Icons.keyboard_arrow_down,
-                      size: isSmallPhone ? 12.0 : isMobile ? 14.0 : 16.0,
+                      size: isSmallPhone
+                          ? 12.0
+                          : isMobile
+                          ? 14.0
+                          : 16.0,
                       color: Colors.grey[600],
                     ),
                   ],
@@ -102,28 +186,16 @@ class ActivityWidget extends StatelessWidget {
                       reservedSize: 30,
                       interval: 1,
                       getTitlesWidget: (double value, TitleMeta meta) {
-                        const days = [
-                          'Sun',
-                          'Mon',
-                          'Tue',
-                          'Wed',
-                          'Thu',
-                          'Fri',
-                          'Sat',
-                        ];
-                        if (value >= 0 && value < days.length) {
+                        final index = value.toInt();
+                        if (index >= 0 && index < series.length) {
                           return Padding(
                             padding: const EdgeInsets.only(top: 8.0),
                             child: Text(
-                              days[value.toInt()],
+                              _weekdayLabel(series[index].day),
                               style: TextStyle(
-                                color: value.toInt() == 3
-                                    ? Colors.blue
-                                    : Colors.grey[600],
+                                color: Colors.grey[600],
                                 fontSize: 12,
-                                fontWeight: value.toInt() == 3
-                                    ? FontWeight.w600
-                                    : FontWeight.normal,
+                                fontWeight: FontWeight.normal,
                               ),
                             ),
                           );
@@ -136,11 +208,11 @@ class ActivityWidget extends StatelessWidget {
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      interval: 25,
+                      interval: maxY <= 5 ? 1 : (maxY / 4).ceilToDouble(),
                       reservedSize: 40,
                       getTitlesWidget: (double value, TitleMeta meta) {
                         return Text(
-                          '${value.toInt()}%',
+                          value.toInt().toString(),
                           style: TextStyle(
                             color: Colors.grey[600],
                             fontSize: 12,
@@ -154,21 +226,13 @@ class ActivityWidget extends StatelessWidget {
                 borderData: FlBorderData(show: false),
 
                 minX: 0,
-                maxX: 6,
+                maxX: (series.length - 1).toDouble(),
                 minY: 0,
-                maxY: 100,
+                maxY: maxY,
 
                 lineBarsData: [
                   LineChartBarData(
-                    spots: const [
-                      FlSpot(0, 45),
-                      FlSpot(1, 60),
-                      FlSpot(2, 50),
-                      FlSpot(3, 75),
-                      FlSpot(4, 35),
-                      FlSpot(5, 55),
-                      FlSpot(6, 65),
-                    ],
+                    spots: spots,
                     isCurved: true,
                     color: Colors.blue,
                     barWidth: 3,
@@ -177,14 +241,6 @@ class ActivityWidget extends StatelessWidget {
                     dotData: FlDotData(
                       show: true,
                       getDotPainter: (spot, percent, barData, index) {
-                        if (index == 3) {
-                          return FlDotCirclePainter(
-                            radius: 6,
-                            color: Colors.blue,
-                            strokeWidth: 2,
-                            strokeColor: Colors.white,
-                          );
-                        }
                         return FlDotCirclePainter(
                           radius: 3,
                           color: Colors.blue,
@@ -201,9 +257,13 @@ class ActivityWidget extends StatelessWidget {
                     tooltipPadding: const EdgeInsets.all(8),
                     getTooltipItems: (touchedSpots) {
                       return touchedSpots.map((spot) {
-                        return const LineTooltipItem(
-                          '5 tasks\nAnnual completed',
-                          TextStyle(
+                        final idx = spot.x.toInt();
+                        final count = (idx >= 0 && idx < series.length)
+                            ? series[idx].completed
+                            : 0;
+                        return LineTooltipItem(
+                          '$count tasks completed',
+                          const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
                             fontWeight: FontWeight.w500,

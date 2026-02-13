@@ -273,7 +273,7 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
         children: [
           ActiveProject(key: _activeProjectKey, onProjectLoaded: _setProjectId),
           const SizedBox(height: 16),
-          const Tasks(),
+          Tasks(projectId: _currentProjectId),
           const SizedBox(height: 16),
           if (_currentProjectId != null) ...[
             PhasesWidget(projectId: _currentProjectId!),
@@ -310,7 +310,7 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
         children: [
           ActiveProject(key: _activeProjectKey, onProjectLoaded: _setProjectId),
           const SizedBox(height: 18),
-          const Tasks(),
+          Tasks(projectId: _currentProjectId),
           const SizedBox(height: 18),
           if (_currentProjectId != null) ...[
             PhasesWidget(projectId: _currentProjectId!),
@@ -343,7 +343,7 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
                   onProjectLoaded: _setProjectId,
                 ),
                 const SizedBox(height: 20),
-                const Tasks(),
+                Tasks(projectId: _currentProjectId),
                 const SizedBox(height: 20),
                 if (_currentProjectId != null) ...[
                   PhasesWidget(projectId: _currentProjectId!),

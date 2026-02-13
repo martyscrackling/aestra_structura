@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'widgets/sidebar.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
+import '../services/auth_service.dart';
 
 class AttendanceReport {
   AttendanceReport({
@@ -673,19 +674,18 @@ class _ReportsPageState extends State<ReportsPage> {
                           // AESTRA account (hidden on mobile)
                           if (!isMobile)
                             PopupMenuButton<String>(
-                              onSelected: (value) {
-                                if (value == 'switch')
+                              onSelected: (value) async {
+                                if (value == 'switch') {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
                                       content: Text('Switch account (demo)'),
                                     ),
                                   );
-                                if (value == 'logout')
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Logout (demo)'),
-                                    ),
-                                  );
+                                } else if (value == 'logout') {
+                                  await AuthService().logout();
+                                  if (!context.mounted) return;
+                                  context.go('/login');
+                                }
                               },
                               offset: const Offset(0, 48),
                               shape: RoundedRectangleBorder(

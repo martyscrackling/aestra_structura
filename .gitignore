@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.pyo
+*.pyc
+*.egg-info/
+*.egg
+*.log
+.env
+.venv/
+venv/
+
+# Django
+*.sqlite3
+
+# VS Code / IDE
+.vscode/
+.idea/
+*.iml
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub/
+build/
+
+# Android
+**/local.properties
+**/key.properties
+**/key.properties.*
+
+# macOS
+.DS_Store
