@@ -339,6 +339,13 @@ class FieldWorkerSerializer(serializers.ModelSerializer):
         }
     
     def create(self, validated_data):
+        # If the client doesn't send a user_id (common for Supervisor logins where
+        # user_id is not a real User PK), infer it from the project when possible.
+        if validated_data.get('user_id') is None:
+            project = validated_data.get('project_id')
+            if project is not None and getattr(project, 'user', None) is not None:
+                validated_data['user_id'] = project.user
+
         field_worker = models.FieldWorker(**validated_data)
         field_worker.save()
         return field_worker

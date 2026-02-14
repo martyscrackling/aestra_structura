@@ -1,7 +1,3 @@
-databases:
-  - name: structura-db
-    plan: free
-
 services:
   - type: web
     name: structura-backend
@@ -18,7 +14,6 @@ services:
         value: "0"
       - key: SECRET_KEY
         generateValue: true
+      # Supabase (or any external Postgres): set DATABASE_URL in Render dashboard
       - key: DATABASE_URL
-        fromDatabase:
-          name: structura-db
-          property: connectionString
+        sync: false

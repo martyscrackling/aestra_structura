@@ -91,7 +91,12 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
       });
 
       try {
-        final currentUserId = AuthService().currentUser?['user_id'];
+        final currentUser = AuthService().currentUser;
+        final currentUserType = (currentUser?['type'] ?? '').toString();
+        final isRealUser = currentUserType.toLowerCase() == 'user' ||
+            (currentUserType.isEmpty && currentUser?['supervisor_id'] == null && currentUser?['client_id'] == null);
+
+        final currentUserId = isRealUser ? currentUser?['user_id'] : null;
 
         final fieldWorkerData = {
           if (currentUserId != null) 'user_id': currentUserId,
