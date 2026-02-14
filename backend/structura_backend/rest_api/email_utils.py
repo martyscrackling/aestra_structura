@@ -137,4 +137,35 @@ def send_invitation_email(
             sender_header_value,
             reply_to,
         )
+
+        # Some SMTP providers (including Gmail) may reject or rewrite messages if the
+        # From address is not aligned with the authenticated sender. If we attempted
+        # to send "From=PM" and it failed, retry with the configured default sender.
+        if default_from_email and from_email != default_from_email:
+            try:
+                fallback = EmailMessage(
+                    subject=subject,
+                    body=message,
+                    from_email=default_from_email,
+                    to=[to_email],
+                    reply_to=reply_to,
+                )
+                sent_count = fallback.send(fail_silently=False)
+                logger.info(
+                    "Invitation email fallback send result=%s to=%s subject=%r from=%r reply_to=%r",
+                    sent_count,
+                    to_email,
+                    subject,
+                    default_from_email,
+                    reply_to,
+                )
+            except Exception:
+                logger.exception(
+                    "Invitation email fallback also failed (to=%s role=%s subject=%r from=%r reply_to=%r)",
+                    to_email,
+                    role,
+                    subject,
+                    default_from_email,
+                    reply_to,
+                )
         return

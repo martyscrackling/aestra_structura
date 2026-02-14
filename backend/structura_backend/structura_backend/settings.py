@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import os
+from urllib.parse import urlparse
 
 import dj_database_url
 
@@ -174,13 +175,36 @@ EMAIL_HOST = os.getenv("EMAIL_HOST", "").strip()
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "").strip()
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "").strip()
-EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "1").strip().lower() in {"1", "true", "yes"}
+_email_use_tls_raw = os.getenv("EMAIL_USE_TLS", "").strip()
+if not _email_use_tls_raw:
+    # Some deployments accidentally use MAIL_USE_TLS.
+    _email_use_tls_raw = os.getenv("MAIL_USE_TLS", "1").strip()
+EMAIL_USE_TLS = _email_use_tls_raw.lower() in {"1", "true", "yes"}
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "no-reply@localhost")
 
 if EMAIL_HOST:
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 else:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+
+
+# If FRONTEND_URL is provided, default CORS/CSRF settings to allow it.
+# This prevents common "Failed to fetch" errors on Flutter Web when CORS/CSRF env vars
+# were not configured for production.
+if FRONTEND_URL:
+    parsed_frontend = urlparse(FRONTEND_URL)
+    if parsed_frontend.scheme and parsed_frontend.netloc:
+        frontend_origin = f"{parsed_frontend.scheme}://{parsed_frontend.netloc}"
+        if not globals().get("CORS_ALLOW_ALL_ORIGINS", False):
+            existing_allowed = set(globals().get("CORS_ALLOWED_ORIGINS", []))
+            if not existing_allowed:
+                CORS_ALLOWED_ORIGINS = [frontend_origin]
+            elif frontend_origin not in existing_allowed:
+                CORS_ALLOWED_ORIGINS = list(existing_allowed) + [frontend_origin]
+
+        existing_csrf = set(globals().get("CSRF_TRUSTED_ORIGINS", []))
+        if frontend_origin not in existing_csrf:
+            CSRF_TRUSTED_ORIGINS = list(existing_csrf) + [frontend_origin]
 
 
 # Static files (CSS, JavaScript, Images)
