@@ -37,6 +37,11 @@ def send_invitation_email(
             role,
         )
 
+    smtp_host = getattr(settings, "EMAIL_HOST", "")
+    smtp_port = getattr(settings, "EMAIL_PORT", None)
+    smtp_tls = getattr(settings, "EMAIL_USE_TLS", None)
+    smtp_user = getattr(settings, "EMAIL_HOST_USER", "")
+
     app_name = getattr(settings, "APP_NAME", "Structura")
     frontend_url = (getattr(settings, "FRONTEND_URL", "") or "").strip().rstrip("/")
 
@@ -129,13 +134,18 @@ def send_invitation_email(
     except Exception:
         # Never fail account creation because email failed.
         logger.exception(
-            "Failed sending invitation email (to=%s role=%s subject=%r from=%r sender=%r reply_to=%r)",
+            "Failed sending invitation email (to=%s role=%s subject=%r from=%r sender=%r reply_to=%r smtp_host=%r smtp_port=%r smtp_tls=%r smtp_user=%r backend=%r)",
             to_email,
             role,
             subject,
             from_email,
             sender_header_value,
             reply_to,
+            smtp_host,
+            smtp_port,
+            smtp_tls,
+            smtp_user,
+            email_backend,
         )
 
         # Some SMTP providers (including Gmail) may reject or rewrite messages if the
@@ -161,11 +171,16 @@ def send_invitation_email(
                 )
             except Exception:
                 logger.exception(
-                    "Invitation email fallback also failed (to=%s role=%s subject=%r from=%r reply_to=%r)",
+                    "Invitation email fallback also failed (to=%s role=%s subject=%r from=%r reply_to=%r smtp_host=%r smtp_port=%r smtp_tls=%r smtp_user=%r backend=%r)",
                     to_email,
                     role,
                     subject,
                     default_from_email,
                     reply_to,
+                    smtp_host,
+                    smtp_port,
+                    smtp_tls,
+                    smtp_user,
+                    email_backend,
                 )
         return

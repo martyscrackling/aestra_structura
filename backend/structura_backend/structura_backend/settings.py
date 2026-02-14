@@ -174,7 +174,13 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "").strip()
 EMAIL_HOST = os.getenv("EMAIL_HOST", "").strip()
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "").strip()
-EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "").strip()
+EMAIL_HOST_PASSWORD = (
+    os.getenv("EMAIL_HOST_PASSWORD", "")
+    .replace(" ", "")
+    .replace("\n", "")
+    .replace("\r", "")
+    .strip()
+)
 _email_use_tls_raw = os.getenv("EMAIL_USE_TLS", "").strip()
 if not _email_use_tls_raw:
     # Some deployments accidentally use MAIL_USE_TLS.
