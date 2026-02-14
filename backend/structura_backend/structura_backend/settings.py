@@ -181,6 +181,7 @@ EMAIL_HOST_PASSWORD = (
     .replace("\r", "")
     .strip()
 )
+EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "10"))
 _email_use_tls_raw = os.getenv("EMAIL_USE_TLS", "").strip()
 if not _email_use_tls_raw:
     # Some deployments accidentally use MAIL_USE_TLS.

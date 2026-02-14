@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from email.utils import formataddr, parseaddr
 
 from django.conf import settings
@@ -112,14 +113,15 @@ def send_invitation_email(
             logger.warning("Invalid invited_by_email for From header: %r", invited_by_email)
 
     reply_to = [invited_by_email] if invited_by_email else None
-    try:
+
+    def _send_attempt(*, attempt_from: str | None, attempt_sender: str | None) -> None:
         email = EmailMessage(
             subject=subject,
             body=message,
-            from_email=from_email,
+            from_email=attempt_from,
             to=[to_email],
             reply_to=reply_to,
-            headers={"Sender": sender_header_value} if sender_header_value else None,
+            headers={"Sender": attempt_sender} if attempt_sender else None,
         )
         sent_count = email.send(fail_silently=False)
         logger.info(
@@ -127,48 +129,35 @@ def send_invitation_email(
             sent_count,
             to_email,
             subject,
-            from_email,
-            sender_header_value,
+            attempt_from,
+            attempt_sender,
             reply_to,
-        )
-    except Exception:
-        # Never fail account creation because email failed.
-        logger.exception(
-            "Failed sending invitation email (to=%s role=%s subject=%r from=%r sender=%r reply_to=%r smtp_host=%r smtp_port=%r smtp_tls=%r smtp_user=%r backend=%r)",
-            to_email,
-            role,
-            subject,
-            from_email,
-            sender_header_value,
-            reply_to,
-            smtp_host,
-            smtp_port,
-            smtp_tls,
-            smtp_user,
-            email_backend,
         )
 
-        # Some SMTP providers (including Gmail) may reject or rewrite messages if the
-        # From address is not aligned with the authenticated sender. If we attempted
-        # to send "From=PM" and it failed, retry with the configured default sender.
+    def _send_background() -> None:
+        try:
+            _send_attempt(attempt_from=from_email, attempt_sender=sender_header_value)
+            return
+        except Exception:
+            logger.exception(
+                "Failed sending invitation email (to=%s role=%s subject=%r from=%r sender=%r reply_to=%r smtp_host=%r smtp_port=%r smtp_tls=%r smtp_user=%r backend=%r)",
+                to_email,
+                role,
+                subject,
+                from_email,
+                sender_header_value,
+                reply_to,
+                smtp_host,
+                smtp_port,
+                smtp_tls,
+                smtp_user,
+                email_backend,
+            )
+
+        # If provider rejects dynamic From, retry with default sender.
         if default_from_email and from_email != default_from_email:
             try:
-                fallback = EmailMessage(
-                    subject=subject,
-                    body=message,
-                    from_email=default_from_email,
-                    to=[to_email],
-                    reply_to=reply_to,
-                )
-                sent_count = fallback.send(fail_silently=False)
-                logger.info(
-                    "Invitation email fallback send result=%s to=%s subject=%r from=%r reply_to=%r",
-                    sent_count,
-                    to_email,
-                    subject,
-                    default_from_email,
-                    reply_to,
-                )
+                _send_attempt(attempt_from=default_from_email, attempt_sender=None)
             except Exception:
                 logger.exception(
                     "Invitation email fallback also failed (to=%s role=%s subject=%r from=%r reply_to=%r smtp_host=%r smtp_port=%r smtp_tls=%r smtp_user=%r backend=%r)",
@@ -183,4 +172,7 @@ def send_invitation_email(
                     smtp_user,
                     email_backend,
                 )
-        return
+
+    # Never block API responses on SMTP; send in background.
+    threading.Thread(target=_send_background, daemon=True).start()
+    return
