@@ -171,6 +171,10 @@ USE_TZ = True
 APP_NAME = os.getenv("APP_NAME", "Structura")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "").strip()
 
+# Optional: SendGrid API (recommended for production reliability on hosting providers that block SMTP)
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "").strip()
+SENDGRID_FROM_EMAIL = os.getenv("SENDGRID_FROM_EMAIL", "").strip()
+
 EMAIL_HOST = os.getenv("EMAIL_HOST", "").strip()
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "").strip()

@@ -1,14 +1,73 @@
 from __future__ import annotations
 
 import logging
+import json
+import os
 import threading
 from email.utils import formataddr, parseaddr
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
 
 from django.conf import settings
 from django.core.mail import EmailMessage
 
 
 logger = logging.getLogger(__name__)
+
+
+def _send_via_sendgrid(
+    *,
+    api_key: str,
+    subject: str,
+    message: str,
+    to_email: str,
+    from_email: str | None,
+    reply_to: list[str] | None,
+) -> int:
+    """Send using SendGrid v3 API. Returns HTTP status code (202 means accepted)."""
+
+    from_name, from_addr = parseaddr(from_email or "")
+    if not from_addr:
+        # Fallback to env var if DEFAULT_FROM_EMAIL isn't a real address.
+        from_name, from_addr = parseaddr(os.getenv("SENDGRID_FROM_EMAIL", ""))
+
+    if not from_addr:
+        raise ValueError("SendGrid from_email is not configured")
+
+    payload: dict = {
+        "personalizations": [{"to": [{"email": to_email}], "subject": subject}],
+        "from": {"email": from_addr},
+        "content": [{"type": "text/plain", "value": message}],
+    }
+    if from_name:
+        payload["from"]["name"] = from_name
+
+    if reply_to and reply_to[0]:
+        payload["reply_to"] = {"email": reply_to[0]}
+
+    body = json.dumps(payload).encode("utf-8")
+    req = Request(
+        "https://api.sendgrid.com/v3/mail/send",
+        data=body,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+    )
+
+    try:
+        with urlopen(req, timeout=20) as resp:
+            return int(getattr(resp, "status", 0) or 0)
+    except HTTPError as e:
+        # Consume body for better logs.
+        try:
+            details = e.read().decode("utf-8", errors="replace")
+        except Exception:
+            details = "<unable to read body>"
+        raise RuntimeError(f"SendGrid HTTPError {e.code}: {details}")
+    except URLError as e:
+        raise RuntimeError(f"SendGrid URLError: {e}")
 
 
 def send_invitation_email(
@@ -95,6 +154,8 @@ def send_invitation_email(
     message = "\n".join(lines)
 
     default_from_email = getattr(settings, "DEFAULT_FROM_EMAIL", None)
+    sendgrid_key = (getattr(settings, "SENDGRID_API_KEY", "") or "").strip()
+    sendgrid_from_override = (getattr(settings, "SENDGRID_FROM_EMAIL", "") or "").strip()
 
     # NOTE:
     # - Actual deliverability depends on SMTP provider + DMARC alignment.
@@ -115,6 +176,28 @@ def send_invitation_email(
     reply_to = [invited_by_email] if invited_by_email else None
 
     def _send_attempt(*, attempt_from: str | None, attempt_sender: str | None) -> None:
+        # Prefer SendGrid if configured (uses HTTPS; works even when SMTP is blocked).
+        if sendgrid_key:
+            from_for_sendgrid = sendgrid_from_override or attempt_from or default_from_email
+            status = _send_via_sendgrid(
+                api_key=sendgrid_key,
+                subject=subject,
+                message=message,
+                to_email=to_email,
+                from_email=from_for_sendgrid,
+                reply_to=reply_to,
+            )
+            logger.info(
+                "Invitation email sendgrid status=%s to=%s subject=%r from=%r reply_to=%r",
+                status,
+                to_email,
+                subject,
+                from_for_sendgrid,
+                reply_to,
+            )
+            return
+
+        # Default: Django Email backend (SMTP or console).
         email = EmailMessage(
             subject=subject,
             body=message,
@@ -176,3 +259,4 @@ def send_invitation_email(
     # Never block API responses on SMTP; send in background.
     threading.Thread(target=_send_background, daemon=True).start()
     return
+
