@@ -116,8 +116,25 @@ def send_invitation_email(
             reply_to=reply_to,
             headers={"Sender": sender_header_value} if sender_header_value else None,
         )
-        email.send(fail_silently=False)
+        sent_count = email.send(fail_silently=False)
+        logger.info(
+            "Invitation email send result=%s to=%s subject=%r from=%r sender=%r reply_to=%r",
+            sent_count,
+            to_email,
+            subject,
+            from_email,
+            sender_header_value,
+            reply_to,
+        )
     except Exception:
         # Never fail account creation because email failed.
-        logger.exception("Failed sending invitation email (to=%s role=%s)", to_email, role)
+        logger.exception(
+            "Failed sending invitation email (to=%s role=%s subject=%r from=%r sender=%r reply_to=%r)",
+            to_email,
+            role,
+            subject,
+            from_email,
+            sender_header_value,
+            reply_to,
+        )
         return
