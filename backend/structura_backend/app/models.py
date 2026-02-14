@@ -172,7 +172,13 @@ class FieldWorker(models.Model):
     
     fieldworker_id = models.AutoField(primary_key=True)
     user_id = models.ForeignKey(User, on_delete=models.CASCADE, related_name='field_workers', null=True, blank=True)
-    project_id = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='field_workers')
+    project_id = models.ForeignKey(
+        Project,
+        on_delete=models.SET_NULL,
+        related_name='field_workers',
+        null=True,
+        blank=True,
+    )
     
     first_name = models.CharField(max_length=100)
     middle_name = models.CharField(max_length=100, null=True, blank=True)

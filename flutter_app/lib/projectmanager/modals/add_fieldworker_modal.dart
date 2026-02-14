@@ -7,12 +7,12 @@ import '../../services/auth_service.dart';
 
 class AddFieldWorkerModal extends StatefulWidget {
   final String workerType;
-  final int projectId;
+  final int? projectId;
 
   const AddFieldWorkerModal({
     super.key,
     required this.workerType,
-    required this.projectId,
+    this.projectId,
   });
 
   @override
@@ -95,7 +95,7 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
 
         final fieldWorkerData = {
           if (currentUserId != null) 'user_id': currentUserId,
-          'project_id': widget.projectId,
+          if (widget.projectId != null) 'project_id': widget.projectId,
           'first_name': _firstNameController.text.trim(),
           'middle_name': _middleNameController.text.trim().isEmpty
               ? null

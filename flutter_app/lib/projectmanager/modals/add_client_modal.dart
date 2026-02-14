@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
-import 'package:provider/provider.dart';
 import 'dart:convert';
-import '../../services/auth_service.dart';
 import '../../services/app_config.dart';
+import '../../services/auth_service.dart';
 
 class AddClientModal extends StatefulWidget {
   const AddClientModal({super.key});
@@ -23,7 +22,6 @@ class _AddClientModalState extends State<AddClientModal> {
   final _generatedEmailController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  String _selectedStatus = 'active';
   XFile? _selectedImage;
   bool _isLoading = false;
 
@@ -31,15 +29,6 @@ class _AddClientModalState extends State<AddClientModal> {
   void initState() {
     super.initState();
     _passwordController.text = 'PASSWORD';
-  }
-
-  void _generateEmail() {
-    final firstName = _firstNameController.text.trim().toLowerCase();
-    final lastName = _lastNameController.text.trim().toLowerCase();
-
-    if (firstName.isNotEmpty && lastName.isNotEmpty) {
-      _generatedEmailController.text = '$lastName.$firstName@structura.com';
-    }
   }
 
   @override
@@ -137,12 +126,11 @@ class _AddClientModalState extends State<AddClientModal> {
       });
 
       try {
-        // Get the current logged-in user's ID from AuthService
-        final authService = Provider.of<AuthService>(context, listen: false);
-        final userId = authService.currentUser?['user_id'];
-
         final clientData = {
-          'user_id': userId, // Include the currently logged-in user's ID
+          'invited_by_email': AuthService().currentUser?['email'],
+          'invited_by_name':
+            '${AuthService().currentUser?['first_name'] ?? ''} ${AuthService().currentUser?['last_name'] ?? ''}'
+              .trim(),
           'first_name': _firstNameController.text.trim(),
           'middle_name': _middleNameController.text.trim().isEmpty
               ? null
@@ -155,10 +143,9 @@ class _AddClientModalState extends State<AddClientModal> {
           'birthdate': _birthdateController.text.trim().isEmpty
               ? null
               : _birthdateController.text.trim(),
-          'status': _selectedStatus,
         };
 
-        print('Sending client data: $clientData');
+        debugPrint('Sending client data: $clientData');
 
         final response = await http.post(
           AppConfig.apiUri('clients/'),
@@ -166,8 +153,10 @@ class _AddClientModalState extends State<AddClientModal> {
           body: jsonEncode(clientData),
         );
 
-        print('Response status: ${response.statusCode}');
-        print('Response body: ${response.body}');
+        debugPrint('Response status: ${response.statusCode}');
+        debugPrint('Response body: ${response.body}');
+
+        if (!mounted) return;
 
         if (response.statusCode == 201 || response.statusCode == 200) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -192,13 +181,17 @@ class _AddClientModalState extends State<AddClientModal> {
           }
         }
       } catch (e) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        }
       } finally {
-        setState(() {
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
       }
     }
   }
@@ -314,7 +307,6 @@ class _AddClientModalState extends State<AddClientModal> {
                                 _buildTextField(
                                   controller: _firstNameController,
                                   hintText: 'First Name',
-                                  onChanged: (value) => _generateEmail(),
                                   validator: (value) {
                                     if (value == null || value.isEmpty) {
                                       return 'Required';
@@ -335,7 +327,6 @@ class _AddClientModalState extends State<AddClientModal> {
                                 _buildTextField(
                                   controller: _lastNameController,
                                   hintText: 'Last Name',
-                                  onChanged: (value) => _generateEmail(),
                                   validator: (value) {
                                     if (value == null || value.isEmpty) {
                                       return 'Required';
@@ -348,8 +339,14 @@ class _AddClientModalState extends State<AddClientModal> {
                                 // Generated Account Email
                                 _buildTextField(
                                   controller: _generatedEmailController,
-                                  hintText: 'Account Email (Auto-generated)',
-                                  readOnly: true,
+                                  hintText: 'Email (Gmail)',
+                                  keyboardType: TextInputType.emailAddress,
+                                  validator: (value) {
+                                    if (value == null || value.trim().isEmpty) {
+                                      return 'Required';
+                                    }
+                                    return null;
+                                  },
                                 ),
                                 const SizedBox(height: 12),
 
@@ -387,62 +384,6 @@ class _AddClientModalState extends State<AddClientModal> {
                                   ),
                                 ),
                                 const SizedBox(height: 12),
-
-                                // Status Dropdown
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'Status',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: Color(0xFF6B7280),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Container(
-                                      width: double.infinity,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFF9FAFB),
-                                        border: Border.all(
-                                          color: Colors.grey[300]!,
-                                        ),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: DropdownButtonHideUnderline(
-                                        child: DropdownButton<String>(
-                                          value: _selectedStatus,
-                                          isExpanded: true,
-                                          items: const [
-                                            DropdownMenuItem(
-                                              value: 'active',
-                                              child: Text('Active'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: 'deactivated',
-                                              child: Text('Deactivated'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: 'fired',
-                                              child: Text('Fired'),
-                                            ),
-                                          ],
-                                          onChanged: (value) {
-                                            setState(() {
-                                              _selectedStatus =
-                                                  value ?? 'active';
-                                            });
-                                          },
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
                               ],
                             ),
                           ),
@@ -518,7 +459,6 @@ class _AddClientModalState extends State<AddClientModal> {
                                   _buildTextField(
                                     controller: _firstNameController,
                                     hintText: 'First Name',
-                                    onChanged: (value) => _generateEmail(),
                                     validator: (value) {
                                       if (value == null || value.isEmpty) {
                                         return 'Required';
@@ -539,7 +479,6 @@ class _AddClientModalState extends State<AddClientModal> {
                                   _buildTextField(
                                     controller: _lastNameController,
                                     hintText: 'Last Name',
-                                    onChanged: (value) => _generateEmail(),
                                     validator: (value) {
                                       if (value == null || value.isEmpty) {
                                         return 'Required';
@@ -552,8 +491,14 @@ class _AddClientModalState extends State<AddClientModal> {
                                   // Generated Account Email
                                   _buildTextField(
                                     controller: _generatedEmailController,
-                                    hintText: 'Account Email (Auto-generated)',
-                                    readOnly: true,
+                                    hintText: 'Email (Gmail)',
+                                    keyboardType: TextInputType.emailAddress,
+                                    validator: (value) {
+                                      if (value == null || value.trim().isEmpty) {
+                                        return 'Required';
+                                      }
+                                      return null;
+                                    },
                                   ),
                                   const SizedBox(height: 16),
 
@@ -591,65 +536,6 @@ class _AddClientModalState extends State<AddClientModal> {
                                     ),
                                   ),
                                   const SizedBox(height: 16),
-
-                                  // Status Dropdown
-                                  Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'Status',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: Color(0xFF6B7280),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Container(
-                                        width: double.infinity,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFF9FAFB),
-                                          border: Border.all(
-                                            color: Colors.grey[300]!,
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                        ),
-                                        child: DropdownButtonHideUnderline(
-                                          child: DropdownButton<String>(
-                                            value: _selectedStatus,
-                                            isExpanded: true,
-                                            items: const [
-                                              DropdownMenuItem(
-                                                value: 'active',
-                                                child: Text('Active'),
-                                              ),
-                                              DropdownMenuItem(
-                                                value: 'deactivated',
-                                                child: Text('Deactivated'),
-                                              ),
-                                              DropdownMenuItem(
-                                                value: 'fired',
-                                                child: Text('Fired'),
-                                              ),
-                                            ],
-                                            onChanged: (value) {
-                                              setState(() {
-                                                _selectedStatus =
-                                                    value ?? 'active';
-                                              });
-                                            },
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
                                 ],
                               ),
                             ),

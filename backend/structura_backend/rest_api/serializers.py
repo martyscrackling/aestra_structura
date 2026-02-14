@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from .email_utils import send_invitation_email
 from app import models
 
 
@@ -163,9 +164,28 @@ class ProjectSerializer(serializers.ModelSerializer):
 
 
 class SupervisorsSerializer(serializers.ModelSerializer):
+    invited_by_email = serializers.EmailField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+    )
+    invited_by_name = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+    )
+    project_name = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+    )
+
     class Meta:
         model = models.Supervisors
         fields = [
+            'invited_by_email',
+            'invited_by_name',
+            'project_name',
             'supervisor_id',
             'project_id',
             'first_name',
@@ -197,16 +217,49 @@ class SupervisorsSerializer(serializers.ModelSerializer):
         }
     
     def create(self, validated_data):
+        invited_by_email = validated_data.pop('invited_by_email', '')
+        invited_by_name = validated_data.pop('invited_by_name', '')
+        project_name = validated_data.pop('project_name', '')
+
+        plain_password = validated_data.get('password_hash', 'PASSWORD')
         # Create supervisor with all fields
         supervisor = models.Supervisors(**validated_data)
         supervisor.save()
+
+        send_invitation_email(
+            to_email=supervisor.email,
+            role='Supervisor',
+            temp_password=str(plain_password),
+            invited_by_email=invited_by_email,
+            invited_by_name=invited_by_name,
+            project_name=project_name,
+        )
         return supervisor
 
 
 class SupervisorSerializer(serializers.ModelSerializer):
+    invited_by_email = serializers.EmailField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+    )
+    invited_by_name = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+    )
+    project_name = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+    )
+
     class Meta:
         model = models.Supervisors
         fields = [
+            'invited_by_email',
+            'invited_by_name',
+            'project_name',
             'supervisor_id',
             'project_id',
             'first_name',
@@ -238,9 +291,23 @@ class SupervisorSerializer(serializers.ModelSerializer):
         }
     
     def create(self, validated_data):
+        invited_by_email = validated_data.pop('invited_by_email', '')
+        invited_by_name = validated_data.pop('invited_by_name', '')
+        project_name = validated_data.pop('project_name', '')
+
+        plain_password = validated_data.get('password_hash', 'PASSWORD')
         # Create supervisor with all fields
         supervisor = models.Supervisors(**validated_data)
         supervisor.save()
+
+        send_invitation_email(
+            to_email=supervisor.email,
+            role='Supervisor',
+            temp_password=str(plain_password),
+            invited_by_email=invited_by_email,
+            invited_by_name=invited_by_name,
+            project_name=project_name,
+        )
         return supervisor
 
 
@@ -266,7 +333,7 @@ class FieldWorkerSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'fieldworker_id': {'read_only': True},
             'created_at': {'read_only': True},
-            'project_id': {'required': True},
+            'project_id': {'required': False, 'allow_null': True},
             'user_id': {'required': False, 'allow_null': True},
         }
     
@@ -277,9 +344,28 @@ class FieldWorkerSerializer(serializers.ModelSerializer):
 
 
 class ClientSerializer(serializers.ModelSerializer):
+    invited_by_email = serializers.EmailField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+    )
+    invited_by_name = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+    )
+    project_name = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+    )
+
     class Meta:
         model = models.Client
         fields = [
+            'invited_by_email',
+            'invited_by_name',
+            'project_name',
             'client_id',
             'user_id',
             'project_id',
@@ -304,6 +390,11 @@ class ClientSerializer(serializers.ModelSerializer):
         }
     
     def create(self, validated_data):
+        invited_by_email = validated_data.pop('invited_by_email', '')
+        invited_by_name = validated_data.pop('invited_by_name', '')
+        project_name = validated_data.pop('project_name', '')
+
+        plain_password = validated_data.get('password_hash', 'PASSWORD')
         # Auto-create User account if user_id is not provided
         if 'user_id' not in validated_data or validated_data.get('user_id') is None:
             user = models.User.objects.create(
@@ -322,6 +413,15 @@ class ClientSerializer(serializers.ModelSerializer):
         # Create client with all fields
         client = models.Client(**validated_data)
         client.save()
+
+        send_invitation_email(
+            to_email=client.email,
+            role='Client',
+            temp_password=str(plain_password),
+            invited_by_email=invited_by_email,
+            invited_by_name=invited_by_name,
+            project_name=project_name,
+        )
         return client
 
 

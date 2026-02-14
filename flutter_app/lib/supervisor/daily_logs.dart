@@ -107,10 +107,7 @@ class _DailyLogsPageState extends State<DailyLogsPage> {
           Row(
             children: [
               if (isDesktop)
-                Sidebar(
-                  activePage: "Daily Logs",
-                  keepVisible: true,
-                ),
+                Sidebar(activePage: "Daily Logs", keepVisible: true),
               Expanded(
                 child: Column(
                   children: [
@@ -310,9 +307,7 @@ class _DailyLogsPageState extends State<DailyLogsPage> {
                     ),
 
                     // Main content: logs list
-                    Expanded(
-                      child: _buildLogsPanel(isMobile),
-                    ),
+                    Expanded(child: _buildLogsPanel(isMobile)),
                   ],
                 ),
               ),
@@ -497,10 +492,7 @@ class _DailyLogsPageState extends State<DailyLogsPage> {
                   const SizedBox(height: 8),
                   Text(
                     'Tap the + button to add your first log',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[500],
-                    ),
+                    style: TextStyle(fontSize: 14, color: Colors.grey[500]),
                   ),
                 ],
               ),
@@ -512,7 +504,7 @@ class _DailyLogsPageState extends State<DailyLogsPage> {
               itemBuilder: (context, i) {
                 final log = logs[i];
                 final isDraft = (log['status'] ?? '') == 'Draft';
-                
+
                 return Container(
                   margin: EdgeInsets.only(bottom: isMobile ? 12 : 16),
                   decoration: BoxDecoration(

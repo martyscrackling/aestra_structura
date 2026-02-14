@@ -165,6 +165,24 @@ USE_I18N = True
 USE_TZ = True
 
 
+# Email (optional)
+# If SMTP env vars are not set, Django will print emails to the console.
+APP_NAME = os.getenv("APP_NAME", "Structura")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "").strip()
+
+EMAIL_HOST = os.getenv("EMAIL_HOST", "").strip()
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "").strip()
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "").strip()
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "1").strip().lower() in {"1", "true", "yes"}
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "no-reply@localhost")
+
+if EMAIL_HOST:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+
+
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 

@@ -386,16 +386,6 @@ class WorkerGroupSection extends StatelessWidget {
                         height: 40,
                         child: ElevatedButton.icon(
                           onPressed: () async {
-                            if (projectId == null || projectId! <= 0) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'No project selected. Open a project first, then add workers.',
-                                  ),
-                                ),
-                              );
-                              return;
-                            }
                             final result = await showDialog<String>(
                               context: context,
                               builder: (context) =>
@@ -419,7 +409,7 @@ class WorkerGroupSection extends StatelessWidget {
                                   context: context,
                                   builder: (context) => AddFieldWorkerModal(
                                     workerType: 'Field Worker',
-                                    projectId: projectId!,
+                                    projectId: projectId,
                                   ),
                                 );
                                 if (!context.mounted) return;
@@ -545,16 +535,6 @@ class WorkerGroupSection extends StatelessWidget {
                     height: 40,
                     child: ElevatedButton.icon(
                       onPressed: () async {
-                        if (projectId == null || projectId! <= 0) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'No project selected. Open a project first, then add workers.',
-                              ),
-                            ),
-                          );
-                          return;
-                        }
                         final result = await showDialog<String>(
                           context: context,
                           builder: (context) => const SelectWorkerTypeModal(),
@@ -577,7 +557,7 @@ class WorkerGroupSection extends StatelessWidget {
                               context: context,
                               builder: (context) => AddFieldWorkerModal(
                                 workerType: 'Field Worker',
-                                projectId: projectId!,
+                                projectId: projectId,
                               ),
                             );
                             if (!context.mounted) return;

@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
-import 'package:provider/provider.dart';
 import 'dart:convert';
-import '../../services/auth_service.dart';
 import '../../services/app_config.dart';
+import '../../services/auth_service.dart';
 
 class AddWorkerModal extends StatefulWidget {
   final String workerType;
@@ -36,15 +35,6 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
   void initState() {
     super.initState();
     _passwordController.text = 'PASSWORD';
-  }
-
-  void _generateEmail() {
-    final firstName = _firstNameController.text.trim().toLowerCase();
-    final lastName = _lastNameController.text.trim().toLowerCase();
-
-    if (firstName.isNotEmpty && lastName.isNotEmpty) {
-      _generatedEmailController.text = '$lastName.$firstName@structura.com';
-    }
   }
 
   @override
@@ -99,6 +89,10 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
       try {
         // Build payload with ALL fields including optional ones
         final Map<String, dynamic> supervisorData = {
+          'invited_by_email': AuthService().currentUser?['email'],
+          'invited_by_name':
+            '${AuthService().currentUser?['first_name'] ?? ''} ${AuthService().currentUser?['last_name'] ?? ''}'
+              .trim(),
           'first_name': _firstNameController.text.trim(),
           'middle_name': _middleNameController.text.trim().isEmpty
               ? null
@@ -124,7 +118,7 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
               : double.tryParse(_payrateController.text.trim()),
         };
 
-        print('Sending supervisor data: $supervisorData');
+        debugPrint('Sending supervisor data: $supervisorData');
 
         final response = await http.post(
           AppConfig.apiUri('supervisors/'),
@@ -132,8 +126,8 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
           body: jsonEncode(supervisorData),
         );
 
-        print('Response status: ${response.statusCode}');
-        print('Response body: ${response.body}');
+        debugPrint('Response status: ${response.statusCode}');
+        debugPrint('Response body: ${response.body}');
 
         if (response.statusCode == 201 || response.statusCode == 200) {
           if (mounted) {
@@ -184,9 +178,11 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
           ).showSnackBar(SnackBar(content: Text('Error: $e')));
         }
       } finally {
-        setState(() {
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
       }
     }
   }
@@ -519,7 +515,6 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
       _buildTextField(
         controller: _firstNameController,
         hintText: 'First Name',
-        onChanged: (value) => _generateEmail(),
         validator: (value) {
           if (value == null || value.isEmpty) {
             return 'Required';
@@ -540,7 +535,6 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
       _buildTextField(
         controller: _lastNameController,
         hintText: 'Last Name',
-        onChanged: (value) => _generateEmail(),
         validator: (value) {
           if (value == null || value.isEmpty) {
             return 'Required';
@@ -553,8 +547,14 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
       // Generated Account Email
       _buildTextField(
         controller: _generatedEmailController,
-        hintText: 'Account Email (Auto-generated)',
-        readOnly: true,
+        hintText: 'Email (Gmail)',
+        keyboardType: TextInputType.emailAddress,
+        validator: (value) {
+          if (value == null || value.trim().isEmpty) {
+            return 'Required';
+          }
+          return null;
+        },
       ),
       SizedBox(height: spacing),
 
