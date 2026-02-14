@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import os
+from django.core.exceptions import ImproperlyConfigured
 from urllib.parse import urlparse
 
 import dj_database_url
@@ -118,6 +119,11 @@ if DATABASE_URL:
         )
     }
 else:
+    if not DEBUG:
+        raise ImproperlyConfigured(
+            "DATABASE_URL must be set in production (DEBUG=0). "
+            "Point it to your Supabase Postgres connection string."
+        )
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
