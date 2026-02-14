@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'widgets/sidebar.dart';
-import 'widgets/dashboard_header.dart';
 import 'widgets/responsive_page_layout.dart';
 import 'modals/select_modal.dart';
 import 'modals/add_worker_modal.dart';
 import 'modals/add_fieldworker_modal.dart';
 import 'worker_profile_page.dart';
 import '../services/app_config.dart';
+import '../services/auth_service.dart';
 
 class WorkforcePage extends StatefulWidget {
   const WorkforcePage({super.key});
@@ -21,23 +20,65 @@ class _WorkforcePageState extends State<WorkforcePage> {
   List<WorkerGroup> _groups = [];
   bool _isLoading = true;
   String? _error;
-  late int _projectId;
+  int? _projectId;
   String _searchQuery = '';
   String _filterType = 'All'; // All, Supervisor, Field Worker
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _resolveProjectId();
+    });
     _fetchWorkerGroups();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Get project_id from route arguments, default to 18 if not available
+    // Intentionally no default demo project id.
+    // go_router doesn't use ModalRoute arguments; projectId is resolved in _resolveProjectId.
+  }
+
+  int? _tryParseInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    return int.tryParse(value.toString());
+  }
+
+  Future<void> _resolveProjectId() async {
+    if (_projectId != null) return;
+
+    int? projectId;
+
+    // 1) Try legacy Navigator arguments (works if pushed with Navigator).
     final args =
         ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-    _projectId = args?['project_id'] ?? 18;
+    projectId = _tryParseInt(args?['project_id']);
+
+    // 2) Try auth state (Supervisor/Client often has project_id).
+    projectId ??= _tryParseInt(AuthService().currentUser?['project_id']);
+
+    // 3) For PM: pick the most recent project for this user as a fallback.
+    if (projectId == null || projectId <= 0) {
+      final userId = _tryParseInt(AuthService().currentUser?['user_id']);
+      if (userId != null && userId > 0) {
+        final response = await http.get(
+          AppConfig.apiUri('projects/?user_id=$userId'),
+        );
+        if (response.statusCode == 200) {
+          final decoded = jsonDecode(response.body);
+          if (decoded is List && decoded.isNotEmpty) {
+            projectId = _tryParseInt(decoded.first['project_id']);
+          }
+        }
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _projectId = (projectId != null && projectId > 0) ? projectId : null;
+    });
   }
 
   Future<void> _fetchWorkerGroups() async {
@@ -251,7 +292,7 @@ class _WorkforcePageState extends State<WorkforcePage> {
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
+                            color: Colors.black.withAlpha(13),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
                           ),
@@ -309,7 +350,7 @@ class WorkerGroupSection extends StatelessWidget {
   });
 
   final WorkerGroup group;
-  final int projectId;
+  final int? projectId;
   final VoidCallback onWorkerAdded;
   final List<WorkerInfo> filteredWorkers;
   final String searchQuery;
@@ -345,11 +386,23 @@ class WorkerGroupSection extends StatelessWidget {
                         height: 40,
                         child: ElevatedButton.icon(
                           onPressed: () async {
+                            if (projectId == null || projectId! <= 0) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'No project selected. Open a project first, then add workers.',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
                             final result = await showDialog<String>(
                               context: context,
                               builder: (context) =>
                                   const SelectWorkerTypeModal(),
                             );
+
+                            if (!context.mounted) return;
 
                             if (result != null) {
                               dynamic modalResult;
@@ -360,14 +413,16 @@ class WorkerGroupSection extends StatelessWidget {
                                     workerType: 'Supervisor',
                                   ),
                                 );
+                                if (!context.mounted) return;
                               } else if (result == 'fieldworker') {
                                 modalResult = await showDialog(
                                   context: context,
                                   builder: (context) => AddFieldWorkerModal(
                                     workerType: 'Field Worker',
-                                    projectId: projectId,
+                                    projectId: projectId!,
                                   ),
                                 );
+                                if (!context.mounted) return;
                               }
 
                               if (modalResult == true) {
@@ -490,10 +545,22 @@ class WorkerGroupSection extends StatelessWidget {
                     height: 40,
                     child: ElevatedButton.icon(
                       onPressed: () async {
+                        if (projectId == null || projectId! <= 0) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'No project selected. Open a project first, then add workers.',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
                         final result = await showDialog<String>(
                           context: context,
                           builder: (context) => const SelectWorkerTypeModal(),
                         );
+
+                        if (!context.mounted) return;
 
                         if (result != null) {
                           dynamic modalResult;
@@ -504,14 +571,16 @@ class WorkerGroupSection extends StatelessWidget {
                                 workerType: 'Supervisor',
                               ),
                             );
+                            if (!context.mounted) return;
                           } else if (result == 'fieldworker') {
                             modalResult = await showDialog(
                               context: context,
                               builder: (context) => AddFieldWorkerModal(
                                 workerType: 'Field Worker',
-                                projectId: projectId,
+                                projectId: projectId!,
                               ),
                             );
+                            if (!context.mounted) return;
                           }
 
                           if (modalResult == true) {
@@ -695,7 +764,7 @@ class WorkerProfileCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(18),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.06),
+                color: Colors.black.withAlpha(15),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),

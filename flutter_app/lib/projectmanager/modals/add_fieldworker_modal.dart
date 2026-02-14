@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../../services/app_config.dart';
+import '../../services/auth_service.dart';
 
 class AddFieldWorkerModal extends StatefulWidget {
   final String workerType;
@@ -90,8 +91,10 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
       });
 
       try {
+        final currentUserId = AuthService().currentUser?['user_id'];
+
         final fieldWorkerData = {
-          'user_id': 1, // TODO: Replace with current logged-in user ID
+          if (currentUserId != null) 'user_id': currentUserId,
           'project_id': widget.projectId,
           'first_name': _firstNameController.text.trim(),
           'middle_name': _middleNameController.text.trim().isEmpty
@@ -119,7 +122,7 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
               : double.tryParse(_payrateController.text.trim()),
         };
 
-        print('Creating field worker: $fieldWorkerData');
+        debugPrint('Creating field worker: $fieldWorkerData');
 
         final response = await http.post(
           AppConfig.apiUri('field-workers/'),
@@ -127,8 +130,8 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
           body: jsonEncode(fieldWorkerData),
         );
 
-        print('Response status: ${response.statusCode}');
-        print('Response body: ${response.body}');
+        debugPrint('Response status: ${response.statusCode}');
+        debugPrint('Response body: ${response.body}');
 
         if (response.statusCode == 201 || response.statusCode == 200) {
           if (mounted) {
