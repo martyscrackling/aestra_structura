@@ -228,6 +228,7 @@ class SupervisorsSerializer(serializers.ModelSerializer):
 
         send_invitation_email(
             to_email=supervisor.email,
+            first_name=supervisor.first_name,
             role='Supervisor',
             temp_password=str(plain_password),
             invited_by_email=invited_by_email,
@@ -416,6 +417,7 @@ class ClientSerializer(serializers.ModelSerializer):
 
         send_invitation_email(
             to_email=client.email,
+            first_name=client.first_name,
             role='Client',
             temp_password=str(plain_password),
             invited_by_email=invited_by_email,

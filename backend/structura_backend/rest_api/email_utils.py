@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 def send_invitation_email(
     *,
     to_email: str,
+    first_name: str | None = None,
     role: str,
     temp_password: str,
     invited_by_email: str | None = None,
@@ -44,31 +45,46 @@ def send_invitation_email(
     invited_by_email = (invited_by_email or "").strip()
     invited_by_name = (invited_by_name or "").strip()
     project_name = (project_name or "").strip()
+    first_name = (first_name or "").strip()
 
-    intro = f"You’ve been invited to join {app_name}."
+    greeting = f"Hi {first_name}," if first_name else "Hi,"
+
+    project_line = ""
     if project_name:
-        intro = f"You’ve been invited to join {app_name} for the project: {project_name}."
+        project_line = f" for the project: {project_name}"
 
     lines: list[str] = [
-        f"Hi,",
+        greeting,
         "",
-        intro,
+        f"You’ve been invited to join {app_name}{project_line}.",
         "",
         f"Role: {role}",
         f"Email: {to_email}",
         f"Temporary password: {temp_password}",
-        "",
-        "Login and change your password after signing in.",
     ]
 
     if frontend_url:
-        lines.extend(["", f"Login: {frontend_url}/login"])
+        lines.extend(["", f"Login here: {frontend_url}/login"])
+
+    lines.extend(
+        [
+            "",
+            "After logging in, please change your password right away (Settings → Change Password).",
+        ]
+    )
 
     if invited_by_email or invited_by_name:
-        by_line = invited_by_name if invited_by_name else invited_by_email
-        if invited_by_email and invited_by_name:
-            by_line = f"{invited_by_name} ({invited_by_email})"
-        lines.extend(["", f"Invited by: {by_line}"])
+        pm_name = invited_by_name or "Project Manager"
+        pm_email = invited_by_email
+        contact = f"{pm_name} ({pm_email})" if pm_email else pm_name
+        lines.extend(
+            [
+                "",
+                f"If you weren’t expecting this invitation, you can ignore this email or contact the Project Manager: {contact}.",
+            ]
+        )
+
+    lines.extend(["", "Thanks,", f"{app_name} Team"])
 
     message = "\n".join(lines)
 
