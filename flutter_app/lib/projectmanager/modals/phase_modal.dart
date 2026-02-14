@@ -25,7 +25,11 @@ class _PhaseModalState extends State<PhaseModal> {
 
   String? _selectedPhase;
   final List<TextEditingController> _subtaskControllers = [];
-  List<String> _existingPhases = []; // Phases already in database
+  List<String> _existingPhases = []; // Phase names already in database
+
+  int? _projectDurationDays;
+  int _existingPhasesDurationDays = 0;
+  String? _durationWarning;
 
   final List<String> _phases = [
     'PHASE 1 - Pre-Construction Phase',
@@ -41,7 +45,30 @@ class _PhaseModalState extends State<PhaseModal> {
   void initState() {
     super.initState();
     _subtaskControllers.add(TextEditingController());
+    _fetchProjectDuration();
     _fetchExistingPhases();
+  }
+
+  Future<void> _fetchProjectDuration() async {
+    try {
+      final response = await http.get(
+        AppConfig.apiUri('projects/${widget.projectId}/'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final raw = data['duration_days'];
+        final parsed = (raw as num?)?.toInt();
+        if (!mounted) return;
+        setState(() {
+          _projectDurationDays = parsed;
+        });
+      }
+    } catch (e) {
+      // Silently fail; modal can still work without duration validation.
+      // ignore: avoid_print
+      print('Error fetching project duration: $e');
+    }
   }
 
   Future<void> _fetchExistingPhases() async {
@@ -51,15 +78,58 @@ class _PhaseModalState extends State<PhaseModal> {
       );
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
+        int usedDays = 0;
+        for (final item in data) {
+          final phase = item as Map<String, dynamic>;
+          final d = phase['days_duration'];
+          usedDays += (d as num?)?.toInt() ?? 0;
+        }
         setState(() {
           _existingPhases = data
               .map((phase) => phase['phase_name'] as String)
               .toList();
+          _existingPhasesDurationDays = usedDays;
         });
+
+        _recomputeDurationWarning();
       }
     } catch (e) {
       // Silently fail - user can still add phases
+      // ignore: avoid_print
       print('Error fetching existing phases: $e');
+    }
+  }
+
+  void _recomputeDurationWarning() {
+    final projectDays = _projectDurationDays;
+    final enteredDays = int.tryParse(_daysDurationController.text.trim());
+
+    if (projectDays == null || projectDays <= 0) {
+      setState(() {
+        _durationWarning = null;
+      });
+      return;
+    }
+
+    if (enteredDays == null) {
+      setState(() {
+        _durationWarning = null;
+      });
+      return;
+    }
+
+    final total = _existingPhasesDurationDays + enteredDays;
+    final remaining = projectDays - _existingPhasesDurationDays;
+
+    if (total > projectDays) {
+      setState(() {
+        _durationWarning =
+            'Not valid: phase duration exceeds project duration. Remaining: $remaining days.';
+      });
+    } else {
+      setState(() {
+        _durationWarning = null;
+      });
     }
   }
 
@@ -100,6 +170,18 @@ class _PhaseModalState extends State<PhaseModal> {
 
   Future<void> _submitPhase() async {
     if (!_formKey.currentState!.validate()) return;
+
+    if (_durationWarning != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_durationWarning!),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
 
     setState(() {
       _isLoading = true;
@@ -170,6 +252,11 @@ class _PhaseModalState extends State<PhaseModal> {
     final modalWidth = isMobile ? screenWidth * 0.95 : 520.0;
     final maxHeight = isMobile ? screenWidth * 1.2 : 600.0;
 
+    final projectDays = _projectDurationDays;
+    final remainingDays = (projectDays == null)
+        ? null
+        : (projectDays - _existingPhasesDurationDays);
+
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: EdgeInsets.symmetric(
@@ -234,7 +321,8 @@ class _PhaseModalState extends State<PhaseModal> {
                     children: [
                       // Phase dropdown
                       DropdownButtonFormField<String>(
-                        value: _selectedPhase,
+                        key: ValueKey(_selectedPhase),
+                        initialValue: _selectedPhase,
                         isExpanded: true,
                         decoration: InputDecoration(
                           hintText: 'Select Phase',
@@ -291,10 +379,42 @@ class _PhaseModalState extends State<PhaseModal> {
                         'Duration',
                         style: TextStyle(fontWeight: FontWeight.w600),
                       ),
+                      if (projectDays != null) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          'Project duration: $projectDays days • Used by phases: $_existingPhasesDurationDays days • Remaining: ${remainingDays ?? 0} days',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: (_existingPhasesDurationDays > projectDays)
+                                ? Colors.red
+                                : Colors.grey,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: _daysDurationController,
                         keyboardType: TextInputType.number,
+                        onChanged: (_) => _recomputeDurationWarning(),
+                        validator: (value) {
+                          final trimmed = (value ?? '').trim();
+                          if (trimmed.isEmpty) return null;
+
+                          final days = int.tryParse(trimmed);
+                          if (days == null || days < 0) {
+                            return 'Please enter a valid number of days';
+                          }
+
+                          final pd = _projectDurationDays;
+                          if (pd == null || pd <= 0) return null;
+
+                          final total = _existingPhasesDurationDays + days;
+                          if (total > pd) {
+                            final remaining = pd - _existingPhasesDurationDays;
+                            return 'Not valid: you exceed the project duration (remaining: $remaining days)';
+                          }
+                          return null;
+                        },
                         decoration: InputDecoration(
                           labelText: 'DAYS DURATION',
                           labelStyle: const TextStyle(
@@ -307,6 +427,12 @@ class _PhaseModalState extends State<PhaseModal> {
                           suffixIcon: const Icon(
                             Icons.timer_outlined,
                             size: 18,
+                          ),
+                          helperText: _durationWarning,
+                          helperStyle: TextStyle(
+                            color: _durationWarning != null
+                                ? Colors.red
+                                : Colors.grey.shade600,
                           ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
@@ -505,40 +631,3 @@ class _PhaseModalState extends State<PhaseModal> {
     );
   }
 }
-
-class _DetailColumn extends StatelessWidget {
-  final String label;
-  final String? value;
-  final IconData icon;
-
-  const _DetailColumn({required this.label, required this.icon, this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 18, color: Colors.grey),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-            ],
-          ),
-          if (value != null) ...[
-            const SizedBox(height: 4),
-            Text(value!, style: const TextStyle(fontWeight: FontWeight.w500)),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-// Usage:
-// showDialog(context: context, builder: (_) => const CreatePhaseModal());

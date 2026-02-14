@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:convert';
+import 'dart:ui' as ui;
+import 'package:qr_flutter/qr_flutter.dart';
 import '../services/auth_service.dart';
 import '../services/app_config.dart';
+import '../services/file_download/file_download.dart';
 import 'widgets/sidebar.dart';
 import 'dashboard_page.dart';
 import 'attendance_page.dart';
@@ -210,6 +215,7 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
         final sssId = worker['sss_id'] ?? 'N/A';
         final philhealthId = worker['philhealth_id'] ?? 'N/A';
         final pagibigId = worker['pagibig_id'] ?? 'N/A';
+        final fieldWorkerId = (worker['fieldworker_id'] as num?)?.toInt();
 
         return Dialog(
           shape: RoundedRectangleBorder(
@@ -345,15 +351,13 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                       children: [
                         Expanded(
                           child: OutlinedButton.icon(
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    'QR Code for $workerName downloaded!',
+                            onPressed: fieldWorkerId == null
+                                ? null
+                                : () => _showWorkerQrDialog(
+                                    context,
+                                    workerName: workerName,
+                                    fieldWorkerId: fieldWorkerId,
                                   ),
-                                ),
-                              );
-                            },
                             icon: const Icon(Icons.qr_code),
                             label: const Text("Download QR"),
                             style: OutlinedButton.styleFrom(
@@ -377,6 +381,163 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                     const SizedBox(height: 8),
                   ],
                 ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  String _buildWorkerQrPayload({required int fieldWorkerId}) {
+    // Keep the payload simple and stable so scanning is easy.
+    return 'structura-fw:$fieldWorkerId';
+  }
+
+  Future<void> _showWorkerQrDialog(
+    BuildContext context, {
+    required String workerName,
+    required int fieldWorkerId,
+  }) async {
+    final repaintKey = GlobalKey();
+    final payload = _buildWorkerQrPayload(fieldWorkerId: fieldWorkerId);
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'QR Code - $workerName',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close),
+                        splashRadius: 18,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Center(
+                    child: RepaintBoundary(
+                      key: repaintKey,
+                      child: Container(
+                        color: Colors.white,
+                        padding: const EdgeInsets.all(12),
+                        child: SizedBox(
+                          width: 220,
+                          height: 220,
+                          child: QrImageView(
+                            data: payload,
+                            version: QrVersions.auto,
+                            gapless: false,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Worker ID: $fieldWorkerId',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Close'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            try {
+                              final boundary =
+                                  repaintKey.currentContext?.findRenderObject()
+                                      as RenderRepaintBoundary?;
+                              if (boundary == null) {
+                                throw Exception('QR render boundary not ready');
+                              }
+
+                              final ui.Image image = await boundary.toImage(
+                                pixelRatio: 3.0,
+                              );
+                              final byteData = await image.toByteData(
+                                format: ui.ImageByteFormat.png,
+                              );
+                              final Uint8List bytes = byteData!.buffer
+                                  .asUint8List(
+                                    byteData.offsetInBytes,
+                                    byteData.lengthInBytes,
+                                  );
+
+                              final safeName = workerName.trim().isEmpty
+                                  ? 'worker'
+                                  : workerName.trim().replaceAll(
+                                      RegExp(r'[^a-zA-Z0-9_-]+'),
+                                      '_',
+                                    );
+                              final filename =
+                                  'qr_${safeName}_$fieldWorkerId.png';
+
+                              await downloadBytes(
+                                bytes: bytes,
+                                filename: filename,
+                                mimeType: 'image/png',
+                              );
+
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'QR code downloaded: $filename',
+                                  ),
+                                ),
+                              );
+                            } catch (e) {
+                              if (!context.mounted) return;
+                              final msg = kIsWeb
+                                  ? 'Failed to download QR: $e'
+                                  : 'QR download is supported on web only';
+                              ScaffoldMessenger.of(
+                                context,
+                              ).showSnackBar(SnackBar(content: Text(msg)));
+                            }
+                          },
+                          icon: const Icon(Icons.download),
+                          label: const Text('Download'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1396E9),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ),
@@ -480,18 +641,12 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
           Row(
             children: [
               if (isDesktop)
-                Sidebar(
-                  activePage: "Worker Management",
-                  keepVisible: true,
-                ),
+                Sidebar(activePage: "Worker Management", keepVisible: true),
               Expanded(
                 child: Column(
                   children: [
                     // White header with blue left accent (keeps Notification bell & AESTRA)
-                    WorkersHeader(
-                      onMenuPressed: () {},
-                      isMobile: isMobile,
-                    ),
+                    WorkersHeader(onMenuPressed: () {}, isMobile: isMobile),
 
                     // Scrollable content area
                     Expanded(

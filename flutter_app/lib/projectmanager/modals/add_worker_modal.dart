@@ -91,8 +91,8 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
         final Map<String, dynamic> supervisorData = {
           'invited_by_email': AuthService().currentUser?['email'],
           'invited_by_name':
-            '${AuthService().currentUser?['first_name'] ?? ''} ${AuthService().currentUser?['last_name'] ?? ''}'
-              .trim(),
+              '${AuthService().currentUser?['first_name'] ?? ''} ${AuthService().currentUser?['last_name'] ?? ''}'
+                  .trim(),
           'first_name': _firstNameController.text.trim(),
           'middle_name': _middleNameController.text.trim().isEmpty
               ? null

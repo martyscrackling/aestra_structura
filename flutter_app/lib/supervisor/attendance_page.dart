@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:convert';
+import 'dart:async';
 import '../services/auth_service.dart';
 import '../services/app_config.dart';
 import 'widgets/sidebar.dart';
@@ -130,6 +131,89 @@ class _AttendancePageState extends State<AttendancePage> {
     }
   }
 
+  int? _parseFieldWorkerIdFromQr(String raw) {
+    final value = raw.trim();
+    if (value.isEmpty) return null;
+
+    // Supported formats:
+    // - structura-fw:123
+    // - 123
+    // - any string containing a number as the last segment
+    final match = RegExp(
+      r'(?:structura-fw:)?(\d+)$',
+      caseSensitive: false,
+    ).firstMatch(value);
+    if (match != null) {
+      return int.tryParse(match.group(1) ?? '');
+    }
+
+    // Fallback: pick first number found.
+    final any = RegExp(r'(\d+)').firstMatch(value);
+    if (any != null) {
+      return int.tryParse(any.group(1) ?? '');
+    }
+    return null;
+  }
+
+  String _nowTimeString() {
+    final now = DateTime.now();
+    final hh = now.hour.toString().padLeft(2, '0');
+    final mm = now.minute.toString().padLeft(2, '0');
+    final ss = now.second.toString().padLeft(2, '0');
+    return '$hh:$mm:$ss';
+  }
+
+  Future<void> _recordAttendanceFromScan({
+    required String action,
+    required int fieldWorkerId,
+  }) async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final projectId = authService.currentUser?['project_id'];
+
+    if (projectId == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No project assigned to supervisor')),
+      );
+      return;
+    }
+
+    final attendanceData = <String, dynamic>{'field_worker': fieldWorkerId};
+
+    final time = _nowTimeString();
+    switch (action) {
+      case 'Time In':
+        attendanceData['check_in_time'] = time;
+        attendanceData['status'] = 'on_site';
+        break;
+      case 'Time Out':
+        attendanceData['check_out_time'] = time;
+        attendanceData['status'] = 'absent';
+        break;
+      case 'Break In':
+        attendanceData['break_in_time'] = time;
+        attendanceData['status'] = 'on_break';
+        break;
+      case 'Break Out':
+        attendanceData['break_out_time'] = time;
+        attendanceData['status'] = 'on_site';
+        break;
+      default:
+        // Unknown action; do nothing.
+        break;
+    }
+
+    await _saveAttendance(attendanceData);
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('✓ $action recorded for worker #$fieldWorkerId'),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
   void _navigateToPage(String page) {
     switch (page) {
       case 'Dashboard':
@@ -240,10 +324,7 @@ class _AttendancePageState extends State<AttendancePage> {
           Row(
             children: [
               if (isDesktop)
-                Sidebar(
-                  activePage: "Attendance",
-                  keepVisible: true,
-                ),
+                Sidebar(activePage: "Attendance", keepVisible: true),
               Expanded(
                 child: Column(
                   children: [
@@ -1772,7 +1853,7 @@ class _AttendancePageState extends State<AttendancePage> {
   void _showQRScannerDialog(String action) {
     final color = _getActionColor(action);
     final MobileScannerController controller = MobileScannerController();
-    bool isScanned = false;
+    bool isHandlingScan = false;
 
     showDialog(
       context: context,
@@ -1862,27 +1943,36 @@ class _AttendancePageState extends State<AttendancePage> {
                         child: MobileScanner(
                           controller: controller,
                           onDetect: (capture) {
-                            if (!isScanned) {
-                              isScanned = true;
-                              final List<Barcode> barcodes = capture.barcodes;
-                              for (final barcode in barcodes) {
-                                final String? code = barcode.rawValue;
-                                if (code != null) {
-                                  controller.stop();
-                                  Navigator.pop(context);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        '✓ $action recorded for: $code',
-                                      ),
-                                      backgroundColor: color,
-                                      duration: const Duration(seconds: 3),
-                                    ),
-                                  );
-                                  // Here you would typically save the attendance record
-                                  break;
-                                }
+                            if (isHandlingScan) return;
+
+                            final List<Barcode> barcodes = capture.barcodes;
+                            if (barcodes.isEmpty) {
+                              // Nothing decoded yet; keep scanning.
+                              return;
+                            }
+
+                            for (final barcode in barcodes) {
+                              final String? code = barcode.rawValue;
+                              if (code == null || code.trim().isEmpty) {
+                                continue;
                               }
+
+                              final id = _parseFieldWorkerIdFromQr(code);
+                              if (id == null) {
+                                // Not a Structura worker QR; keep scanning.
+                                continue;
+                              }
+
+                              isHandlingScan = true;
+                              unawaited(controller.stop());
+                              Navigator.pop(context);
+                              unawaited(
+                                _recordAttendanceFromScan(
+                                  action: action,
+                                  fieldWorkerId: id,
+                                ),
+                              );
+                              break;
                             }
                           },
                         ),
@@ -1951,7 +2041,7 @@ class _AttendancePageState extends State<AttendancePage> {
                     width: double.infinity,
                     child: OutlinedButton(
                       onPressed: () {
-                        controller.stop();
+                        unawaited(controller.stop());
                         Navigator.pop(context);
                       },
                       style: OutlinedButton.styleFrom(
@@ -1979,6 +2069,11 @@ class _AttendancePageState extends State<AttendancePage> {
     ).then((_) {
       // Ensure controller is disposed when dialog closes
       controller.dispose();
+    });
+
+    // Ensure the camera starts once the dialog is on-screen.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(controller.start());
     });
   }
 

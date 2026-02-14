@@ -129,8 +129,8 @@ class _AddClientModalState extends State<AddClientModal> {
         final clientData = {
           'invited_by_email': AuthService().currentUser?['email'],
           'invited_by_name':
-            '${AuthService().currentUser?['first_name'] ?? ''} ${AuthService().currentUser?['last_name'] ?? ''}'
-              .trim(),
+              '${AuthService().currentUser?['first_name'] ?? ''} ${AuthService().currentUser?['last_name'] ?? ''}'
+                  .trim(),
           'first_name': _firstNameController.text.trim(),
           'middle_name': _middleNameController.text.trim().isEmpty
               ? null
@@ -494,7 +494,8 @@ class _AddClientModalState extends State<AddClientModal> {
                                     hintText: 'Email (Gmail)',
                                     keyboardType: TextInputType.emailAddress,
                                     validator: (value) {
-                                      if (value == null || value.trim().isEmpty) {
+                                      if (value == null ||
+                                          value.trim().isEmpty) {
                                         return 'Required';
                                       }
                                       return null;
