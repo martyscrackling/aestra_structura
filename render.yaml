@@ -5,7 +5,7 @@ services:
     plan: free
     rootDir: backend/structura_backend
     buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
-    startCommand: python manage.py migrate --noinput && gunicorn structura_backend.wsgi:application --bind 0.0.0.0:$PORT
+    startCommand: sh start.sh
     envVars:
       - key: DJANGO_SETTINGS_MODULE
         value: structura_backend.settings
@@ -19,3 +19,7 @@ services:
         value: https://martyscrackling.github.io/aestra_structura/
       - key: DATABASE_URL
         sync: false
+      - key: MIGRATE_RETRIES
+        value: "8"
+      - key: MIGRATE_RETRY_SLEEP_SECONDS
+        value: "3"

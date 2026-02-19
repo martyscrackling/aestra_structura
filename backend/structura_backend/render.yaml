@@ -4,7 +4,7 @@ services:
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
-    startCommand: python manage.py migrate --noinput && gunicorn structura_backend.wsgi:application --bind 0.0.0.0:$PORT
+    startCommand: sh start.sh
     envVars:
       - key: DJANGO_SETTINGS_MODULE
         value: structura_backend.settings
@@ -17,3 +17,7 @@ services:
       # Supabase (or any external Postgres): set DATABASE_URL in Render dashboard
       - key: DATABASE_URL
         sync: false
+      - key: MIGRATE_RETRIES
+        value: "8"
+      - key: MIGRATE_RETRY_SLEEP_SECONDS
+        value: "3"
