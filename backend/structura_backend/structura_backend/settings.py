@@ -119,11 +119,6 @@ if DATABASE_URL:
         )
     }
 else:
-    if not DEBUG:
-        raise ImproperlyConfigured(
-            "DATABASE_URL must be set in production (DEBUG=0). "
-            "Point it to your Supabase Postgres connection string."
-        )
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",

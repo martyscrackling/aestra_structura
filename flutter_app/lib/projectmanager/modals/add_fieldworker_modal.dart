@@ -96,7 +96,7 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
         final isRealUser = currentUserType.toLowerCase() == 'user' ||
             (currentUserType.isEmpty && currentUser?['supervisor_id'] == null && currentUser?['client_id'] == null);
 
-        final currentUserId = isRealUser ? currentUser?['user_id'] : null;
+        final currentUserId = (isRealUser && currentUser != null) ? currentUser['user_id'] : null;
 
         final fieldWorkerData = {
           if (currentUserId != null) 'user_id': currentUserId,
