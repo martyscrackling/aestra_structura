@@ -15,9 +15,5 @@ services:
         value: "0"
       - key: SECRET_KEY
         generateValue: true
-      # Supabase (or any external Postgres): set DATABASE_URL in Render dashboard
-      # e.g. postgres://USER:PASSWORD@HOST:5432/postgres?sslmode=require
-      - key: DATABASE_URL
-        sync: false
       - key: FRONTEND_URL
         value: https://martyscrackling.github.io/aestra_structura/
