@@ -115,9 +115,13 @@ if DATABASE_URL:
         "default": dj_database_url.parse(
             DATABASE_URL,
             conn_max_age=_db_conn_max_age,
-            ssl_require=False,
+            ssl_require=True,
         )
     }
+    # Ensure SSL is properly configured for external databases like Supabase
+    if 'OPTIONS' not in DATABASES['default']:
+        DATABASES['default']['OPTIONS'] = {}
+    DATABASES['default']['OPTIONS']['sslmode'] = 'require'
 else:
     DATABASES = {
         "default": {

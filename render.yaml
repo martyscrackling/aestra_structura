@@ -17,3 +17,5 @@ services:
         generateValue: true
       - key: FRONTEND_URL
         value: https://martyscrackling.github.io/aestra_structura/
+      - key: DATABASE_URL
+        sync: false
