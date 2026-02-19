@@ -115,7 +115,7 @@ if DATABASE_URL:
         "default": dj_database_url.parse(
             DATABASE_URL,
             conn_max_age=_db_conn_max_age,
-            ssl_require=True,
+            ssl_require=False,
         )
     }
 else:
