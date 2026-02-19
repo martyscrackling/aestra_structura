@@ -20,13 +20,4 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: FRONTEND_URL
-        value: https://structura-frontend.onrender.com
-
-  - type: web
-    name: structura-frontend
-    env: docker
-    plan: free
-    rootDir: flutter_app
-    envVars:
-      - key: BACKEND_ORIGIN
-        value: https://structura-backend.onrender.com
+        value: https://martyscrackling.github.io/aestra_structura/
