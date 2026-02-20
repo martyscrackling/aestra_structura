@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .email_utils import send_invitation_email
 from app import models
+from django.contrib.auth.hashers import make_password
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -26,7 +27,9 @@ class UserSerializer(serializers.ModelSerializer):
         ]
     
     def create(self, validated_data):
-        # Ensure password is hashed when creating
+        # Hash the password before saving
+        if 'password_hash' in validated_data:
+            validated_data['password_hash'] = make_password(validated_data['password_hash'])
         user = models.User(**validated_data)
         user.save()
         return user
@@ -34,7 +37,7 @@ class UserSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         # Handle password hashing on update
         if 'password_hash' in validated_data:
-            instance.password_hash = validated_data['password_hash']
+            instance.password_hash = make_password(validated_data['password_hash'])
             validated_data.pop('password_hash')
         
         for attr, value in validated_data.items():
