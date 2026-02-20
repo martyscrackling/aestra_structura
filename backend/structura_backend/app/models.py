@@ -57,9 +57,9 @@ class User(models.Model):
     email = models.EmailField(max_length=100, unique=True)
     password_hash = models.CharField(max_length=255)
 
-    first_name = models.CharField(max_length=100)
+    first_name = models.CharField(max_length=100, null=True, blank=True)
     middle_name = models.CharField(max_length=100, null=True, blank=True)
-    last_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100, null=True, blank=True)
 
     birthdate = models.DateField(null=True, blank=True)
     phone = models.CharField(max_length=20, null=True, blank=True)
@@ -133,9 +133,9 @@ class Supervisors(models.Model):
     supervisor_id = models.AutoField(primary_key=True)
     project_id = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name='supervisors')
 
-    first_name = models.CharField(max_length=100)
+    first_name = models.CharField(max_length=100, null=True, blank=True)
     middle_name = models.CharField(max_length=100, null=True, blank=True)
-    last_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100, null=True, blank=True)
     email = models.EmailField(max_length=100, unique=True)
     password_hash = models.CharField(max_length=255, default='PASSWORD')
     phone_number = models.CharField(max_length=20)
@@ -180,9 +180,9 @@ class FieldWorker(models.Model):
         blank=True,
     )
     
-    first_name = models.CharField(max_length=100)
+    first_name = models.CharField(max_length=100, null=True, blank=True)
     middle_name = models.CharField(max_length=100, null=True, blank=True)
-    last_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100, null=True, blank=True)
     phone_number = models.CharField(max_length=20)
     birthdate = models.DateField(null=True, blank=True)
     
@@ -209,9 +209,9 @@ class Client(models.Model):
     user_id = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='client_profile')
     project_id = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name='clients')
 
-    first_name = models.CharField(max_length=100)
+    first_name = models.CharField(max_length=100, null=True, blank=True)
     middle_name = models.CharField(max_length=100, null=True, blank=True)
-    last_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100, null=True, blank=True)
     email = models.EmailField(max_length=100, unique=True)
     password_hash = models.CharField(max_length=255, default='PASSWORD')
     phone_number = models.CharField(max_length=20)

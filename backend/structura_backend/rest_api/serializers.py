@@ -4,11 +4,6 @@ from app import models
 
 
 class UserSerializer(serializers.ModelSerializer):
-    user_id = serializers.IntegerField(read_only=True)
-    created_at = serializers.DateTimeField(read_only=True)
-    first_name = serializers.CharField(required=False, allow_blank=True, default='')
-    last_name = serializers.CharField(required=False, allow_blank=True, default='')
-    
     class Meta:
         model = models.User
         fields = [
@@ -29,6 +24,7 @@ class UserSerializer(serializers.ModelSerializer):
             'created_at',
             'status',
         ]
+        read_only_fields = ['user_id', 'created_at']
     
     def create(self, validated_data):
         user = models.User(**validated_data)
@@ -207,6 +203,8 @@ class SupervisorsSerializer(serializers.ModelSerializer):
             'created_at': {'read_only': True},
             'password_hash': {'write_only': True},
             'role': {'read_only': True},  # Role is always Supervisor
+            'first_name': {'required': False, 'allow_null': True},
+            'last_name': {'required': False, 'allow_null': True},
             'middle_name': {'required': False, 'allow_null': True},
             'birthdate': {'required': False, 'allow_null': True},
             'sss_id': {'required': False, 'allow_null': True},
@@ -282,6 +280,8 @@ class SupervisorSerializer(serializers.ModelSerializer):
             'created_at': {'read_only': True},
             'password_hash': {'write_only': True},
             'role': {'read_only': True},  # Role is always Supervisor
+            'first_name': {'required': False, 'allow_null': True},
+            'last_name': {'required': False, 'allow_null': True},
             'middle_name': {'required': False, 'allow_null': True},
             'birthdate': {'required': False, 'allow_null': True},
             'sss_id': {'required': False, 'allow_null': True},
@@ -335,6 +335,14 @@ class FieldWorkerSerializer(serializers.ModelSerializer):
             'created_at': {'read_only': True},
             'project_id': {'required': False, 'allow_null': True},
             'user_id': {'required': False, 'allow_null': True},
+            'first_name': {'required': False, 'allow_null': True},
+            'last_name': {'required': False, 'allow_null': True},
+            'middle_name': {'required': False, 'allow_null': True},
+            'birthdate': {'required': False, 'allow_null': True},
+            'sss_id': {'required': False, 'allow_null': True},
+            'philhealth_id': {'required': False, 'allow_null': True},
+            'pagibig_id': {'required': False, 'allow_null': True},
+            'payrate': {'required': False, 'allow_null': True},
         }
     
     def create(self, validated_data):
@@ -392,6 +400,8 @@ class ClientSerializer(serializers.ModelSerializer):
             'client_id': {'read_only': True},
             'created_at': {'read_only': True},
             'password_hash': {'write_only': True},  # Only accept on POST/PUT, don't return in GET
+            'first_name': {'required': False, 'allow_null': True},
+            'last_name': {'required': False, 'allow_null': True},
             'middle_name': {'required': False, 'allow_null': True},
             'birthdate': {'required': False, 'allow_null': True},
         }
