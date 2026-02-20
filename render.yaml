@@ -18,7 +18,7 @@ services:
       - key: FRONTEND_URL
         value: https://martyscrackling.github.io/aestra_structura/
       - key: DATABASE_URL
-        value: postgresql://postgres:[YOUR-PASSWORD]@db.prokngxytawscbszbnxc.supabase.co:5432/postgres
+        value: postgresql://postgres:MhzI3gwvj2TwzE1P@db.prokngxytawscbszbnxc.supabase.co:5432/postgres
       - key: MIGRATE_RETRIES
         value: "8"
       - key: MIGRATE_RETRY_SLEEP_SECONDS
