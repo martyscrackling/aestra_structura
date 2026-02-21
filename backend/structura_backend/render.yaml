@@ -3,8 +3,8 @@ services:
     name: structura-backend
     env: python
     plan: free
-    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
-    startCommand: gunicorn structura_backend.wsgi:application --bind 0.0.0.0:$PORT
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput && chmod +x start.sh
+    startCommand: ./start.sh
     envVars:
       - key: DJANGO_SETTINGS_MODULE
         value: structura_backend.settings
@@ -14,9 +14,9 @@ services:
         value: "0"
       - key: SECRET_KEY
         generateValue: true
-      # Supabase (or any external Postgres): set DATABASE_URL in Render dashboard
-      - key: DATABASE_URL
-        value: postgresql://postgres:MhzI3gwvj2TwzE1P@db.prokngxytawscbszbnxc.supabase.co:5432/postgres
+      # DATABASE_URL: Set this in Render dashboard to your Supabase connection string
+      # Format: postgresql://[user]:[password]@[host]:[port]/[database]
+      # Get it from: Supabase > Settings > Database > Connection string > URI
       - key: MIGRATE_RETRIES
         value: "8"
       - key: MIGRATE_RETRY_SLEEP_SECONDS

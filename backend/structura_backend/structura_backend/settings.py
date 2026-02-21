@@ -123,6 +123,16 @@ if DATABASE_URL:
         DATABASES['default']['OPTIONS'] = {}
     DATABASES['default']['OPTIONS']['sslmode'] = 'require'
 else:
+    # Warn in production if DATABASE_URL is not set
+    if not DEBUG:
+        import sys
+        print("\n" + "="*80, file=sys.stderr)
+        print("WARNING: DATABASE_URL environment variable is not set!", file=sys.stderr)
+        print("The application will use SQLite, which won't have production data.", file=sys.stderr)
+        print("Set DATABASE_URL in Render Dashboard → Environment Variables", file=sys.stderr)
+        print("Format: postgresql://user:password@host:5432/dbname?sslmode=require", file=sys.stderr)
+        print("="*80 + "\n", file=sys.stderr)
+    
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",

@@ -9,6 +9,39 @@ from django.db.models.functions import TruncDate
 from django.utils import timezone
 import json
 from datetime import timedelta
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Health check endpoint for debugging
+@api_view(['GET'])
+def health_check(request):
+    """
+    Health check endpoint to verify database connection and app status.
+    """
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+    
+    try:
+        # Test database connection
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+        db_status = "connected"
+        db_error = None
+    except Exception as e:
+        db_status = "error"
+        db_error = str(e)
+    
+    return Response({
+        'status': 'ok' if db_status == 'connected' else 'error',
+        'database': {
+            'status': db_status,
+            'error': db_error,
+            'engine': connection.settings_dict.get('ENGINE', 'unknown'),
+            'name': connection.settings_dict.get('NAME', 'unknown'),
+        },
+        'version': '1.0',
+    })
 
 # Create your views here.
 from app import models
@@ -32,6 +65,16 @@ from .serializers import (
 class ListUser(generics.ListCreateAPIView):
     queryset = models.User.objects.all()
     serializer_class = UserSerializer
+    
+    def create(self, request, *args, **kwargs):
+        try:
+            return super().create(request, *args, **kwargs)
+        except Exception as e:
+            logger.error(f"User creation error: {str(e)}", exc_info=True)
+            return Response(
+                {'success': False, 'message': f'Error creating user: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 class DetailUser(generics.RetrieveUpdateDestroyAPIView):
     queryset = models.User.objects.all()
