@@ -110,7 +110,17 @@ WSGI_APPLICATION = 'structura_backend.wsgi.application'
 
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 if DATABASE_URL:
-    _db_conn_max_age = int(os.getenv("DB_CONN_MAX_AGE", "600"))
+    parsed_db_for_pooler = urlparse(DATABASE_URL)
+    is_supabase_pooler = (
+        (parsed_db_for_pooler.hostname or "").endswith(".pooler.supabase.com")
+        or (parsed_db_for_pooler.hostname or "") == "pooler.supabase.com"
+        or str(parsed_db_for_pooler.port or "") == "6543"
+    )
+
+    # Transaction poolers (PgBouncer) generally require short-lived connections.
+    # Default to 0 for pooler unless explicitly overridden.
+    default_conn_max_age = "0" if is_supabase_pooler else "600"
+    _db_conn_max_age = int(os.getenv("DB_CONN_MAX_AGE", default_conn_max_age))
     DATABASES = {
         "default": dj_database_url.parse(
             DATABASE_URL,
@@ -118,6 +128,10 @@ if DATABASE_URL:
             ssl_require=True,
         )
     }
+
+    # Django server-side cursors are not compatible with transaction pooling.
+    if is_supabase_pooler:
+        DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = True
     import socket
 
     # Some hosts (including Render) may not have IPv6 egress. If the database
