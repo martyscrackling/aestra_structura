@@ -118,6 +118,23 @@ if DATABASE_URL:
             ssl_require=True,
         )
     }
+    import socket
+
+    # Some hosts (including Render) may not have IPv6 egress. If the database
+    # hostname resolves to an IPv6 address first (common for Supabase), the
+    # connection can fail with "Network is unreachable". Setting FORCE_IPV4=1
+    # forces Django to connect via an IPv4 address.
+    if os.getenv("FORCE_IPV4", "0").strip() == "1":
+        try:
+            parsed_db = urlparse(DATABASE_URL)
+            if parsed_db.hostname:
+                ipv4_addr = socket.gethostbyname(parsed_db.hostname)
+                if ipv4_addr:
+                    DATABASES["default"]["HOST"] = ipv4_addr
+        except Exception:
+            # Best-effort only; fall back to the original hostname.
+            pass
+
     # Ensure SSL is properly configured for external databases like Supabase
     if 'OPTIONS' not in DATABASES['default']:
         DATABASES['default']['OPTIONS'] = {}
