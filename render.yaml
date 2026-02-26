@@ -5,7 +5,7 @@ services:
     plan: free
     rootDir: backend/structura_backend
     buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
-    startCommand: gunicorn structura_backend.wsgi:application --bind 0.0.0.0:$PORT
+    startCommand: python manage.py migrate --noinput && gunicorn structura_backend.wsgi:application
     envVars:
       - key: DJANGO_SETTINGS_MODULE
         value: structura_backend.settings
@@ -15,13 +15,9 @@ services:
         value: "0"
       - key: SECRET_KEY
         generateValue: true
+      # Supabase (or any external Postgres): set DATABASE_URL in Render dashboard
+      # e.g. postgres://USER:PASSWORD@HOST:5432/postgres?sslmode=require
+      - key: DATABASE_URL
+        sync: false
       - key: FRONTEND_URL
         value: https://martyscrackling.github.io/aestra_structura/
-      - key: DATABASE_URL
-        value: postgresql://postgres:MhzI3gwvj2TwzE1P@db.prokngxytawscbszbnxc.supabase.co:5432/postgres
-      - key: MIGRATE_RETRIES
-        value: "8"
-      - key: MIGRATE_RETRY_SLEEP_SECONDS
-        value: "3"
-      - key: CORS_ALLOWED_ORIGINS
-        value: https://martyscrackling.github.io

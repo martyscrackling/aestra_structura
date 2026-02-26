@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'widgets/sidebar.dart';
-import 'widgets/dashboard_header.dart';
 import 'widgets/responsive_page_layout.dart';
 import 'modals/tool_details_modal.dart';
 import 'modals/add_inventory_item_modal.dart';

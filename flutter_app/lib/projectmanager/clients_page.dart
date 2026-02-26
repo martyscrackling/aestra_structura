@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'widgets/sidebar.dart';
-import 'widgets/dashboard_header.dart';
 import 'widgets/responsive_page_layout.dart';
 import 'modals/add_client_modal.dart';
 import 'client_profile_page.dart';
