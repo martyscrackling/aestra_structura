@@ -596,7 +596,8 @@ class ProjectOverviewCard extends StatelessWidget {
         );
       } else if (imagePath.startsWith('/media/')) {
         // Use deployed backend URL for media images
-        final url = 'https://martyscrackling.github.io/aestra_structura' + imagePath;
+        final url =
+            'https://martyscrackling.github.io/aestra_structura' + imagePath;
         return Image.network(
           url,
           height: 150,

@@ -82,6 +82,20 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
         final List<dynamic> data = jsonDecode(response.body);
         setState(() {
           _regions = data.cast<Map<String, dynamic>>();
+
+          // Set default region to Region IX - Zamboanga Peninsula
+          final defaultRegion = _regions.firstWhere(
+            (r) => r['id'] == 10, // or r['code'] == '090000000'
+          );
+
+          if (defaultRegion != null) {
+            _selectedRegionId = defaultRegion['id'];
+            _fetchProvinces(
+              _selectedRegionId!,
+            ); // load provinces for default region
+          } else {
+            _selectedRegionId = 10; // fallback if region not found
+          }
         });
       }
     } catch (e) {
@@ -100,9 +114,22 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
         final List<dynamic> data = jsonDecode(response.body);
         setState(() {
           _provinces = data.cast<Map<String, dynamic>>();
-          _selectedProvinceId = null;
           _cities = [];
           _barangays = [];
+
+          // Set default province (id = 50)
+          Map<String, dynamic>? defaultProvince = _provinces.firstWhere(
+            (p) => p['id'] == 50, // or p['code'] == '097300000'
+          );
+
+          if (defaultProvince != null) {
+            _selectedProvinceId = defaultProvince['id'];
+            _fetchCities(
+              _selectedProvinceId!,
+            ); // load cities for default province
+          } else {
+            _selectedProvinceId = null;
+          }
         });
       }
     } catch (e) {
@@ -119,8 +146,21 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
         final List<dynamic> data = jsonDecode(response.body);
         setState(() {
           _cities = data.cast<Map<String, dynamic>>();
-          _selectedCityId = null;
           _barangays = [];
+
+          // Set default city (id = 825)
+          Map<String, dynamic>? defaultCity = _cities.firstWhere(
+            (c) => c['id'] == 825, // or c['code'] == '097302000'
+          );
+
+          if (defaultCity != null) {
+            _selectedCityId = defaultCity['id'];
+            _fetchBarangays(
+              _selectedCityId!,
+            ); // load barangays for default city
+          } else {
+            _selectedCityId = null;
+          }
         });
       }
     } catch (e) {

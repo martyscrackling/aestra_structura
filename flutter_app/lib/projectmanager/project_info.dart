@@ -617,7 +617,8 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
 
       // Network image (relative /media/ URL)
       if (imagePath.startsWith('/media/')) {
-        final url = 'https://martyscrackling.github.io/aestra_structura' + imagePath;
+        final url =
+            'https://martyscrackling.github.io/aestra_structura' + imagePath;
         return Image.network(
           url,
           height: 220,
