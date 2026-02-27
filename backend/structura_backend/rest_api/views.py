@@ -227,9 +227,46 @@ class BarangayViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 # Project ViewSet
+
+from rest_framework.decorators import action, parser_classes
+from rest_framework.parsers import MultiPartParser, FormParser
+import os
+from django.conf import settings
+
 class ProjectViewSet(viewsets.ModelViewSet):
     serializer_class = ProjectSerializer
-    
+
+    @action(detail=True, methods=['post'], url_path='upload_image', parser_classes=[MultiPartParser, FormParser])
+    def upload_image(self, request, pk=None):
+        """
+        Accepts a multipart POST with an image file, saves it, and returns the public URL.
+        """
+        project = self.get_object()
+        image_file = request.FILES.get('image')
+        if not image_file:
+            return Response({'error': 'No image file provided.'}, status=400)
+
+        # Save to MEDIA_ROOT/project_images/project_<id>.jpg
+        media_root = getattr(settings, 'MEDIA_ROOT', 'media')
+        os.makedirs(os.path.join(media_root, 'project_images'), exist_ok=True)
+        filename = f'project_{project.project_id}.jpg'
+        file_path = os.path.join(media_root, 'project_images', filename)
+        with open(file_path, 'wb+') as dest:
+            for chunk in image_file.chunks():
+                dest.write(chunk)
+
+        # Save path to project and return URL
+        rel_path = f'project_images/{filename}'
+        project.project_image = rel_path
+        project.save()
+
+        # Build absolute URL
+        if hasattr(request, 'build_absolute_uri'):
+            url = request.build_absolute_uri(settings.MEDIA_URL + rel_path)
+        else:
+            url = settings.MEDIA_URL + rel_path
+        return Response({'url': url})
+
     def get_queryset(self):
         """
         Get projects only for the logged-in user
@@ -239,7 +276,6 @@ class ProjectViewSet(viewsets.ModelViewSet):
         # In production, use authentication tokens
         user_id = self.request.query_params.get('user_id')
         client_id = self.request.query_params.get('client_id')
-        
         print(f"🔍 ProjectViewSet get_queryset called")
         print(f"🔍 Received user_id: {user_id}")
         

@@ -1,3 +1,5 @@
+import 'package:http_parser/http_parser.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
@@ -288,30 +290,47 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
       return null;
     }
     try {
-      // Create the full path to assets/images/project_images
-      final projectDir = Directory('assets/images/project_images');
-      print('📁 Creating directory: ${projectDir.path}');
-
-      if (!projectDir.existsSync()) {
-        projectDir.createSync(recursive: true);
+      if (kIsWeb) {
+        // Upload image to backend as multipart
+        final uri = AppConfig.apiUri('projects/$projectId/upload_image/');
+        final request = http.MultipartRequest('POST', uri);
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'image',
+            await _selectedImage!.readAsBytes(),
+            filename: _selectedImage!.name,
+            contentType: MediaType('image', 'jpeg'),
+          ),
+        );
+        final response = await request.send();
+        if (response.statusCode == 200) {
+          final respStr = await response.stream.bytesToString();
+          final respData = jsonDecode(respStr);
+          print('✓ Image uploaded: ${respData['url']}');
+          return respData['url']; // Use returned URL
+        } else {
+          print('❌ Image upload failed: ${response.statusCode}');
+          return null;
+        }
+      } else {
+        // Mobile/Desktop: Save locally as before
+        final projectDir = Directory('assets/images/project_images');
+        print('📁 Creating directory: ${projectDir.path}');
+        if (!projectDir.existsSync()) {
+          projectDir.createSync(recursive: true);
+        }
+        final fileName = 'project_$projectId.jpg';
+        final filePath = 'assets/images/project_images/$fileName';
+        final fullPath = projectDir.path + Platform.pathSeparator + fileName;
+        final sourceFile = File(_selectedImage!.path);
+        print('📸 Source: ${sourceFile.path}');
+        print('📍 Destination: $fullPath');
+        await sourceFile.copy(fullPath);
+        print('✓ Image saved successfully!');
+        return filePath;
       }
-
-      // Create filename using project_id
-      final fileName = 'project_$projectId.jpg';
-      final filePath = 'assets/images/project_images/$fileName';
-      final fullPath = projectDir.path + Platform.pathSeparator + fileName;
-
-      // Copy the selected image file
-      final sourceFile = File(_selectedImage!.path);
-      print('📸 Source: ${sourceFile.path}');
-      print('📍 Destination: $fullPath');
-
-      await sourceFile.copy(fullPath);
-      print('✓ Image saved successfully!');
-
-      return filePath;
     } catch (e) {
-      print('❌ Error saving image: $e');
+      print('❌ Error saving/uploading image: $e');
       return null;
     }
   }
@@ -438,19 +457,44 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFD1FAE5),
-                        borderRadius: BorderRadius.circular(40),
+                    if (_selectedImage != null)
+                      Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(40),
+                          color: const Color(0xFFD1FAE5),
+                        ),
+                        child: ClipOval(
+                          child: kIsWeb
+                              ? Image.network(
+                                  _selectedImage!.path,
+                                  fit: BoxFit.cover,
+                                  width: 80,
+                                  height: 80,
+                                )
+                              : Image.file(
+                                  File(_selectedImage!.path),
+                                  fit: BoxFit.cover,
+                                  width: 80,
+                                  height: 80,
+                                ),
+                        ),
+                      )
+                    else
+                      Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFD1FAE5),
+                          borderRadius: BorderRadius.circular(40),
+                        ),
+                        child: const Icon(
+                          Icons.check_circle,
+                          color: Color(0xFF059669),
+                          size: 40,
+                        ),
                       ),
-                      child: const Icon(
-                        Icons.check_circle,
-                        color: Color(0xFF059669),
-                        size: 40,
-                      ),
-                    ),
                     const SizedBox(height: 16),
                     const Text(
                       'New Project Added',
@@ -583,6 +627,7 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
                       const SizedBox(height: 12),
                       Row(
                         children: [
+                          // Image preview
                           if (_selectedImage != null)
                             Container(
                               width: 100,
@@ -624,14 +669,14 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Column(
-                                children: const [
-                                  Icon(
+                                children: [
+                                  const Icon(
                                     Icons.cloud_upload_outlined,
                                     color: Colors.blue,
                                     size: 28,
                                   ),
-                                  SizedBox(height: 4),
-                                  Text(
+                                  const SizedBox(height: 4),
+                                  const Text(
                                     'New Image',
                                     style: TextStyle(
                                       fontSize: 12,
@@ -639,6 +684,18 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
+                                  if (_selectedImage != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 8.0),
+                                      child: Text(
+                                        _selectedImage!.name,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.black,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
                                 ],
                               ),
                             ),

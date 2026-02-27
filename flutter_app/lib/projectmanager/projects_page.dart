@@ -407,10 +407,7 @@ class _ProjectsHeader extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              Expanded(
-                flex: 2,
-                child: _SearchField(isMobile: true),
-              ),
+              Expanded(flex: 2, child: _SearchField(isMobile: true)),
               const SizedBox(width: 8),
               _SortButton(onPressed: onRefresh, isMobile: true),
             ],
@@ -580,6 +577,33 @@ class ProjectOverviewCard extends StatelessWidget {
           fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) {
             print('⚠️ Asset image failed to load: $imagePath');
+            return _buildPlaceholder();
+          },
+        );
+      }
+
+      // Check if it's a network URL (http, https, or starts with /media/)
+      if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+        return Image.network(
+          imagePath,
+          height: 150,
+          width: double.infinity,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            print('⚠️ Network image failed to load: $imagePath');
+            return _buildPlaceholder();
+          },
+        );
+      } else if (imagePath.startsWith('/media/')) {
+        // Use deployed backend URL for media images
+        final url = 'https://martyscrackling.github.io/aestra_structura' + imagePath;
+        return Image.network(
+          url,
+          height: 150,
+          width: double.infinity,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            print('⚠️ Network image failed to load: $url');
             return _buildPlaceholder();
           },
         );
