@@ -2124,16 +2124,28 @@ class _AttendancePageState extends State<AttendancePage> {
                         hint: const Text('Select worker'),
                         underline: const SizedBox(),
                         isExpanded: true,
-                        items: workers
-                            .map(
-                              (w) => DropdownMenuItem<String>(
-                                value: w['field_worker_id'].toString(),
-                                child: Text(
-                                  '${w['first_name']} ${w['last_name']} - ${w['role']}',
+                        items: (() {
+                          final sortedWorkers = List<Map<String, dynamic>>.from(
+                            workers,
+                          );
+                          sortedWorkers.sort((a, b) {
+                            final nameA = '${a['first_name']} ${a['last_name']}'
+                                .toLowerCase();
+                            final nameB = '${b['first_name']} ${b['last_name']}'
+                                .toLowerCase();
+                            return nameA.compareTo(nameB);
+                          });
+                          return sortedWorkers
+                              .map(
+                                (w) => DropdownMenuItem<String>(
+                                  value: w['field_worker_id'].toString(),
+                                  child: Text(
+                                    '${w['first_name']} ${w['last_name']} - ${w['role']}',
+                                  ),
                                 ),
-                              ),
-                            )
-                            .toList(),
+                              )
+                              .toList();
+                        })(),
                         onChanged: (val) =>
                             setState(() => selectedWorkerId = val),
                       ),
@@ -2287,16 +2299,28 @@ class _AttendancePageState extends State<AttendancePage> {
                         hint: const Text('Select worker'),
                         underline: const SizedBox(),
                         isExpanded: true,
-                        items: workers
-                            .map(
-                              (w) => DropdownMenuItem<String>(
-                                value: w['field_worker_id'].toString(),
-                                child: Text(
-                                  '${w['first_name']} ${w['last_name']} - ${w['role']}',
+                        items: (() {
+                          final sortedWorkers = List<Map<String, dynamic>>.from(
+                            workers,
+                          );
+                          sortedWorkers.sort((a, b) {
+                            final nameA = '${a['first_name']} ${a['last_name']}'
+                                .toLowerCase();
+                            final nameB = '${b['first_name']} ${b['last_name']}'
+                                .toLowerCase();
+                            return nameA.compareTo(nameB);
+                          });
+                          return sortedWorkers
+                              .map(
+                                (w) => DropdownMenuItem<String>(
+                                  value: w['field_worker_id'].toString(),
+                                  child: Text(
+                                    '${w['first_name']} ${w['last_name']} - ${w['role']}',
+                                  ),
                                 ),
-                              ),
-                            )
-                            .toList(),
+                              )
+                              .toList();
+                        })(),
                         onChanged: (val) =>
                             setState(() => selectedWorkerId = val),
                       ),

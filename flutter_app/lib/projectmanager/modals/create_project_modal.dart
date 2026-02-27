@@ -1114,30 +1114,47 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
                                   ),
                                 ),
                               ),
-                              items: _clients
-                                  .where(
-                                    (client) =>
-                                        (client['client_id'] as int?) != null &&
-                                        (client['client_id'] as int) > 0,
-                                  )
-                                  .map((client) {
-                                    final clientId = client['client_id'] as int;
-                                    final firstName =
-                                        client['first_name'] as String? ?? '';
-                                    final lastName =
-                                        client['last_name'] as String? ?? '';
-                                    final displayName = '$firstName $lastName'
-                                        .trim();
-                                    return DropdownMenuItem<int>(
-                                      value: clientId,
-                                      child: Text(
-                                        displayName.isEmpty
-                                            ? 'Unknown'
-                                            : displayName,
-                                      ),
-                                    );
-                                  })
-                                  .toList(),
+                              items: (() {
+                                final filteredClients = _clients
+                                    .where(
+                                      (client) =>
+                                          (client['client_id'] as int?) !=
+                                              null &&
+                                          (client['client_id'] as int) > 0,
+                                    )
+                                    .toList();
+
+                                // Sort alphabetically by name
+                                filteredClients.sort((a, b) {
+                                  final nameA =
+                                      '${a['first_name'] ?? ''} ${a['last_name'] ?? ''}'
+                                          .trim()
+                                          .toLowerCase();
+                                  final nameB =
+                                      '${b['first_name'] ?? ''} ${b['last_name'] ?? ''}'
+                                          .trim()
+                                          .toLowerCase();
+                                  return nameA.compareTo(nameB);
+                                });
+
+                                return filteredClients.map((client) {
+                                  final clientId = client['client_id'] as int;
+                                  final firstName =
+                                      client['first_name'] as String? ?? '';
+                                  final lastName =
+                                      client['last_name'] as String? ?? '';
+                                  final displayName = '$firstName $lastName'
+                                      .trim();
+                                  return DropdownMenuItem<int>(
+                                    value: clientId,
+                                    child: Text(
+                                      displayName.isEmpty
+                                          ? 'Unknown'
+                                          : displayName,
+                                    ),
+                                  );
+                                }).toList();
+                              })(),
                               onChanged: (int? newValue) {
                                 setState(() {
                                   _selectedClientId = newValue;
@@ -1172,35 +1189,50 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
                                   ),
                                 ),
                               ),
-                              items: _supervisors
-                                  .where(
-                                    (supervisor) =>
-                                        (supervisor['supervisor_id'] as int?) !=
-                                            null &&
-                                        (supervisor['supervisor_id'] as int) >
-                                            0,
-                                  )
-                                  .map((supervisor) {
-                                    final supervisorId =
-                                        supervisor['supervisor_id'] as int;
-                                    final firstName =
-                                        supervisor['first_name'] as String? ??
-                                        '';
-                                    final lastName =
-                                        supervisor['last_name'] as String? ??
-                                        '';
-                                    final displayName = '$firstName $lastName'
-                                        .trim();
-                                    return DropdownMenuItem<int>(
-                                      value: supervisorId,
-                                      child: Text(
-                                        displayName.isEmpty
-                                            ? 'Unknown'
-                                            : displayName,
-                                      ),
-                                    );
-                                  })
-                                  .toList(),
+                              items: (() {
+                                final filteredSupervisors = _supervisors
+                                    .where(
+                                      (supervisor) =>
+                                          (supervisor['supervisor_id']
+                                                  as int?) !=
+                                              null &&
+                                          (supervisor['supervisor_id'] as int) >
+                                              0,
+                                    )
+                                    .toList();
+
+                                // Sort alphabetically by name
+                                filteredSupervisors.sort((a, b) {
+                                  final nameA =
+                                      '${a['first_name'] ?? ''} ${a['last_name'] ?? ''}'
+                                          .trim()
+                                          .toLowerCase();
+                                  final nameB =
+                                      '${b['first_name'] ?? ''} ${b['last_name'] ?? ''}'
+                                          .trim()
+                                          .toLowerCase();
+                                  return nameA.compareTo(nameB);
+                                });
+
+                                return filteredSupervisors.map((supervisor) {
+                                  final supervisorId =
+                                      supervisor['supervisor_id'] as int;
+                                  final firstName =
+                                      supervisor['first_name'] as String? ?? '';
+                                  final lastName =
+                                      supervisor['last_name'] as String? ?? '';
+                                  final displayName = '$firstName $lastName'
+                                      .trim();
+                                  return DropdownMenuItem<int>(
+                                    value: supervisorId,
+                                    child: Text(
+                                      displayName.isEmpty
+                                          ? 'Unknown'
+                                          : displayName,
+                                    ),
+                                  );
+                                }).toList();
+                              })(),
                               onChanged: (int? newValue) {
                                 setState(() {
                                   _selectedSupervisorId = newValue;
