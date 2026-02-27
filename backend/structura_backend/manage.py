@@ -2,10 +2,28 @@
 """Django's command-line utility for administrative tasks."""
 import os
 import sys
+from pathlib import Path
+
+
+def _load_local_dotenv() -> None:
+    """Load .env for local development and CLI commands.
+
+    Render/production should provide environment variables directly.
+    """
+
+    try:
+        from dotenv import load_dotenv
+
+        base_dir = Path(__file__).resolve().parent
+        load_dotenv(base_dir / ".env", override=False)
+    except Exception:
+        # Best-effort: if python-dotenv isn't installed, continue.
+        pass
 
 
 def main():
     """Run administrative tasks."""
+    _load_local_dotenv()
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'structura_backend.settings')
     try:
         from django.core.management import execute_from_command_line

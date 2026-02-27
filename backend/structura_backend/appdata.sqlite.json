@@ -1,0 +1,1622 @@
+[
+{
+  "model": "app.user",
+  "pk": 1,
+  "fields": {
+    "email": "mariaericha_g@yahoo.com",
+    "password_hash": "qwerty",
+    "first_name": "ma. ericha",
+    "middle_name": "maaghop",
+    "last_name": "guanzon",
+    "birthdate": "2004-11-12",
+    "phone": "089587245421",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "ProjectManager",
+    "created_at": "2025-11-20T15:50:06.250Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 2,
+  "fields": {
+    "email": "riaguanzon2@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$Tvz90ZfuE69tTnmUlrS7cM$uyYvkUH/c+/XqLvLgbQfOOKnQ315cqdqZx5YAnPqa7g=",
+    "first_name": "haha",
+    "middle_name": "baba",
+    "last_name": "lala",
+    "birthdate": "2025-11-20",
+    "phone": "09262049143",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "ProjectManager",
+    "created_at": "2025-11-20T15:58:38.615Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 3,
+  "fields": {
+    "email": "mar@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$SAYpBCPvzwgzotQNJTmlQz$zTPdFv6W3+M1wX/ohInHArkeb8u2/6pttWUtbFZ9cEI=",
+    "first_name": "mama",
+    "middle_name": "baba",
+    "last_name": "dada",
+    "birthdate": "2025-11-20",
+    "phone": "09262049143",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "ProjectManager",
+    "created_at": "2025-11-20T18:05:52.734Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 4,
+  "fields": {
+    "email": "ria@gmail.com",
+    "password_hash": "",
+    "first_name": "lala",
+    "middle_name": null,
+    "last_name": "lele",
+    "birthdate": "2000-01-05",
+    "phone": "09562457211",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "ProjectManager",
+    "created_at": "2025-11-20T18:11:44.434Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 5,
+  "fields": {
+    "email": "try@gmail.com",
+    "password_hash": "",
+    "first_name": "hello",
+    "middle_name": null,
+    "last_name": "po",
+    "birthdate": "2000-01-04",
+    "phone": "1123458799",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "ProjectManager",
+    "created_at": "2025-11-20T18:13:35.176Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 6,
+  "fields": {
+    "email": "hello@gmail.com",
+    "password_hash": "",
+    "first_name": "ria",
+    "middle_name": null,
+    "last_name": "gaunzon",
+    "birthdate": "2000-01-05",
+    "phone": "095648256",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "ProjectManager",
+    "created_at": "2025-11-20T18:19:43.906Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 7,
+  "fields": {
+    "email": "low@gmail.com",
+    "password_hash": "",
+    "first_name": "ria",
+    "middle_name": null,
+    "last_name": "ria",
+    "birthdate": "2000-01-06",
+    "phone": "0985465125",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "ProjectManager",
+    "created_at": "2025-11-20T18:22:49.521Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 8,
+  "fields": {
+    "email": "hash@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$9NFb7ML4X7vUjcgEA5uSZE$GVgfQeXNokYKWAZq9IWbFUZuoqJZFjMu4pbPh10/5Uc=",
+    "first_name": "hash",
+    "middle_name": null,
+    "last_name": "hash",
+    "birthdate": "2000-01-20",
+    "phone": "56784568454",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "ProjectManager",
+    "created_at": "2025-11-20T18:26:30.673Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 9,
+  "fields": {
+    "email": "pizza@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$QlxFv0WbYLbLGlCWSTF53s$TU/D3/XdRYVjDlOegVGzy+p/YLe7phVgELF9F17DIwU=",
+    "first_name": "pizza",
+    "middle_name": null,
+    "last_name": "pizza",
+    "birthdate": "2000-01-19",
+    "phone": "2345689989",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "ProjectManager",
+    "created_at": "2025-11-20T18:51:46.281Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 10,
+  "fields": {
+    "email": "bago@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$P9l0Z7jrFRwnlMUBIDbElj$VuTp1KbzYqqyx1BAKfBERz0CyyC2ZURogsh2+0m3eAw=",
+    "first_name": "User",
+    "middle_name": null,
+    "last_name": "Account",
+    "birthdate": null,
+    "phone": null,
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "ProjectManager",
+    "created_at": "2025-11-20T19:10:46.445Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 11,
+  "fields": {
+    "email": "mid@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$H1htCzxTXlI23RBdg1WCgE$YxT91PuWpVfNLMaO0P5dfT50mIHFO36IY9SaBqNMuDM=",
+    "first_name": "first",
+    "middle_name": "middle",
+    "last_name": "last",
+    "birthdate": "2000-01-13",
+    "phone": "57461945456",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "ProjectManager",
+    "created_at": "2025-11-20T19:15:20.233Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 12,
+  "fields": {
+    "email": "hellopo@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$tL7sBljeVO7QjNhrsBKGxd$Rdx9oJrMSIeNJ6xCOA9xRTk4buM8dHgvVPYLc1hH504=",
+    "first_name": "eria",
+    "middle_name": "aasad",
+    "last_name": "jssdhajdh",
+    "birthdate": "2000-01-10",
+    "phone": "093554845",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "ProjectManager",
+    "created_at": "2025-11-25T22:50:33.189Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 13,
+  "fields": {
+    "email": "ming@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$XEraTYJRIt1QlsPa7TWGlC$BOrovhjdxwvrZafomdusCHYSfEqOL5d3G89GRW1/chc=",
+    "first_name": "qwerty",
+    "middle_name": "asd",
+    "last_name": "qwqwe",
+    "birthdate": "2000-01-01",
+    "phone": "435432",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "ProjectManager",
+    "created_at": "2026-01-31T03:35:51.458Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 14,
+  "fields": {
+    "email": "bella@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$zPuMDqJ2oIxYpYXAHa4bh0$XTOc3NnatQMdjIBiMueBF7+ztmy7EkIMP6ClMhzhqbg=",
+    "first_name": "bella",
+    "middle_name": "efst",
+    "last_name": "hello",
+    "birthdate": "2000-01-01",
+    "phone": "098765432",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "ProjectManager",
+    "created_at": "2026-01-31T04:06:31.539Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 15,
+  "fields": {
+    "email": "Miguel@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$omenY0NyAETUozPpKSVEWM$BxaTosh/UruVjOZyUG7GqhOuAq3eO2XRKVkSrDnPHRE=",
+    "first_name": "Miguel",
+    "middle_name": "Tan",
+    "last_name": "Felix",
+    "birthdate": "2000-01-01",
+    "phone": "0906573413",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "ProjectManager",
+    "created_at": "2026-02-05T08:00:11.855Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 16,
+  "fields": {
+    "email": "Pendragon@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$HafTXUgdOPfLz2urLd65zY$evdePYKVGYg0MvoVAofUu6SWF80eDVGRjxtGf2ZQAMU=",
+    "first_name": "Howell",
+    "middle_name": null,
+    "last_name": "Jenkins",
+    "birthdate": "2000-02-05",
+    "phone": "09065737279",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "ProjectManager",
+    "created_at": "2026-02-12T08:17:16.728Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 17,
+  "fields": {
+    "email": "new@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$kgn8xPEHA9r1voV6hcHfL5$W2dOhi/41WL2aVQzErMYbEL3t5gP7B93S7Zu/+2PkSw=",
+    "first_name": "qw",
+    "middle_name": null,
+    "last_name": "qw",
+    "birthdate": "2000-01-05",
+    "phone": "32432432",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "ProjectManager",
+    "created_at": "2026-02-14T00:35:40.367Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 18,
+  "fields": {
+    "email": "haha@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$ZCfYmRFirqABM7jACCBgUK$80Bo8+ya8jGaPMIdgZ7241LXk9cdEIEjWjnNEOpSuzY=",
+    "first_name": "hah",
+    "middle_name": null,
+    "last_name": "aha",
+    "birthdate": "2000-01-01",
+    "phone": "123456",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "ProjectManager",
+    "created_at": "2026-02-14T01:25:18.279Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 19,
+  "fields": {
+    "email": "mariaerichaguanzon@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$fmcfZBf2u7uV3kh4r0fhAY$rJVZHyPDUKOnxghfdLRXJzeMSoeMGR6dd92vqfZFpUY=",
+    "first_name": "Ma. Ericha",
+    "middle_name": null,
+    "last_name": "Guanzon",
+    "birthdate": "2000-01-04",
+    "phone": "123456",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "ProjectManager",
+    "created_at": "2026-02-14T01:47:10.093Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 20,
+  "fields": {
+    "email": "guanzon.maericha@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$uGuHBgVvJVy7V7feQVOqDo$emret11uIAepLJtTD8siiu1QAYXEcbo7kVOIX4ckZKI=",
+    "first_name": "Cheese",
+    "middle_name": null,
+    "last_name": "Hotdog",
+    "birthdate": null,
+    "phone": "09784512",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "Client",
+    "created_at": "2026-02-14T03:28:32.676Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 21,
+  "fields": {
+    "email": "structura@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$Q1sn4walH1hLSDIB7fac2f$bLt1Yw2fNWZ6z9GiThGB8qBEoWqeBgKHbis4IFie9Bw=",
+    "first_name": "Structura",
+    "middle_name": null,
+    "last_name": "Corps",
+    "birthdate": "2000-01-14",
+    "phone": "12345678",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "ProjectManager",
+    "created_at": "2026-02-19T03:56:34.931Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 22,
+  "fields": {
+    "email": "hahaha@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$FUnGfaSGA6WOURUq6vfGF5$q1CH0CPqdFqHmdUorW60Q+o9XMowgM0dWa/Pw24ZJ+M=",
+    "first_name": "hahaha",
+    "middle_name": null,
+    "last_name": "lalala",
+    "birthdate": "2000-01-07",
+    "phone": "098755124",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "ProjectManager",
+    "created_at": "2026-02-21T00:37:33.613Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 23,
+  "fields": {
+    "email": "fest@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$0fpKoZA8kDB4S8XIbmlv06$dgSH07PDvK+tzWIGvvB5coE95Y2AqHgBuA/BRlJP7eE=",
+    "first_name": "dev",
+    "middle_name": null,
+    "last_name": "fest",
+    "birthdate": null,
+    "phone": "09784542",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "Client",
+    "created_at": "2026-02-21T01:03:15.624Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 24,
+  "fields": {
+    "email": "minniemouse@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$srVrk3mDU2E5DKpbxkNSe8$xFJJEnkKoOh6d9PMmMolaNC0yCiZlwk8ajTn4L9jA/A=",
+    "first_name": "Minnie",
+    "middle_name": null,
+    "last_name": "Mouse",
+    "birthdate": null,
+    "phone": "097845124556",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "Client",
+    "created_at": "2026-02-21T02:38:17.510Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 25,
+  "fields": {
+    "email": "email@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$UypdVvTdsO38gn8fT4d9Ok$J6/Y5ItGTrNAUDn9ZUwcTWX3MPmtCoLfY89bXB5GTno=",
+    "first_name": "hello",
+    "middle_name": "struct",
+    "last_name": "struct",
+    "birthdate": "2000-01-28",
+    "phone": "09874542556",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "ProjectManager",
+    "created_at": "2026-02-27T08:36:06.428Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 26,
+  "fields": {
+    "email": "happy@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$AmXAEeY8F3XNXHLKnprFB2$kTkAvdKr2SJM9eRFDbdraEB23XGMZcVXX9n2f26Pn+U=",
+    "first_name": "Structura",
+    "middle_name": null,
+    "last_name": "Corporations",
+    "birthdate": "2000-01-22",
+    "phone": "097845215",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "ProjectManager",
+    "created_at": "2026-02-27T09:10:50.872Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.user",
+  "pk": 27,
+  "fields": {
+    "email": "mik@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$4ToM0KhKe64DbuCbjhsTHP$FtAXDStrN8qeJ+X+ULc9qRN9kqRifSQML9J96flrutg=",
+    "first_name": "mik",
+    "middle_name": null,
+    "last_name": "mik",
+    "birthdate": "2000-02-24",
+    "phone": "097845126",
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": null,
+    "role": "ProjectManager",
+    "created_at": "2026-02-27T09:18:01.843Z",
+    "status": "Active"
+  }
+},
+{
+  "model": "app.project",
+  "pk": 1,
+  "fields": {
+    "project_image": null,
+    "project_name": "qweefge",
+    "description": "eretwsdgxg",
+    "user": 13,
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": "",
+    "project_type": "Commercial",
+    "start_date": "2026-01-31",
+    "end_date": "2047-08-27",
+    "duration_days": 7878,
+    "client": 1,
+    "supervisor": 1,
+    "budget": "657676.00",
+    "status": "Planning",
+    "created_at": "2026-01-31T03:44:42.952Z"
+  }
+},
+{
+  "model": "app.project",
+  "pk": 2,
+  "fields": {
+    "project_image": null,
+    "project_name": "Howl's Moving Caslte",
+    "description": "Magical moving castle",
+    "user": 15,
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": "",
+    "project_type": "Infrastructure",
+    "start_date": "2026-02-27",
+    "end_date": "2026-07-02",
+    "duration_days": 125,
+    "client": 1,
+    "supervisor": 1,
+    "budget": "10000088.00",
+    "status": "Planning",
+    "created_at": "2026-02-05T08:57:05.013Z"
+  }
+},
+{
+  "model": "app.project",
+  "pk": 3,
+  "fields": {
+    "project_image": null,
+    "project_name": "dasdas",
+    "description": "dsada",
+    "user": 17,
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": "",
+    "project_type": "Commercial",
+    "start_date": "2026-02-19",
+    "end_date": "2035-07-06",
+    "duration_days": 3424,
+    "client": 2,
+    "supervisor": 1,
+    "budget": "43243.00",
+    "status": "Planning",
+    "created_at": "2026-02-14T01:17:32.797Z"
+  }
+},
+{
+  "model": "app.project",
+  "pk": 4,
+  "fields": {
+    "project_image": null,
+    "project_name": "dsfds",
+    "description": "fdsfs",
+    "user": 17,
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": "",
+    "project_type": "Infrastructure",
+    "start_date": "2026-02-20",
+    "end_date": "2026-03-26",
+    "duration_days": 34,
+    "client": 1,
+    "supervisor": 2,
+    "budget": "5443.00",
+    "status": "Planning",
+    "created_at": "2026-02-14T10:52:32.196Z"
+  }
+},
+{
+  "model": "app.project",
+  "pk": 5,
+  "fields": {
+    "project_image": null,
+    "project_name": "fdsf",
+    "description": "fsdgdsg",
+    "user": 17,
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": "",
+    "project_type": "Commercial",
+    "start_date": "2026-02-14",
+    "end_date": "2026-04-05",
+    "duration_days": 50,
+    "client": 2,
+    "supervisor": 3,
+    "budget": "4334.00",
+    "status": "Planning",
+    "created_at": "2026-02-14T10:53:09.788Z"
+  }
+},
+{
+  "model": "app.project",
+  "pk": 6,
+  "fields": {
+    "project_image": null,
+    "project_name": "qwert",
+    "description": "fdfsd",
+    "user": 21,
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": "",
+    "project_type": "Residential",
+    "start_date": "2026-02-11",
+    "end_date": "2026-03-04",
+    "duration_days": 21,
+    "client": 1,
+    "supervisor": 2,
+    "budget": "5657.00",
+    "status": "Planning",
+    "created_at": "2026-02-20T06:08:08.869Z"
+  }
+},
+{
+  "model": "app.project",
+  "pk": 7,
+  "fields": {
+    "project_image": null,
+    "project_name": "hello",
+    "description": "laallaa",
+    "user": 22,
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": "",
+    "project_type": "Infrastructure",
+    "start_date": "2026-02-21",
+    "end_date": "2026-03-16",
+    "duration_days": 23,
+    "client": 4,
+    "supervisor": 5,
+    "budget": "2321.00",
+    "status": "Planning",
+    "created_at": "2026-02-21T01:03:39.131Z"
+  }
+},
+{
+  "model": "app.project",
+  "pk": 8,
+  "fields": {
+    "project_image": null,
+    "project_name": "Doll House",
+    "description": "bahay",
+    "user": 22,
+    "region": null,
+    "province": null,
+    "city": null,
+    "barangay": null,
+    "street": "",
+    "project_type": "Commercial",
+    "start_date": "2026-02-21",
+    "end_date": "2026-02-28",
+    "duration_days": 7,
+    "client": 5,
+    "supervisor": 6,
+    "budget": "123458.00",
+    "status": "Planning",
+    "created_at": "2026-02-21T02:47:25.530Z"
+  }
+},
+{
+  "model": "app.supervisors",
+  "pk": 1,
+  "fields": {
+    "project_id": 3,
+    "first_name": "dsad",
+    "middle_name": null,
+    "last_name": "dasdas",
+    "email": "dasdas.dsad@structura.com",
+    "password_hash": "pbkdf2_sha256$1000000$c66ZIX91D4rTaBSn8VnNVh$dqEN8sWJNqP28LPjKWXD6n4BvkT83VvCqPm9b5+iaCw=",
+    "phone_number": "432432",
+    "birthdate": null,
+    "role": "Supervisor",
+    "sss_id": null,
+    "philhealth_id": null,
+    "pagibig_id": null,
+    "payrate": null,
+    "created_at": "2026-01-31T03:38:54.585Z"
+  }
+},
+{
+  "model": "app.supervisors",
+  "pk": 2,
+  "fields": {
+    "project_id": 6,
+    "first_name": "heelo",
+    "middle_name": null,
+    "last_name": "po",
+    "email": "riaguanzon2@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$I4pJED3YeI7tQTmBnMa8S1$FlTJCiRWg4a19T1f9xN3+/AQDAI6fkZJdjduEU1K+uU=",
+    "phone_number": "78454542",
+    "birthdate": null,
+    "role": "Supervisor",
+    "sss_id": null,
+    "philhealth_id": null,
+    "pagibig_id": null,
+    "payrate": "123.00",
+    "created_at": "2026-02-14T01:44:52.221Z"
+  }
+},
+{
+  "model": "app.supervisors",
+  "pk": 3,
+  "fields": {
+    "project_id": 5,
+    "first_name": "hotdog",
+    "middle_name": null,
+    "last_name": "cheese",
+    "email": "hz202303993@wmsu.edu.ph",
+    "password_hash": "pbkdf2_sha256$1000000$Mn5yFNwMNvfg71YoVylfrd$5Nr1G+ZN2W2ezhTw+sP/8uMthC3LrUfjFeqrLxgQNdU=",
+    "phone_number": "1234567",
+    "birthdate": null,
+    "role": "Supervisor",
+    "sss_id": null,
+    "philhealth_id": null,
+    "pagibig_id": null,
+    "payrate": "123.00",
+    "created_at": "2026-02-14T01:49:09.110Z"
+  }
+},
+{
+  "model": "app.supervisors",
+  "pk": 4,
+  "fields": {
+    "project_id": null,
+    "first_name": "hotdog",
+    "middle_name": null,
+    "last_name": "hahaha",
+    "email": "guanzon.maericha@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$deCwPANN6RI002GpGR9wWa$q+zgpQwrj7qJaas9qEEE3yBw6BWnknBaxRMaenVvCAE=",
+    "phone_number": "123456",
+    "birthdate": null,
+    "role": "Supervisor",
+    "sss_id": null,
+    "philhealth_id": null,
+    "pagibig_id": null,
+    "payrate": "312.00",
+    "created_at": "2026-02-14T02:01:54.383Z"
+  }
+},
+{
+  "model": "app.supervisors",
+  "pk": 5,
+  "fields": {
+    "project_id": 7,
+    "first_name": "mik",
+    "middle_name": null,
+    "last_name": "nik",
+    "email": "mik@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$IqAWQYzsk6kkkZLkaZrWhQ$B0enzyM23AeXH9gBaf09etfp0Ay+snbgeU4Na6dZ3QI=",
+    "phone_number": "097845112",
+    "birthdate": "2026-02-10",
+    "role": "Supervisor",
+    "sss_id": null,
+    "philhealth_id": null,
+    "pagibig_id": null,
+    "payrate": null,
+    "created_at": "2026-02-21T01:02:15.176Z"
+  }
+},
+{
+  "model": "app.supervisors",
+  "pk": 6,
+  "fields": {
+    "project_id": 8,
+    "first_name": "Donald",
+    "middle_name": null,
+    "last_name": "Duck",
+    "email": "donaldduck@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$hDoHxAQfM3DyMnVOsfFOCy$57yG/HFoyKxFPxFyeYpxVCoGaIWDxpO8W+O0Nvb4Qe0=",
+    "phone_number": "097845126",
+    "birthdate": null,
+    "role": "Supervisor",
+    "sss_id": null,
+    "philhealth_id": null,
+    "pagibig_id": null,
+    "payrate": null,
+    "created_at": "2026-02-21T02:37:37.221Z"
+  }
+},
+{
+  "model": "app.fieldworker",
+  "pk": 1,
+  "fields": {
+    "user_id": 17,
+    "project_id": 5,
+    "first_name": "mason",
+    "middle_name": null,
+    "last_name": "mass",
+    "phone_number": "3543534",
+    "birthdate": null,
+    "role": "Mason",
+    "sss_id": null,
+    "philhealth_id": null,
+    "pagibig_id": null,
+    "payrate": null,
+    "created_at": "2026-02-14T10:57:09.180Z"
+  }
+},
+{
+  "model": "app.fieldworker",
+  "pk": 2,
+  "fields": {
+    "user_id": 17,
+    "project_id": 5,
+    "first_name": "painter",
+    "middle_name": null,
+    "last_name": "asdas",
+    "phone_number": "324346",
+    "birthdate": null,
+    "role": "Painter",
+    "sss_id": null,
+    "philhealth_id": null,
+    "pagibig_id": null,
+    "payrate": null,
+    "created_at": "2026-02-14T10:57:20.951Z"
+  }
+},
+{
+  "model": "app.fieldworker",
+  "pk": 3,
+  "fields": {
+    "user_id": 17,
+    "project_id": 5,
+    "first_name": "carpenter",
+    "middle_name": null,
+    "last_name": "dfdsf",
+    "phone_number": "4354",
+    "birthdate": null,
+    "role": "Carpenter",
+    "sss_id": null,
+    "philhealth_id": null,
+    "pagibig_id": null,
+    "payrate": null,
+    "created_at": "2026-02-14T10:57:36.645Z"
+  }
+},
+{
+  "model": "app.fieldworker",
+  "pk": 4,
+  "fields": {
+    "user_id": 22,
+    "project_id": 7,
+    "first_name": "popo",
+    "middle_name": null,
+    "last_name": "opop",
+    "phone_number": "09784521",
+    "birthdate": null,
+    "role": "Painter",
+    "sss_id": null,
+    "philhealth_id": null,
+    "pagibig_id": null,
+    "payrate": null,
+    "created_at": "2026-02-21T01:28:07.376Z"
+  }
+},
+{
+  "model": "app.fieldworker",
+  "pk": 5,
+  "fields": {
+    "user_id": 22,
+    "project_id": 7,
+    "first_name": "baba",
+    "middle_name": null,
+    "last_name": "abab",
+    "phone_number": "097845245",
+    "birthdate": null,
+    "role": "Mason",
+    "sss_id": null,
+    "philhealth_id": null,
+    "pagibig_id": null,
+    "payrate": null,
+    "created_at": "2026-02-21T01:28:30.634Z"
+  }
+},
+{
+  "model": "app.fieldworker",
+  "pk": 6,
+  "fields": {
+    "user_id": 22,
+    "project_id": 7,
+    "first_name": "Duffy",
+    "middle_name": null,
+    "last_name": "Duck",
+    "phone_number": "097845125",
+    "birthdate": null,
+    "role": "Mason",
+    "sss_id": null,
+    "philhealth_id": null,
+    "pagibig_id": null,
+    "payrate": null,
+    "created_at": "2026-02-21T02:36:07.658Z"
+  }
+},
+{
+  "model": "app.fieldworker",
+  "pk": 7,
+  "fields": {
+    "user_id": 22,
+    "project_id": 8,
+    "first_name": "Duffy",
+    "middle_name": null,
+    "last_name": "Duck",
+    "phone_number": "097845265",
+    "birthdate": null,
+    "role": "Electrician",
+    "sss_id": null,
+    "philhealth_id": null,
+    "pagibig_id": null,
+    "payrate": null,
+    "created_at": "2026-02-21T02:56:47.449Z"
+  }
+},
+{
+  "model": "app.client",
+  "pk": 1,
+  "fields": {
+    "user_id": 13,
+    "project_id": 6,
+    "first_name": "hotdog",
+    "middle_name": null,
+    "last_name": "adhasjd",
+    "email": "adhasjd.hotdog@structura.com",
+    "password_hash": "pbkdf2_sha256$1000000$HoGBSW1cujDi1vzTpGGJbl$A9fMYsW0GiHB11U1ZqoAPytqbXPh710KcBf8lBaYtic=",
+    "phone_number": "10887232",
+    "birthdate": "2026-01-31",
+    "created_at": "2026-01-31T03:42:34.629Z",
+    "status": "active"
+  }
+},
+{
+  "model": "app.client",
+  "pk": 2,
+  "fields": {
+    "user_id": 15,
+    "project_id": 5,
+    "first_name": "Howell",
+    "middle_name": null,
+    "last_name": "Jenkins",
+    "email": "jenkins.howell@structura.com",
+    "password_hash": "pbkdf2_sha256$1000000$Jn4QWGfiWkrlUCU2h10NLw$7xV7FmT+/31bez6POIaFF5Dm/AOuwsnl+Q5NY4k/0gg=",
+    "phone_number": "09974221928",
+    "birthdate": "2000-02-05",
+    "created_at": "2026-02-05T13:54:17.744Z",
+    "status": "active"
+  }
+},
+{
+  "model": "app.client",
+  "pk": 3,
+  "fields": {
+    "user_id": 20,
+    "project_id": null,
+    "first_name": "Cheese",
+    "middle_name": null,
+    "last_name": "Hotdog",
+    "email": "guanzon.maericha@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$REaYvlToHg5T6P2rsXy0DN$U5oMmXysuQVrI9lOKV6qV0IOAfdigtg1smOnJCwPf5w=",
+    "phone_number": "09784512",
+    "birthdate": null,
+    "created_at": "2026-02-14T03:28:34.006Z",
+    "status": "active"
+  }
+},
+{
+  "model": "app.client",
+  "pk": 4,
+  "fields": {
+    "user_id": 23,
+    "project_id": 7,
+    "first_name": "dev",
+    "middle_name": null,
+    "last_name": "fest",
+    "email": "fest@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$4I96veQdi2gRzkfNtD4LUE$GFWFZq02hg3AAOc97P89yOHsuIBQGHyrKaR7a0QtC6k=",
+    "phone_number": "09784542",
+    "birthdate": null,
+    "created_at": "2026-02-21T01:03:16.311Z",
+    "status": "active"
+  }
+},
+{
+  "model": "app.client",
+  "pk": 5,
+  "fields": {
+    "user_id": 24,
+    "project_id": 8,
+    "first_name": "Minnie",
+    "middle_name": null,
+    "last_name": "Mouse",
+    "email": "minniemouse@gmail.com",
+    "password_hash": "pbkdf2_sha256$1000000$t4vZXi49XDytg13Vwi0IQ2$F1ujN9Vbc44jQo89JtHpoKJtfcNc85TROneogrYjt9w=",
+    "phone_number": "097845124556",
+    "birthdate": null,
+    "created_at": "2026-02-21T02:38:20.393Z",
+    "status": "active"
+  }
+},
+{
+  "model": "app.phase",
+  "pk": 1,
+  "fields": {
+    "project": 1,
+    "phase_name": "PHASE 1 - Pre-Construction Phase",
+    "description": "lalalalalaa",
+    "days_duration": 12,
+    "status": "not_started",
+    "created_at": "2026-01-31T03:45:51.187Z",
+    "updated_at": "2026-01-31T03:45:51.188Z"
+  }
+},
+{
+  "model": "app.phase",
+  "pk": 2,
+  "fields": {
+    "project": 5,
+    "phase_name": "PHASE 1 - Pre-Construction Phase",
+    "description": "dsfdsf",
+    "days_duration": 12,
+    "status": "not_started",
+    "created_at": "2026-02-14T10:53:32.550Z",
+    "updated_at": "2026-02-14T10:53:32.550Z"
+  }
+},
+{
+  "model": "app.phase",
+  "pk": 3,
+  "fields": {
+    "project": 5,
+    "phase_name": "PHASE 2 - Design Phase",
+    "description": "fdsfsdg",
+    "days_duration": 12,
+    "status": "not_started",
+    "created_at": "2026-02-14T10:53:57.517Z",
+    "updated_at": "2026-02-14T10:53:57.517Z"
+  }
+},
+{
+  "model": "app.phase",
+  "pk": 4,
+  "fields": {
+    "project": 6,
+    "phase_name": "PHASE 1 - Pre-Construction Phase",
+    "description": "jjfguftu",
+    "days_duration": 2,
+    "status": "not_started",
+    "created_at": "2026-02-20T06:08:35.185Z",
+    "updated_at": "2026-02-20T06:08:35.185Z"
+  }
+},
+{
+  "model": "app.phase",
+  "pk": 5,
+  "fields": {
+    "project": 7,
+    "phase_name": "PHASE 1 - Pre-Construction Phase",
+    "description": "wala lang",
+    "days_duration": 20,
+    "status": "not_started",
+    "created_at": "2026-02-21T01:04:38.950Z",
+    "updated_at": "2026-02-21T01:04:38.950Z"
+  }
+},
+{
+  "model": "app.phase",
+  "pk": 6,
+  "fields": {
+    "project": 7,
+    "phase_name": "PHASE 2 - Design Phase",
+    "description": "dsfdsds",
+    "days_duration": 2,
+    "status": "not_started",
+    "created_at": "2026-02-21T01:28:52.026Z",
+    "updated_at": "2026-02-21T01:28:52.026Z"
+  }
+},
+{
+  "model": "app.phase",
+  "pk": 7,
+  "fields": {
+    "project": 8,
+    "phase_name": "PHASE 1 - Pre-Construction Phase",
+    "description": "four days",
+    "days_duration": 4,
+    "status": "not_started",
+    "created_at": "2026-02-21T02:51:16.727Z",
+    "updated_at": "2026-02-21T02:51:16.733Z"
+  }
+},
+{
+  "model": "app.phase",
+  "pk": 8,
+  "fields": {
+    "project": 8,
+    "phase_name": "PHASE 2 - Design Phase",
+    "description": "3 days left",
+    "days_duration": 3,
+    "status": "not_started",
+    "created_at": "2026-02-21T02:51:47.211Z",
+    "updated_at": "2026-02-21T02:51:47.211Z"
+  }
+},
+{
+  "model": "app.subtask",
+  "pk": 1,
+  "fields": {
+    "phase": 1,
+    "title": "qwe",
+    "status": "pending",
+    "progress_notes": null,
+    "created_at": "2026-01-31T03:45:51.207Z",
+    "updated_at": "2026-01-31T03:45:51.207Z"
+  }
+},
+{
+  "model": "app.subtask",
+  "pk": 2,
+  "fields": {
+    "phase": 1,
+    "title": "rty",
+    "status": "pending",
+    "progress_notes": null,
+    "created_at": "2026-01-31T03:45:51.221Z",
+    "updated_at": "2026-01-31T03:45:51.221Z"
+  }
+},
+{
+  "model": "app.subtask",
+  "pk": 3,
+  "fields": {
+    "phase": 2,
+    "title": "fdsfg",
+    "status": "pending",
+    "progress_notes": null,
+    "created_at": "2026-02-14T10:53:32.565Z",
+    "updated_at": "2026-02-14T10:53:32.565Z"
+  }
+},
+{
+  "model": "app.subtask",
+  "pk": 4,
+  "fields": {
+    "phase": 2,
+    "title": "fgdfgf",
+    "status": "pending",
+    "progress_notes": null,
+    "created_at": "2026-02-14T10:53:32.585Z",
+    "updated_at": "2026-02-14T10:53:32.585Z"
+  }
+},
+{
+  "model": "app.subtask",
+  "pk": 5,
+  "fields": {
+    "phase": 3,
+    "title": "sdfdsf",
+    "status": "pending",
+    "progress_notes": null,
+    "created_at": "2026-02-14T10:53:57.536Z",
+    "updated_at": "2026-02-14T10:53:57.536Z"
+  }
+},
+{
+  "model": "app.subtask",
+  "pk": 6,
+  "fields": {
+    "phase": 4,
+    "title": "gug",
+    "status": "pending",
+    "progress_notes": null,
+    "created_at": "2026-02-20T06:08:35.199Z",
+    "updated_at": "2026-02-20T06:08:35.200Z"
+  }
+},
+{
+  "model": "app.subtask",
+  "pk": 7,
+  "fields": {
+    "phase": 4,
+    "title": "hgf",
+    "status": "pending",
+    "progress_notes": null,
+    "created_at": "2026-02-20T06:08:35.219Z",
+    "updated_at": "2026-02-20T06:08:35.219Z"
+  }
+},
+{
+  "model": "app.subtask",
+  "pk": 8,
+  "fields": {
+    "phase": 5,
+    "title": "fdads",
+    "status": "pending",
+    "progress_notes": null,
+    "created_at": "2026-02-21T01:04:38.993Z",
+    "updated_at": "2026-02-21T01:04:38.993Z"
+  }
+},
+{
+  "model": "app.subtask",
+  "pk": 9,
+  "fields": {
+    "phase": 5,
+    "title": "dasd",
+    "status": "pending",
+    "progress_notes": null,
+    "created_at": "2026-02-21T01:04:39.019Z",
+    "updated_at": "2026-02-21T01:04:39.019Z"
+  }
+},
+{
+  "model": "app.subtask",
+  "pk": 10,
+  "fields": {
+    "phase": 6,
+    "title": "lalala",
+    "status": "pending",
+    "progress_notes": null,
+    "created_at": "2026-02-21T01:28:52.037Z",
+    "updated_at": "2026-02-21T01:28:52.037Z"
+  }
+},
+{
+  "model": "app.subtask",
+  "pk": 11,
+  "fields": {
+    "phase": 6,
+    "title": "paapappa",
+    "status": "pending",
+    "progress_notes": null,
+    "created_at": "2026-02-21T01:28:52.057Z",
+    "updated_at": "2026-02-21T01:28:52.057Z"
+  }
+},
+{
+  "model": "app.subtask",
+  "pk": 12,
+  "fields": {
+    "phase": 7,
+    "title": "one",
+    "status": "pending",
+    "progress_notes": null,
+    "created_at": "2026-02-21T02:51:16.753Z",
+    "updated_at": "2026-02-21T02:51:16.753Z"
+  }
+},
+{
+  "model": "app.subtask",
+  "pk": 13,
+  "fields": {
+    "phase": 7,
+    "title": "two",
+    "status": "pending",
+    "progress_notes": null,
+    "created_at": "2026-02-21T02:51:16.798Z",
+    "updated_at": "2026-02-21T02:51:16.798Z"
+  }
+},
+{
+  "model": "app.subtask",
+  "pk": 14,
+  "fields": {
+    "phase": 8,
+    "title": "three",
+    "status": "pending",
+    "progress_notes": null,
+    "created_at": "2026-02-21T02:51:47.232Z",
+    "updated_at": "2026-02-21T02:51:47.232Z"
+  }
+},
+{
+  "model": "app.subtaskfieldworker",
+  "pk": 1,
+  "fields": {
+    "subtask": 3,
+    "field_worker": 1,
+    "assigned_at": "2026-02-14T10:57:50.441Z"
+  }
+},
+{
+  "model": "app.subtaskfieldworker",
+  "pk": 2,
+  "fields": {
+    "subtask": 3,
+    "field_worker": 2,
+    "assigned_at": "2026-02-14T10:57:50.460Z"
+  }
+},
+{
+  "model": "app.subtaskfieldworker",
+  "pk": 3,
+  "fields": {
+    "subtask": 3,
+    "field_worker": 3,
+    "assigned_at": "2026-02-14T10:57:50.479Z"
+  }
+},
+{
+  "model": "app.subtaskfieldworker",
+  "pk": 4,
+  "fields": {
+    "subtask": 4,
+    "field_worker": 2,
+    "assigned_at": "2026-02-14T10:57:56.890Z"
+  }
+},
+{
+  "model": "app.subtaskfieldworker",
+  "pk": 5,
+  "fields": {
+    "subtask": 4,
+    "field_worker": 1,
+    "assigned_at": "2026-02-14T10:57:56.904Z"
+  }
+},
+{
+  "model": "app.subtaskfieldworker",
+  "pk": 6,
+  "fields": {
+    "subtask": 5,
+    "field_worker": 2,
+    "assigned_at": "2026-02-14T10:58:03.465Z"
+  }
+},
+{
+  "model": "app.subtaskfieldworker",
+  "pk": 7,
+  "fields": {
+    "subtask": 6,
+    "field_worker": 1,
+    "assigned_at": "2026-02-20T06:08:43.298Z"
+  }
+},
+{
+  "model": "app.subtaskfieldworker",
+  "pk": 8,
+  "fields": {
+    "subtask": 7,
+    "field_worker": 3,
+    "assigned_at": "2026-02-20T06:08:47.923Z"
+  }
+},
+{
+  "model": "app.subtaskfieldworker",
+  "pk": 9,
+  "fields": {
+    "subtask": 7,
+    "field_worker": 2,
+    "assigned_at": "2026-02-20T06:08:47.941Z"
+  }
+},
+{
+  "model": "app.subtaskfieldworker",
+  "pk": 10,
+  "fields": {
+    "subtask": 8,
+    "field_worker": 3,
+    "assigned_at": "2026-02-21T01:04:50.848Z"
+  }
+},
+{
+  "model": "app.subtaskfieldworker",
+  "pk": 11,
+  "fields": {
+    "subtask": 8,
+    "field_worker": 1,
+    "assigned_at": "2026-02-21T01:04:50.883Z"
+  }
+},
+{
+  "model": "app.subtaskfieldworker",
+  "pk": 12,
+  "fields": {
+    "subtask": 9,
+    "field_worker": 2,
+    "assigned_at": "2026-02-21T01:04:54.668Z"
+  }
+},
+{
+  "model": "app.subtaskfieldworker",
+  "pk": 13,
+  "fields": {
+    "subtask": 12,
+    "field_worker": 6,
+    "assigned_at": "2026-02-21T02:52:15.943Z"
+  }
+},
+{
+  "model": "app.subtaskfieldworker",
+  "pk": 14,
+  "fields": {
+    "subtask": 13,
+    "field_worker": 6,
+    "assigned_at": "2026-02-21T02:52:23.925Z"
+  }
+},
+{
+  "model": "app.subtaskfieldworker",
+  "pk": 15,
+  "fields": {
+    "subtask": 14,
+    "field_worker": 6,
+    "assigned_at": "2026-02-21T02:52:37.103Z"
+  }
+},
+{
+  "model": "app.subtaskfieldworker",
+  "pk": 16,
+  "fields": {
+    "subtask": 12,
+    "field_worker": 7,
+    "assigned_at": "2026-02-21T02:57:21.057Z"
+  }
+},
+{
+  "model": "app.subtaskfieldworker",
+  "pk": 17,
+  "fields": {
+    "subtask": 12,
+    "field_worker": 3,
+    "assigned_at": "2026-02-21T02:57:21.094Z"
+  }
+},
+{
+  "model": "app.subtaskfieldworker",
+  "pk": 18,
+  "fields": {
+    "subtask": 12,
+    "field_worker": 4,
+    "assigned_at": "2026-02-21T02:57:21.180Z"
+  }
+},
+{
+  "model": "app.subtaskfieldworker",
+  "pk": 19,
+  "fields": {
+    "subtask": 12,
+    "field_worker": 5,
+    "assigned_at": "2026-02-21T02:57:21.204Z"
+  }
+},
+{
+  "model": "app.attendance",
+  "pk": 1,
+  "fields": {
+    "field_worker": 1,
+    "project": 5,
+    "attendance_date": "2026-02-14",
+    "check_in_time": "19:47:02",
+    "check_out_time": "19:47:25",
+    "break_in_time": null,
+    "break_out_time": null,
+    "status": "absent",
+    "created_at": "2026-02-14T11:47:03.075Z",
+    "updated_at": "2026-02-14T11:47:25.723Z"
+  }
+},
+{
+  "model": "app.attendance",
+  "pk": 2,
+  "fields": {
+    "field_worker": 2,
+    "project": 5,
+    "attendance_date": "2026-02-14",
+    "check_in_time": "20:47:44",
+    "check_out_time": null,
+    "break_in_time": null,
+    "break_out_time": null,
+    "status": "on_site",
+    "created_at": "2026-02-14T12:47:45.420Z",
+    "updated_at": "2026-02-14T12:47:45.420Z"
+  }
+},
+{
+  "model": "app.attendance",
+  "pk": 3,
+  "fields": {
+    "field_worker": 2,
+    "project": 7,
+    "attendance_date": "2026-02-21",
+    "check_in_time": "09:11:36",
+    "check_out_time": null,
+    "break_in_time": null,
+    "break_out_time": null,
+    "status": "on_site",
+    "created_at": "2026-02-21T01:11:36.214Z",
+    "updated_at": "2026-02-21T01:11:36.214Z"
+  }
+},
+{
+  "model": "app.attendance",
+  "pk": 4,
+  "fields": {
+    "field_worker": 5,
+    "project": 7,
+    "attendance_date": "2026-02-21",
+    "check_in_time": "09:30:29",
+    "check_out_time": null,
+    "break_in_time": null,
+    "break_out_time": null,
+    "status": "on_site",
+    "created_at": "2026-02-21T01:30:29.220Z",
+    "updated_at": "2026-02-21T01:30:29.220Z"
+  }
+},
+{
+  "model": "app.attendance",
+  "pk": 5,
+  "fields": {
+    "field_worker": 7,
+    "project": 8,
+    "attendance_date": "2026-02-21",
+    "check_in_time": "11:06:01",
+    "check_out_time": "11:08:30",
+    "break_in_time": "11:07:57",
+    "break_out_time": "11:08:17",
+    "status": "absent",
+    "created_at": "2026-02-21T03:04:41.899Z",
+    "updated_at": "2026-02-21T03:08:30.750Z"
+  }
+}
+]

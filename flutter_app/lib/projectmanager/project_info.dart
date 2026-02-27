@@ -135,7 +135,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
             );
           }
         } catch (e) {
-          print('⚠️ Error fetching supervisor: $e');
+          print('Error fetching supervisor: $e');
         }
       } else {
         print('⚠️ No supervisor_id found in project data');
@@ -149,18 +149,18 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         if (phasesResponse.statusCode == 200) {
           setState(() {
             _phases = jsonDecode(phasesResponse.body) as List<dynamic>;
-            print('✅ Phases fetched: ${_phases?.length ?? 0} phases');
+            print('Phases fetched: ${_phases?.length ?? 0} phases');
           });
         }
       } catch (e) {
-        print('⚠️ Error fetching phases: $e');
+        print('Error fetching phases: $e');
       }
 
       setState(() {
         _isLoading = false;
       });
     } catch (e) {
-      print('❌ Error: $e');
+      print('Error: $e');
       setState(() {
         _error = 'Error loading project details: $e';
         _isLoading = false;

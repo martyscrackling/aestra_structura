@@ -4,6 +4,8 @@ from pathlib import Path
 import os
 from django.core.exceptions import ImproperlyConfigured
 from urllib.parse import urlparse
+from dotenv import load_dotenv
+load_dotenv()
 
 import dj_database_url
 

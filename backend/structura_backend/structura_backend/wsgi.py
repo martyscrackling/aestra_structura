@@ -8,6 +8,16 @@ https://docs.djangoproject.com/en/5.2/howto/deployment/wsgi/
 """
 
 import os
+from pathlib import Path
+
+try:
+	from dotenv import load_dotenv
+
+	base_dir = Path(__file__).resolve().parent.parent
+	load_dotenv(base_dir / ".env", override=False)
+except Exception:
+	# Best-effort for local dev.
+	pass
 
 from django.core.wsgi import get_wsgi_application
 
