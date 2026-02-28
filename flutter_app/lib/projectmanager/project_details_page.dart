@@ -205,7 +205,7 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
     WeeklyTask(
       weekTitle: 'Week 8 - Superstructure & Roofing',
       description:
-          'Complete slab concreting, masonry works, install frames, set roof trusses, and finish with roofing and cleanup.',
+          'Complete slab concreting, masonry works, inFstall frames, set roof trusses, and finish with roofing and cleanup.',
       status: 'In-Process',
       date: 'Oct 19',
       progress: 0.15,

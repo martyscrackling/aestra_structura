@@ -31,6 +31,21 @@ class ProjectDetailsPage extends StatefulWidget {
 }
 
 class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
+  int? _calculateDaysLeft() {
+    if (_projectInfo == null || _projectInfo!['end_date'] == null) return null;
+    try {
+      final endDateStr = _projectInfo!['end_date'] as String;
+      if (endDateStr.isEmpty) return null;
+      final endDate = DateTime.parse(endDateStr);
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final diff = endDate.difference(today).inDays;
+      return diff >= 0 ? diff : 0;
+    } catch (e) {
+      return null;
+    }
+  }
+
   Map<String, dynamic>? _clientInfo;
   Map<String, dynamic>? _supervisorInfo;
   Map<String, dynamic>? _projectInfo;
@@ -171,6 +186,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final daysLeft = _calculateDaysLeft();
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: Color(0xFFF4F6F9),
@@ -196,6 +212,53 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (daysLeft != null)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 14,
+                  horizontal: 18,
+                ),
+                decoration: BoxDecoration(
+                  color: daysLeft <= 3
+                      ? const Color(0xFFFFE0B2)
+                      : const Color(0xFFE3F2FD),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: daysLeft <= 3
+                        ? const Color(0xFFFF9800)
+                        : const Color(0xFF2196F3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.hourglass_bottom,
+                      color: daysLeft <= 3
+                          ? const Color(0xFFFF9800)
+                          : const Color(0xFF2196F3),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        daysLeft == 0
+                            ? 'Today is the expected end date for this project.'
+                            : daysLeft == 1
+                            ? '1 day left before the expected end date.'
+                            : '$daysLeft days left before the expected end date.',
+                        style: TextStyle(
+                          color: daysLeft <= 3
+                              ? const Color(0xFFFF9800)
+                              : const Color(0xFF0C1935),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             // Back button
             Row(
               children: [
@@ -281,13 +344,30 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
             if (isMobile)
               Column(
                 children: [
-                  _projectDetailCard(
-                    icon: Icons.calendar_today,
-                    title: 'Duration',
-                    value: _projectInfo != null
-                        ? '${_projectInfo!['duration_days'] ?? 'N/A'} days'
-                        : 'Loading...',
-                    color: const Color(0xFF2196F3),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _projectDetailCard(
+                          icon: Icons.calendar_today,
+                          title: 'Duration',
+                          value: _projectInfo != null
+                              ? '${_projectInfo!['duration_days'] ?? 'N/A'} days'
+                              : 'Loading...',
+                          color: const Color(0xFF2196F3),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _projectDetailCard(
+                          icon: Icons.hourglass_bottom,
+                          title: 'Days Left',
+                          value: _calculateDaysLeft() != null
+                              ? '${_calculateDaysLeft()} days'
+                              : 'N/A',
+                          color: const Color(0xFFFF9800),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   _projectDetailCard(
@@ -299,7 +379,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                   const SizedBox(height: 12),
                   _projectDetailCard(
                     icon: Icons.event_available,
-                    title: 'End Date',
+                    title: 'Expected Date to End',
                     value: _projectInfo?['end_date'] ?? 'N/A',
                     color: const Color(0xFFF44336),
                   ),
@@ -321,6 +401,17 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: _projectDetailCard(
+                      icon: Icons.hourglass_bottom,
+                      title: 'Days Left',
+                      value: _calculateDaysLeft() != null
+                          ? '${_calculateDaysLeft()} days'
+                          : 'N/A',
+                      color: const Color(0xFFFF9800),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _projectDetailCard(
                       icon: Icons.event,
                       title: 'Start Date',
                       value: _projectInfo?['start_date'] ?? 'N/A',
@@ -331,7 +422,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                   Expanded(
                     child: _projectDetailCard(
                       icon: Icons.event_available,
-                      title: 'End Date',
+                      title: 'Expected Date to End',
                       value: _projectInfo?['end_date'] ?? 'N/A',
                       color: const Color(0xFFF44336),
                     ),
@@ -515,7 +606,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                       ),
                     ),
                     child: const Text(
-                      "Add now",
+                      "View Project Plan",
                       style: TextStyle(color: Colors.white),
                     ),
                   ),

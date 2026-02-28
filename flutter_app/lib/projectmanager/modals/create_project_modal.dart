@@ -290,10 +290,12 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
     BuildContext context,
     TextEditingController controller,
   ) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2020),
+      initialDate: today,
+      firstDate: today, // Only allow today or future
       lastDate: DateTime(2030),
     );
     if (picked != null) {
