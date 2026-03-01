@@ -924,7 +924,9 @@ class ProjectOverviewCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    data.status,
+                    data.projectType.isNotEmpty
+                        ? data.projectType
+                        : data.status,
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -1129,7 +1131,9 @@ class ProjectListPanel extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          project.status,
+                          project.projectType.isNotEmpty
+                              ? project.projectType
+                              : project.status,
                           style: const TextStyle(
                             fontSize: 12,
                             color: Color(0xFF6B7280),

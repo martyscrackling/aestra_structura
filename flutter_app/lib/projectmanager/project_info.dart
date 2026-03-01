@@ -187,6 +187,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
   @override
   Widget build(BuildContext context) {
     final daysLeft = _calculateDaysLeft();
+    final progressPercent = (_calculateProjectProgress() * 100).round();
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: Color(0xFFF4F6F9),
@@ -243,10 +244,10 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                     Expanded(
                       child: Text(
                         daysLeft == 0
-                            ? 'Today is the expected end date for this project.'
+                            ? 'Today is the expected end date for this project and you are $progressPercent% progress.'
                             : daysLeft == 1
-                            ? '1 day left before the expected end date.'
-                            : '$daysLeft days left before the expected end date.',
+                            ? '1 day left before the expected end date. Current progress: $progressPercent%.'
+                            : '$daysLeft days left before the expected end date. Current progress: $progressPercent%.',
                         style: TextStyle(
                           color: daysLeft <= 3
                               ? const Color(0xFFFF9800)
