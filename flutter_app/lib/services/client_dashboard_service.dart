@@ -47,19 +47,23 @@ class ClientDashboardService {
   static const int _notificationPreviewLimit = 3;
   static const int _notificationListLimit = 20;
 
+  int? _asInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    return int.tryParse(value.toString());
+  }
+
   Future<List<ClientProjectCardData>> fetchClientProjects() async {
     final auth = AuthService();
     final user = auth.currentUser;
 
     final clientIdRaw = user?['client_id'];
     final projectIdRaw = user?['project_id'];
+    final userIdRaw = user?['user_id'];
 
-    final clientId = clientIdRaw is int
-        ? clientIdRaw
-        : int.tryParse(clientIdRaw?.toString() ?? '');
-    final singleProjectId = projectIdRaw is int
-        ? projectIdRaw
-        : int.tryParse(projectIdRaw?.toString() ?? '');
+    final clientId = _asInt(clientIdRaw);
+    final singleProjectId = _asInt(projectIdRaw);
+    final userId = _asInt(userIdRaw);
 
     List<Map<String, dynamic>> projects;
 
@@ -85,15 +89,27 @@ class ClientDashboardService {
         throw Exception('Unexpected project response');
       }
       projects = [decoded];
+    } else if (userId != null) {
+      // Fallback: many backends only return `user_id` for a Client user.
+      // The PM dashboard already uses this filter.
+      final response = await http.get(
+        AppConfig.apiUri('projects/?user_id=$userId'),
+      );
+      if (response.statusCode != 200) {
+        throw Exception('Failed to load projects');
+      }
+      final decoded = jsonDecode(response.body);
+      if (decoded is! List) throw Exception('Unexpected projects response');
+      projects = decoded.whereType<Map<String, dynamic>>().toList();
     } else {
       return const [];
     }
 
     final results = await Future.wait(
       projects.map((p) async {
-        final projectId = (p['project_id'] as int?) ?? 0;
+        final projectId = _asInt(p['project_id']) ?? 0;
         final name = (p['project_name'] as String?) ?? 'Untitled project';
-        final image = (p['project_image'] as String?) ?? '';
+        final image = (p['project_image']?.toString().trim() ?? '');
 
         final location = _projectLocation(p);
 

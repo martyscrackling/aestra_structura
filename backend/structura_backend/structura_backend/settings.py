@@ -11,12 +11,18 @@ load_dotenv()
 import dj_database_url
 
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Media files (for uploaded images)
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+# Define DEBUG FIRST
+DEBUG = os.getenv("DEBUG", "1") == "1"
+
+# Media files
 MEDIA_URL = '/media/'
+
+if DEBUG:
+    MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+else:
+    MEDIA_ROOT = '/var/data/media'
 
 
 # Quick-start development settings - unsuitable for production

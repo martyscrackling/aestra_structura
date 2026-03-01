@@ -7,6 +7,34 @@ class ProjectCard extends StatelessWidget {
 
   final ProjectItem item;
 
+  Widget _buildProjectImage({required double height}) {
+    final raw = item.imageUrl.trim();
+    final assetFallback = Image.asset(
+      'assets/images/engineer.jpg',
+      height: height,
+      width: double.infinity,
+      fit: BoxFit.cover,
+    );
+
+    if (raw.isEmpty) return assetFallback;
+    if (raw.startsWith('assets/')) {
+      return Image.asset(
+        raw,
+        height: height,
+        width: double.infinity,
+        fit: BoxFit.cover,
+      );
+    }
+
+    return Image.network(
+      raw,
+      height: height,
+      width: double.infinity,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) => assetFallback,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -29,21 +57,8 @@ class ProjectCard extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
-            child: Image.network(
-              item.imageUrl,
+            child: _buildProjectImage(
               height: isMobile ? 120 : 140,
-              width: double.infinity,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => Container(
-                height: isMobile ? 120 : 140,
-                color: Colors.grey[200],
-                alignment: Alignment.center,
-                child: const Icon(
-                  Icons.broken_image,
-                  size: 40,
-                  color: Colors.grey,
-                ),
-              ),
             ),
           ),
           Padding(

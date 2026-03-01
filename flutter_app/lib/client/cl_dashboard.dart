@@ -82,6 +82,11 @@ class _ClDashboardPageState extends State<ClDashboardPage> {
                             'Unable to load projects.',
                             style: TextStyle(color: Color(0xFF6B7280)),
                           )
+                        else if (items.isEmpty)
+                          const Text(
+                            'No projects found for this account.',
+                            style: TextStyle(color: Color(0xFF6B7280)),
+                          )
                         else
                           ProjectsGrid(items: items),
                       ],
