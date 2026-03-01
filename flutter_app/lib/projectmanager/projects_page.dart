@@ -22,10 +22,70 @@ class _ProjectsPageState extends State<ProjectsPage> {
   bool _isLoading = true;
   String? _error;
 
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  _ProjectSortOrder _sortOrder = _ProjectSortOrder.oldestToNewest;
+  String? _projectTypeFilter; // null = All
+
   @override
   void initState() {
     super.initState();
     _fetchProjects();
+
+    _searchController.addListener(() {
+      final value = _searchController.text;
+      if (value == _searchQuery) return;
+      setState(() {
+        _searchQuery = value;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<ProjectOverviewData> get _visibleProjects {
+    final query = _searchQuery.trim().toLowerCase();
+    final filteredByType = (_projectTypeFilter == null)
+        ? List<ProjectOverviewData>.from(_projects)
+        : _projects.where((p) => p.projectType == _projectTypeFilter).toList();
+
+    final filtered = query.isEmpty
+        ? filteredByType
+        : filteredByType.where((project) {
+            return project.title.toLowerCase().contains(query) ||
+                project.location.toLowerCase().contains(query) ||
+                project.status.toLowerCase().contains(query) ||
+                project.projectType.toLowerCase().contains(query);
+          }).toList();
+
+    int compareCreatedAt(ProjectOverviewData a, ProjectOverviewData b) {
+      try {
+        if (a.createdAt.isEmpty && b.createdAt.isEmpty) return 0;
+        if (a.createdAt.isEmpty) return 1;
+        if (b.createdAt.isEmpty) return -1;
+        final dateA = DateTime.parse(a.createdAt);
+        final dateB = DateTime.parse(b.createdAt);
+        return dateA.compareTo(dateB); // oldest -> newest
+      } catch (_) {
+        return 0;
+      }
+    }
+
+    int comparator(ProjectOverviewData a, ProjectOverviewData b) {
+      int result = compareCreatedAt(a, b);
+
+      if (_sortOrder == _ProjectSortOrder.newestToOldest) {
+        result = -result;
+      }
+      return result;
+    }
+
+    filtered.sort(comparator);
+    return filtered;
   }
 
   // Calculate progress based on subtasks (matching task_progress.dart)
@@ -108,6 +168,8 @@ class _ProjectsPageState extends State<ProjectsPage> {
             final String endDateStr = (project['end_date'] as String?) ?? '';
             final String budget = (project['budget']?.toString()) ?? '0';
             final String createdAt = (project['created_at'] as String?) ?? '';
+            final String projectType =
+                (project['project_type'] as String?) ?? '';
 
             print('✅ Project ID: $projectId, Name: $projectName');
 
@@ -127,6 +189,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
                 image: _getProjectImage(project),
                 budget: budget,
                 createdAt: createdAt,
+                projectType: projectType,
               ),
             );
           } catch (e) {
@@ -136,22 +199,6 @@ class _ProjectsPageState extends State<ProjectsPage> {
 
         setState(() {
           _projects = projects;
-
-          // Sort projects by created_at (newest to oldest, with date and time)
-          _projects.sort((a, b) {
-            try {
-              if (a.createdAt.isEmpty || b.createdAt.isEmpty) {
-                return 0;
-              }
-              final dateA = DateTime.parse(a.createdAt);
-              final dateB = DateTime.parse(b.createdAt);
-              return dateB.compareTo(dateA); // Descending (newest first)
-            } catch (e) {
-              print('⚠️ Error sorting by created_at: $e');
-              return 0;
-            }
-          });
-
           _isLoading = false;
         });
       } else {
@@ -230,6 +277,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 768;
+    final visibleProjects = _visibleProjects;
 
     return ResponsivePageLayout(
       currentPage: 'Projects',
@@ -300,37 +348,68 @@ class _ProjectsPageState extends State<ProjectsPage> {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _ProjectsHeader(onRefresh: _fetchProjects),
-                const SizedBox(height: 24),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final columnCount = constraints.maxWidth > 1400
-                        ? 4
-                        : constraints.maxWidth > 1100
-                        ? 3
-                        : constraints.maxWidth > 800
-                        ? 2
-                        : 1;
-                    final cardWidth =
-                        (constraints.maxWidth - (columnCount - 1) * 20) /
-                        columnCount;
-
-                    return Wrap(
-                      spacing: 20,
-                      runSpacing: 20,
-                      children: _projects
-                          .map(
-                            (project) => SizedBox(
-                              width: cardWidth,
-                              child: ProjectOverviewCard(data: project),
-                            ),
-                          )
-                          .toList(),
-                    );
+                _ProjectsHeader(
+                  onRefresh: _fetchProjects,
+                  searchController: _searchController,
+                  sortOrder: _sortOrder,
+                  onSortOrderChanged: (value) {
+                    setState(() {
+                      _sortOrder = value;
+                    });
+                  },
+                  projectTypeFilter: _projectTypeFilter,
+                  onProjectTypeFilterChanged: (value) {
+                    setState(() {
+                      _projectTypeFilter = value;
+                    });
                   },
                 ),
+                const SizedBox(height: 24),
+                if (visibleProjects.isEmpty)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 32),
+                      child: Text(
+                        '0 Projects found',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF6B7280),
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final columnCount = constraints.maxWidth > 1400
+                          ? 4
+                          : constraints.maxWidth > 1100
+                          ? 3
+                          : constraints.maxWidth > 800
+                          ? 2
+                          : 1;
+                      final cardWidth =
+                          (constraints.maxWidth - (columnCount - 1) * 20) /
+                          columnCount;
+
+                      return Wrap(
+                        spacing: 20,
+                        runSpacing: 20,
+                        children: visibleProjects
+                            .map(
+                              (project) => SizedBox(
+                                width: cardWidth,
+                                child: ProjectOverviewCard(data: project),
+                              ),
+                            )
+                            .toList(),
+                      );
+                    },
+                  ),
                 const SizedBox(height: 32),
-                ProjectListPanel(items: _projects),
+                if (visibleProjects.isNotEmpty)
+                  ProjectListPanel(items: visibleProjects),
                 SizedBox(height: isMobile ? 80 : 32), // Space for bottom nav
               ],
             ),
@@ -339,9 +418,21 @@ class _ProjectsPageState extends State<ProjectsPage> {
 }
 
 class _ProjectsHeader extends StatelessWidget {
-  const _ProjectsHeader({required this.onRefresh});
+  const _ProjectsHeader({
+    required this.onRefresh,
+    required this.searchController,
+    required this.sortOrder,
+    required this.onSortOrderChanged,
+    required this.projectTypeFilter,
+    required this.onProjectTypeFilterChanged,
+  });
 
   final VoidCallback onRefresh;
+  final TextEditingController searchController;
+  final _ProjectSortOrder sortOrder;
+  final ValueChanged<_ProjectSortOrder> onSortOrderChanged;
+  final String? projectTypeFilter;
+  final ValueChanged<String?> onProjectTypeFilterChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -407,9 +498,25 @@ class _ProjectsHeader extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              Expanded(flex: 2, child: _SearchField(isMobile: true)),
+              Expanded(
+                flex: 2,
+                child: _SearchField(
+                  isMobile: true,
+                  controller: searchController,
+                ),
+              ),
               const SizedBox(width: 8),
-              _SortButton(onPressed: onRefresh, isMobile: true),
+              _ProjectTypeFilterDropdown(
+                value: projectTypeFilter,
+                onChanged: onProjectTypeFilterChanged,
+                isMobile: true,
+              ),
+              const SizedBox(width: 8),
+              _SortOrderDropdown(
+                value: sortOrder,
+                onChanged: onSortOrderChanged,
+                isMobile: true,
+              ),
             ],
           ),
         ],
@@ -468,18 +575,29 @@ class _ProjectsHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 16),
-        const _SearchField(isMobile: false),
+        _SearchField(isMobile: false, controller: searchController),
         const SizedBox(width: 12),
-        _SortButton(onPressed: onRefresh, isMobile: false),
+        _ProjectTypeFilterDropdown(
+          value: projectTypeFilter,
+          onChanged: onProjectTypeFilterChanged,
+          isMobile: false,
+        ),
+        const SizedBox(width: 12),
+        _SortOrderDropdown(
+          value: sortOrder,
+          onChanged: onSortOrderChanged,
+          isMobile: false,
+        ),
       ],
     );
   }
 }
 
 class _SearchField extends StatelessWidget {
-  const _SearchField({required this.isMobile});
+  const _SearchField({required this.isMobile, required this.controller});
 
   final bool isMobile;
+  final TextEditingController controller;
 
   @override
   Widget build(BuildContext context) {
@@ -487,6 +605,7 @@ class _SearchField extends StatelessWidget {
       width: isMobile ? null : 220,
       height: 40,
       child: TextField(
+        controller: controller,
         decoration: InputDecoration(
           filled: true,
           fillColor: Colors.white,
@@ -504,51 +623,170 @@ class _SearchField extends StatelessWidget {
   }
 }
 
-class _SortButton extends StatelessWidget {
-  const _SortButton({required this.onPressed, required this.isMobile});
+enum _ProjectSortOrder { oldestToNewest, newestToOldest }
 
-  final VoidCallback onPressed;
+class _ProjectTypeFilterDropdown extends StatelessWidget {
+  const _ProjectTypeFilterDropdown({
+    required this.value,
+    required this.onChanged,
+    required this.isMobile,
+  });
+
+  final String? value; // null = All
+  final ValueChanged<String?> onChanged;
   final bool isMobile;
+
+  static const List<String> _types = [
+    'Residential',
+    'Commercial',
+    'Infrastructure',
+    'Industrial',
+  ];
 
   @override
   Widget build(BuildContext context) {
+    final dropdown = DropdownButton<String?>(
+      value: value,
+      isDense: true,
+      onChanged: onChanged,
+      items: <DropdownMenuItem<String?>>[
+        const DropdownMenuItem(
+          value: null,
+          child: Text(
+            'All Types',
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF0C1935),
+            ),
+          ),
+        ),
+        ..._types.map(
+          (type) => DropdownMenuItem(
+            value: type,
+            child: Text(
+              type,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF0C1935),
+              ),
+            ),
+          ),
+        ),
+      ],
+      icon: const Icon(Icons.filter_list, size: 18, color: Color(0xFF0C1935)),
+    );
+
     if (isMobile) {
-      // Mobile: Icon only button
       return SizedBox(
         height: 40,
         width: 40,
-        child: OutlinedButton(
-          onPressed: onPressed,
-          style: OutlinedButton.styleFrom(
-            foregroundColor: const Color(0xFF0C1935),
-            side: const BorderSide(color: Color(0xFFE5E7EB)),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            padding: EdgeInsets.zero,
+        child: _DropdownShell(
+          child: DropdownButtonHideUnderline(
+            child: ButtonTheme(alignedDropdown: true, child: dropdown),
           ),
-          child: const Icon(Icons.sort, size: 18),
         ),
       );
     }
 
     return SizedBox(
       height: 40,
-      child: OutlinedButton.icon(
-        onPressed: onPressed,
-        style: OutlinedButton.styleFrom(
-          foregroundColor: const Color(0xFF0C1935),
-          side: const BorderSide(color: Color(0xFFE5E7EB)),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
+      width: 180,
+      child: _DropdownShell(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: DropdownButtonHideUnderline(child: dropdown),
+      ),
+    );
+  }
+}
+
+class _SortOrderDropdown extends StatelessWidget {
+  const _SortOrderDropdown({
+    required this.value,
+    required this.onChanged,
+    required this.isMobile,
+  });
+
+  final _ProjectSortOrder value;
+  final ValueChanged<_ProjectSortOrder> onChanged;
+  final bool isMobile;
+
+  String _label(_ProjectSortOrder order) {
+    switch (order) {
+      case _ProjectSortOrder.oldestToNewest:
+        return 'Oldest to Newest';
+      case _ProjectSortOrder.newestToOldest:
+        return 'Newest to Oldest';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dropdown = DropdownButton<_ProjectSortOrder>(
+      value: value,
+      isDense: true,
+      onChanged: (v) {
+        if (v == null) return;
+        onChanged(v);
+      },
+      items: _ProjectSortOrder.values
+          .map(
+            (order) => DropdownMenuItem(
+              value: order,
+              child: Text(
+                _label(order),
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF0C1935),
+                ),
+              ),
+            ),
+          )
+          .toList(),
+      icon: const Icon(Icons.swap_vert, size: 18, color: Color(0xFF0C1935)),
+    );
+
+    if (isMobile) {
+      return SizedBox(
+        height: 40,
+        width: 40,
+        child: _DropdownShell(
+          child: DropdownButtonHideUnderline(
+            child: ButtonTheme(alignedDropdown: true, child: dropdown),
           ),
         ),
-        icon: const Icon(Icons.sort, size: 18),
-        label: const Text(
-          'Sort',
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
+      );
+    }
+
+    return SizedBox(
+      height: 40,
+      width: 200,
+      child: _DropdownShell(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: DropdownButtonHideUnderline(child: dropdown),
       ),
+    );
+  }
+}
+
+class _DropdownShell extends StatelessWidget {
+  const _DropdownShell({required this.child, this.padding = EdgeInsets.zero});
+
+  final Widget child;
+  final EdgeInsets padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        color: Colors.white,
+      ),
+      child: Center(child: child),
     );
   }
 }
@@ -929,6 +1167,7 @@ class ProjectOverviewData {
     required this.progress,
     required this.crewCount,
     required this.image,
+    required this.projectType,
     this.budget,
     this.createdAt = '',
   });
@@ -942,6 +1181,7 @@ class ProjectOverviewData {
   final double progress;
   final int crewCount;
   final String image;
+  final String projectType;
   final String? budget;
   final String createdAt;
 }

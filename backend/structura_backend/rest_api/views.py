@@ -103,6 +103,28 @@ def login_user(request):
             user = models.User.objects.get(email=email)
             # Check password
             if check_password(password, user.password_hash):
+                # If this is a Client user, also resolve the corresponding Client profile.
+                # Many parts of the mobile/web clients rely on `client_id` / `project_id`.
+                if user.role == 'Client':
+                    client = (
+                        models.Client.objects.filter(user_id=user).select_related('project_id').first()
+                        or models.Client.objects.filter(email=email).select_related('project_id').first()
+                    )
+                    return Response({
+                        'success': True,
+                        'message': 'Login successful',
+                        'user': {
+                            'user_id': user.user_id,
+                            'client_id': client.client_id if client else None,
+                            'project_id': client.project_id.project_id if (client and client.project_id) else None,
+                            'email': user.email,
+                            'first_name': user.first_name,
+                            'last_name': user.last_name,
+                            'role': 'Client',
+                            'type': 'Client',
+                        }
+                    }, status=status.HTTP_200_OK)
+
                 return Response({
                     'success': True,
                     'message': 'Login successful',
@@ -285,6 +307,38 @@ class ProjectViewSet(viewsets.ModelViewSet):
             return queryset
 
         if user_id:
+            # `user_id` is used by multiple client apps. For Project Managers it maps to Project.user_id.
+            # For Clients, projects are linked through Project.client (Client profile), not Project.user.
+            try:
+                user_id_int = int(user_id)
+            except (TypeError, ValueError):
+                user_id_int = None
+
+            if user_id_int is not None:
+                # First, interpret this as a real User PK if it exists.
+                user_obj = models.User.objects.filter(user_id=user_id_int).only('role').first()
+                if user_obj and user_obj.role == 'Client':
+                    queryset = models.Project.objects.filter(client__user_id=user_id_int).order_by('-created_at')
+                    print(f"✅ Filtered projects by client user_id count: {queryset.count()}")
+                    return queryset
+
+                if user_obj:
+                    queryset = models.Project.objects.filter(user_id=user_id_int).order_by('-created_at')
+                    print(f"✅ Filtered projects by PM user_id count: {queryset.count()}")
+                    return queryset
+
+                # Legacy/mobile fallback: some clients stored `user_id` as the Client PK.
+                # Only apply this if there is no matching User record; otherwise PM user_id values
+                # can accidentally collide with Client PKs.
+                if models.Client.objects.filter(client_id=user_id_int).exists():
+                    queryset = models.Project.objects.filter(client_id=user_id_int).order_by('-created_at')
+                    print(f"✅ Filtered projects by legacy client_id(user_id) count: {queryset.count()}")
+                    return queryset
+
+                queryset = models.Project.objects.none()
+                print("⚠️ user_id provided but no matching User/Client found; returning empty queryset")
+                return queryset
+
             queryset = models.Project.objects.filter(user_id=user_id).order_by('-created_at')
             print(f"✅ Filtered projects count: {queryset.count()}")
             return queryset

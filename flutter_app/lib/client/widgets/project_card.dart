@@ -57,9 +57,7 @@ class ProjectCard extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
-            child: _buildProjectImage(
-              height: isMobile ? 120 : 140,
-            ),
+            child: _buildProjectImage(height: isMobile ? 120 : 140),
           ),
           Padding(
             padding: EdgeInsets.all(isMobile ? 12.0 : 16.0),
