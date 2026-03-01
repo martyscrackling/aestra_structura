@@ -131,6 +131,14 @@ class Supervisors(models.Model):
     ]
     
     supervisor_id = models.AutoField(primary_key=True)
+    # Project Manager (User) that created/invited this supervisor.
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_supervisors',
+    )
     project_id = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name='supervisors')
 
     first_name = models.CharField(max_length=100, null=True, blank=True)
@@ -206,6 +214,14 @@ class Client(models.Model):
         ('deactivated', 'Deactivated'),
     ]
     client_id = models.AutoField(primary_key=True)
+    # Project Manager (User) that created/invited this client.
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_clients',
+    )
     user_id = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='client_profile')
     project_id = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name='clients')
 

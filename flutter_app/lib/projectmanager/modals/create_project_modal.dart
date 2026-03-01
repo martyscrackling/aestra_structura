@@ -188,7 +188,11 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
   Future<void> _fetchSupervisors() async {
     try {
       setState(() => _isLoadingSupervisors = true);
-      final response = await http.get(AppConfig.apiUri('supervisors/'));
+      final userId = AuthService().currentUser?['user_id'];
+      final uri = (userId != null)
+          ? AppConfig.apiUri('supervisors/?user_id=$userId')
+          : AppConfig.apiUri('supervisors/');
+      final response = await http.get(uri);
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
         print(
@@ -208,7 +212,11 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
   Future<void> _fetchClients() async {
     try {
       setState(() => _isLoadingClients = true);
-      final response = await http.get(AppConfig.apiUri('clients/'));
+      final userId = AuthService().currentUser?['user_id'];
+      final uri = (userId != null)
+          ? AppConfig.apiUri('clients/?user_id=$userId')
+          : AppConfig.apiUri('clients/');
+      final response = await http.get(uri);
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
         print(

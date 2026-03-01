@@ -6,6 +6,7 @@ import 'widgets/dashboard_header.dart';
 import 'widgets/manage_workers.dart';
 import 'project_details_page.dart';
 import '../services/app_config.dart';
+import '../services/auth_service.dart';
 
 class SubtaskManagePage extends StatefulWidget {
   final Phase phase;
@@ -415,8 +416,15 @@ class _ViewWorkForceModalState extends State<ViewWorkForceModal> {
         // Fetch details for each assigned worker
         List<Map<String, dynamic>> workers = [];
         for (var assignment in assignments) {
+          final userId = AuthService().currentUser?['user_id'];
           final workerResponse = await http.get(
-            AppConfig.apiUri('field-workers/${assignment['field_worker']}/'),
+            (userId != null)
+                ? AppConfig.apiUri(
+                    'field-workers/${assignment['field_worker']}/?user_id=$userId',
+                  )
+                : AppConfig.apiUri(
+                    'field-workers/${assignment['field_worker']}/',
+                  ),
           );
 
           if (workerResponse.statusCode == 200) {

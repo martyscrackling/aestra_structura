@@ -13,6 +13,34 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+def _get_request_pm_user_id(request):
+    """Best-effort extraction of the ProjectManager's `user_id` from the request.
+
+    Note: This project currently does not use auth tokens, so scoping relies on a
+    `user_id` being supplied by the client app.
+    """
+    raw = (
+        request.query_params.get('user_id')
+        or request.headers.get('X-User-Id')
+        or request.data.get('user_id')
+        or request.data.get('created_by')
+        or request.data.get('created_by_id')
+    )
+    try:
+        return int(raw) if raw is not None and raw != '' else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _get_pm_user_or_none(pm_user_id):
+    if pm_user_id is None:
+        return None
+    return models.User.objects.filter(
+        user_id=pm_user_id,
+        role__in=['ProjectManager', 'SuperAdmin'],
+    ).first()
+
 # Health check endpoint for debugging
 @api_view(['GET'])
 def health_check(request):
@@ -150,13 +178,27 @@ def login_user(request):
             supervisor = models.Supervisors.objects.get(email=email)
             # Check password
             if check_password(password, supervisor.password_hash):
+                # Prefer the explicit FK on the supervisor row, but fall back to
+                # resolving the project through Project.supervisor.
+                project_obj = supervisor.project_id
+                if project_obj is None:
+                    project_obj = (
+                        models.Project.objects.filter(supervisor=supervisor)
+                        .order_by('-created_at')
+                        .first()
+                    )
+                    if project_obj is not None:
+                        # Backfill for future logins
+                        supervisor.project_id = project_obj
+                        supervisor.save(update_fields=['project_id'])
+
                 return Response({
                     'success': True,
                     'message': 'Login successful',
                     'user': {
                         'supervisor_id': supervisor.supervisor_id,
                         'user_id': supervisor.supervisor_id,  # Use supervisor_id as user_id
-                        'project_id': supervisor.project_id.project_id if supervisor.project_id else None,
+                        'project_id': project_obj.project_id if project_obj else None,
                         'email': supervisor.email,
                         'first_name': supervisor.first_name,
                         'last_name': supervisor.last_name,
@@ -393,11 +435,64 @@ class SupervisorsViewSet(viewsets.ModelViewSet):
     queryset = models.Supervisors.objects.all()
     serializer_class = SupervisorsSerializer
 
+    def get_queryset(self):
+        pm_user_id = _get_request_pm_user_id(self.request)
+        project_id = self.request.query_params.get('project_id')
+
+        if pm_user_id is None:
+            if project_id:
+                return models.Supervisors.objects.filter(project_id=project_id)
+            return models.Supervisors.objects.none()
+
+        # Prefer explicit ownership; fall back to project ownership for older rows.
+        queryset = models.Supervisors.objects.filter(
+            Q(created_by_id=pm_user_id) | Q(project_id__user_id=pm_user_id)
+        ).distinct()
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+        return queryset
+
+    def perform_create(self, serializer):
+        pm_user_id = _get_request_pm_user_id(self.request)
+        pm_user = _get_pm_user_or_none(pm_user_id)
+        if pm_user is None:
+            # If a project is supplied, infer PM from the project itself.
+            project = serializer.validated_data.get('project_id')
+            if project is not None and getattr(project, 'user_id', None) is not None:
+                pm_user = project.user
+
+        serializer.save(created_by=pm_user)
+
 
 # Supervisor ViewSet (alias for backwards compatibility)
 class SupervisorViewSet(viewsets.ModelViewSet):
     queryset = models.Supervisors.objects.all()
     serializer_class = SupervisorSerializer
+
+    def get_queryset(self):
+        pm_user_id = _get_request_pm_user_id(self.request)
+        project_id = self.request.query_params.get('project_id')
+
+        if pm_user_id is None:
+            if project_id:
+                return models.Supervisors.objects.filter(project_id=project_id)
+            return models.Supervisors.objects.none()
+
+        queryset = models.Supervisors.objects.filter(
+            Q(created_by_id=pm_user_id) | Q(project_id__user_id=pm_user_id)
+        ).distinct()
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+        return queryset
+
+    def perform_create(self, serializer):
+        pm_user_id = _get_request_pm_user_id(self.request)
+        pm_user = _get_pm_user_or_none(pm_user_id)
+        if pm_user is None:
+            project = serializer.validated_data.get('project_id')
+            if project is not None and getattr(project, 'user_id', None) is not None:
+                pm_user = project.user
+        serializer.save(created_by=pm_user)
 
 
 # FieldWorker ViewSet
@@ -406,17 +501,60 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
     serializer_class = FieldWorkerSerializer
 
     def get_queryset(self):
-        queryset = models.FieldWorker.objects.all()
+        pm_user_id = _get_request_pm_user_id(self.request)
         project_id = self.request.query_params.get('project_id')
+        if pm_user_id is None:
+            if project_id:
+                return models.FieldWorker.objects.filter(project_id=project_id)
+            return models.FieldWorker.objects.none()
+
+        queryset = models.FieldWorker.objects.filter(
+            Q(user_id=pm_user_id) | Q(project_id__user_id=pm_user_id)
+        ).distinct()
         if project_id:
             queryset = queryset.filter(project_id=project_id)
         return queryset
+
+    def perform_create(self, serializer):
+        # If user_id wasn't provided, attach the PM based on request user_id.
+        pm_user_id = _get_request_pm_user_id(self.request)
+        pm_user = _get_pm_user_or_none(pm_user_id)
+        if serializer.validated_data.get('user_id') is None and pm_user is not None:
+            serializer.save(user_id=pm_user)
+        else:
+            serializer.save()
 
 
 # Client ViewSet
 class ClientViewSet(viewsets.ModelViewSet):
     queryset = models.Client.objects.all()
     serializer_class = ClientSerializer
+
+    def get_queryset(self):
+        pm_user_id = _get_request_pm_user_id(self.request)
+        project_id = self.request.query_params.get('project_id')
+        if pm_user_id is None:
+            if project_id:
+                return models.Client.objects.filter(project_id=project_id)
+            return models.Client.objects.none()
+
+        # Prefer explicit ownership; fall back to project ownership for older rows.
+        queryset = models.Client.objects.filter(
+            Q(created_by_id=pm_user_id) | Q(project_id__user_id=pm_user_id)
+        ).distinct()
+
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+        return queryset
+
+    def perform_create(self, serializer):
+        pm_user_id = _get_request_pm_user_id(self.request)
+        pm_user = _get_pm_user_or_none(pm_user_id)
+        if pm_user is None:
+            project = serializer.validated_data.get('project_id')
+            if project is not None and getattr(project, 'user_id', None) is not None:
+                pm_user = project.user
+        serializer.save(created_by=pm_user)
 
 
 # Phase ViewSet

@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../services/app_config.dart';
 import 'widgets/sidebar.dart';
+import 'widgets/supervisor_user_badge.dart';
 
 class Subtask {
   Subtask({
@@ -1066,10 +1067,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
           Row(
             children: [
               if (isDesktop)
-                Sidebar(
-                  activePage: 'Task Progress',
-                  keepVisible: true,
-                ),
+                Sidebar(activePage: 'Task Progress', keepVisible: true),
               Expanded(
                 child: Column(
                   children: [
@@ -1273,39 +1271,9 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                                   color: Colors.grey[100],
                                   borderRadius: BorderRadius.circular(8),
                                 ),
-                                child: Row(
-                                  children: [
-                                    SizedBox(
-                                      width: 36,
-                                      height: 36,
-                                      child: DecoratedBox(
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFE8D5F2),
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                        ),
-                                        child: const Center(
-                                          child: Text(
-                                            'A',
-                                            style: TextStyle(
-                                              color: Color(0xFFB088D9),
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    const Text(
-                                      'AESTRA',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        color: Color(0xFF0C1935),
-                                      ),
-                                    ),
-                                  ],
+                                child: const SupervisorUserBadge(
+                                  showSubtitle: false,
+                                  gap: 8,
                                 ),
                               ),
                             ),

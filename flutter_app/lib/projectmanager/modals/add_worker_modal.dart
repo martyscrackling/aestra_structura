@@ -87,8 +87,10 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
       });
 
       try {
+        final currentUserId = AuthService().currentUser?['user_id'];
         // Build payload with ALL fields including optional ones
         final Map<String, dynamic> supervisorData = {
+          if (currentUserId != null) 'user_id': currentUserId,
           'invited_by_email': AuthService().currentUser?['email'],
           'invited_by_name':
               '${AuthService().currentUser?['first_name'] ?? ''} ${AuthService().currentUser?['last_name'] ?? ''}'

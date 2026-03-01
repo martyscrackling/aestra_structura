@@ -83,15 +83,25 @@ class _WorkforcePageState extends State<WorkforcePage> {
 
   Future<void> _fetchWorkerGroups() async {
     try {
+      final userId = _tryParseInt(AuthService().currentUser?['user_id']);
+
+      final supervisorsUrl = (userId != null && userId > 0)
+          ? AppConfig.apiUri('supervisors/?user_id=$userId')
+          : (_projectId != null
+                ? AppConfig.apiUri('supervisors/?project_id=$_projectId')
+                : AppConfig.apiUri('supervisors/'));
+
+      final fieldWorkersUrl = (userId != null && userId > 0)
+          ? AppConfig.apiUri('field-workers/?user_id=$userId')
+          : (_projectId != null
+                ? AppConfig.apiUri('field-workers/?project_id=$_projectId')
+                : AppConfig.apiUri('field-workers/'));
+
       // Fetch supervisors
-      final supervisorResponse = await http.get(
-        AppConfig.apiUri('supervisors/'),
-      );
+      final supervisorResponse = await http.get(supervisorsUrl);
 
       // Fetch field workers
-      final fieldWorkerResponse = await http.get(
-        AppConfig.apiUri('field-workers/'),
-      );
+      final fieldWorkerResponse = await http.get(fieldWorkersUrl);
 
       List<WorkerInfo> allWorkers = [];
 

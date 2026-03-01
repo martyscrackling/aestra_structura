@@ -5,6 +5,7 @@ import 'widgets/responsive_page_layout.dart';
 import 'modals/add_client_modal.dart';
 import 'client_profile_page.dart';
 import '../services/app_config.dart';
+import '../services/auth_service.dart';
 
 class ClientsPage extends StatefulWidget {
   const ClientsPage({super.key});
@@ -36,7 +37,14 @@ class _ClientsPageState extends State<ClientsPage> {
 
   Future<List<ClientInfo>> _fetchClients() async {
     try {
-      final response = await http.get(AppConfig.apiUri('clients/'));
+      final userId = AuthService().currentUser?['user_id'];
+      if (userId == null) {
+        return [];
+      }
+
+      final response = await http.get(
+        AppConfig.apiUri('clients/?user_id=$userId'),
+      );
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -77,6 +85,11 @@ class _ClientsPageState extends State<ClientsPage> {
                 _searchQuery = query;
               });
             },
+            onClientAdded: () {
+              setState(() {
+                _clientsFuture = _fetchClients();
+              });
+            },
           ),
           const SizedBox(height: 24),
           FutureBuilder<List<ClientInfo>>(
@@ -103,8 +116,12 @@ class _ClientsPageState extends State<ClientsPage> {
 
 class _ClientsHeader extends StatelessWidget {
   final Function(String) onSearchChanged;
+  final VoidCallback onClientAdded;
 
-  const _ClientsHeader({required this.onSearchChanged});
+  const _ClientsHeader({
+    required this.onSearchChanged,
+    required this.onClientAdded,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -160,7 +177,10 @@ class _ClientsHeader extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              SizedBox(height: 40, child: _AddClientButton()),
+              SizedBox(
+                height: 40,
+                child: _AddClientButton(onClientAdded: onClientAdded),
+              ),
             ],
           ),
         ] else ...[
@@ -195,7 +215,7 @@ class _ClientsHeader extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             height: 40,
-            child: _AddClientButton(),
+            child: _AddClientButton(onClientAdded: onClientAdded),
           ),
         ],
       ],
@@ -204,6 +224,10 @@ class _ClientsHeader extends StatelessWidget {
 }
 
 class _AddClientButton extends StatelessWidget {
+  const _AddClientButton({required this.onClientAdded});
+
+  final VoidCallback onClientAdded;
+
   @override
   Widget build(BuildContext context) {
     return ElevatedButton.icon(
@@ -211,7 +235,9 @@ class _AddClientButton extends StatelessWidget {
         showDialog(
           context: context,
           builder: (context) => const AddClientModal(),
-        );
+        ).then((_) {
+          onClientAdded();
+        });
       },
       icon: const Icon(Icons.add, color: Colors.white),
       label: const Text('Add Client', style: TextStyle(color: Colors.white)),

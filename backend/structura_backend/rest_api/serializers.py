@@ -182,6 +182,7 @@ class SupervisorsSerializer(serializers.ModelSerializer):
             'invited_by_name',
             'project_name',
             'supervisor_id',
+            'created_by',
             'project_id',
             'first_name',
             'middle_name',
@@ -199,6 +200,7 @@ class SupervisorsSerializer(serializers.ModelSerializer):
         ]
         extra_kwargs = {
             'project_id': {'required': False, 'allow_null': True},
+            'created_by': {'required': False, 'allow_null': True, 'read_only': True},
             'supervisor_id': {'read_only': True},
             'created_at': {'read_only': True},
             'password_hash': {'write_only': True},
@@ -259,6 +261,7 @@ class SupervisorSerializer(serializers.ModelSerializer):
             'invited_by_name',
             'project_name',
             'supervisor_id',
+            'created_by',
             'project_id',
             'first_name',
             'middle_name',
@@ -276,6 +279,7 @@ class SupervisorSerializer(serializers.ModelSerializer):
         ]
         extra_kwargs = {
             'project_id': {'required': False, 'allow_null': True},
+            'created_by': {'required': False, 'allow_null': True, 'read_only': True},
             'supervisor_id': {'read_only': True},
             'created_at': {'read_only': True},
             'password_hash': {'write_only': True},
@@ -382,6 +386,7 @@ class ClientSerializer(serializers.ModelSerializer):
             'invited_by_name',
             'project_name',
             'client_id',
+            'created_by',
             'user_id',
             'project_id',
             'first_name',
@@ -397,6 +402,7 @@ class ClientSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'user_id': {'required': False, 'allow_null': True},
             'project_id': {'required': False, 'allow_null': True},
+            'created_by': {'required': False, 'allow_null': True, 'read_only': True},
             'client_id': {'read_only': True},
             'created_at': {'read_only': True},
             'password_hash': {'write_only': True},  # Only accept on POST/PUT, don't return in GET

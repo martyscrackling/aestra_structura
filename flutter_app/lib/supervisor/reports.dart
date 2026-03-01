@@ -3,6 +3,7 @@ import 'widgets/sidebar.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import '../services/auth_service.dart';
+import 'widgets/supervisor_user_badge.dart';
 
 class AttendanceReport {
   AttendanceReport({
@@ -555,8 +556,7 @@ class _ReportsPageState extends State<ReportsPage> {
         children: [
           Row(
             children: [
-              if (isDesktop)
-                Sidebar(activePage: 'Reports', keepVisible: true),
+              if (isDesktop) Sidebar(activePage: 'Reports', keepVisible: true),
               Expanded(
                 child: Column(
                   children: [
@@ -739,53 +739,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                   color: Colors.grey[100],
                                   borderRadius: BorderRadius.circular(8),
                                 ),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 36,
-                                      height: 36,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFE8D5F2),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: const Center(
-                                        child: Text(
-                                          "A",
-                                          style: TextStyle(
-                                            color: Color(0xFFB088D9),
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    const Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          "AESTRA",
-                                          style: TextStyle(
-                                            color: Color(0xFF0C1935),
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                        Text(
-                                          "Supervisor",
-                                          style: TextStyle(
-                                            color: Colors.grey,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w400,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
+                                child: const SupervisorUserBadge(),
                               ),
                             ),
                           if (isMobile)

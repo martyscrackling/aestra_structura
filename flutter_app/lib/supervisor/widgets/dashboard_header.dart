@@ -18,6 +18,89 @@ class DashboardHeader extends StatefulWidget {
 class _DashboardHeaderState extends State<DashboardHeader> {
   // Notifications are handled by _SupervisorNotificationMenu.
 
+  Map<String, dynamic>? _profileUser;
+
+  @override
+  void initState() {
+    super.initState();
+    _hydrateSupervisorProfileIfNeeded();
+  }
+
+  Future<void> _hydrateSupervisorProfileIfNeeded() async {
+    try {
+      final auth = AuthService();
+      final user = auth.currentUser;
+      final first = (user?['first_name'] as String? ?? '').trim();
+      final last = (user?['last_name'] as String? ?? '').trim();
+      final hasName = ('$first $last').trim().isNotEmpty;
+
+      if (hasName) {
+        if (!mounted) return;
+        setState(() {
+          _profileUser = user;
+        });
+        return;
+      }
+
+      final supervisorIdRaw = user?['supervisor_id'];
+      final supervisorId = supervisorIdRaw is int
+          ? supervisorIdRaw
+          : int.tryParse(supervisorIdRaw?.toString() ?? '');
+
+      final projectIdRaw = user?['project_id'];
+      final projectId = projectIdRaw is int
+          ? projectIdRaw
+          : int.tryParse(projectIdRaw?.toString() ?? '');
+
+      if (supervisorId == null || projectId == null) {
+        if (!mounted) return;
+        setState(() {
+          _profileUser = user;
+        });
+        return;
+      }
+
+      final response = await http.get(
+        AppConfig.apiUri('supervisors/$supervisorId/?project_id=$projectId'),
+      );
+
+      if (response.statusCode != 200) {
+        if (!mounted) return;
+        setState(() {
+          _profileUser = user;
+        });
+        return;
+      }
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map) {
+        if (!mounted) return;
+        setState(() {
+          _profileUser = user;
+        });
+        return;
+      }
+
+      final profile = Map<String, dynamic>.from(decoded);
+      await auth.updateLocalUserFields({
+        'first_name': profile['first_name'],
+        'last_name': profile['last_name'],
+        'email': profile['email'],
+      });
+
+      if (!mounted) return;
+      setState(() {
+        _profileUser = auth.currentUser;
+      });
+    } catch (_) {
+      // Best-effort only; fall back to cached auth user.
+      if (!mounted) return;
+      setState(() {
+        _profileUser = AuthService().currentUser;
+      });
+    }
+  }
+
   String _displayName(Map<String, dynamic>? user) {
     final first = (user?['first_name'] as String? ?? '').trim();
     final last = (user?['last_name'] as String? ?? '').trim();
@@ -44,11 +127,8 @@ class _DashboardHeaderState extends State<DashboardHeader> {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth <= 600;
-
     final auth = AuthService();
-    final user = auth.currentUser;
+    final user = _profileUser ?? auth.currentUser;
     final name = _displayName(user);
     final subtitle = _subtitle(user);
 

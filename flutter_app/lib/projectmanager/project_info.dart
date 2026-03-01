@@ -7,6 +7,7 @@ import 'widgets/dashboard_header.dart';
 import 'widgets/responsive_page_layout.dart';
 import 'project_details_page.dart' as task_details;
 import '../services/app_config.dart';
+import '../services/auth_service.dart';
 
 class ProjectDetailsPage extends StatefulWidget {
   final String projectTitle;
@@ -31,6 +32,17 @@ class ProjectDetailsPage extends StatefulWidget {
 }
 
 class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
+  int? _toInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value);
+    if (value is Map) {
+      final map = value.cast<String, dynamic>();
+      return _toInt(map['id'] ?? map['client_id'] ?? map['supervisor_id']);
+    }
+    return int.tryParse(value.toString());
+  }
+
   int? _calculateDaysLeft() {
     if (_projectInfo == null || _projectInfo!['end_date'] == null) return null;
     try {
@@ -86,9 +98,14 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
 
   Future<void> _fetchProjectDetails() async {
     try {
+      final userId = AuthService().currentUser?['user_id'];
+      final scopeSuffix = (userId != null) ? '&user_id=$userId' : '';
+
       // First fetch project details to get client_id and supervisor_id
       final projectResponse = await http.get(
-        AppConfig.apiUri('projects/${widget.projectId}/'),
+        (userId != null)
+            ? AppConfig.apiUri('projects/${widget.projectId}/?user_id=$userId')
+            : AppConfig.apiUri('projects/${widget.projectId}/'),
       );
 
       if (projectResponse.statusCode != 200) {
@@ -100,8 +117,8 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
       }
 
       final projectData = jsonDecode(projectResponse.body);
-      final clientId = projectData['client'];
-      final supervisorId = projectData['supervisor'];
+      final clientId = _toInt(projectData['client']);
+      final supervisorId = _toInt(projectData['supervisor']);
 
       setState(() {
         _projectInfo = projectData;
@@ -115,16 +132,59 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
       if (clientId != null) {
         try {
           final clientResponse = await http.get(
-            AppConfig.apiUri('clients/$clientId/'),
+            (userId != null)
+                ? AppConfig.apiUri('clients/$clientId/?user_id=$userId')
+                : AppConfig.apiUri(
+                    'clients/$clientId/?project_id=${widget.projectId}',
+                  ),
           );
           if (clientResponse.statusCode == 200) {
             setState(() {
               _clientInfo = jsonDecode(clientResponse.body);
               print('✅ Client info fetched: ${_clientInfo?['email']}');
             });
+          } else {
+            print(
+              '❌ Failed to fetch client: ${clientResponse.statusCode} ${clientResponse.body}',
+            );
+            // Fallback: if the project FK is set only on the Client side, fetch by project_id
+            final listResponse = await http.get(
+              AppConfig.apiUri(
+                'clients/?project_id=${widget.projectId}$scopeSuffix',
+              ),
+            );
+            if (listResponse.statusCode == 200) {
+              final decoded = jsonDecode(listResponse.body);
+              if (decoded is List &&
+                  decoded.isNotEmpty &&
+                  decoded.first is Map) {
+                setState(() {
+                  _clientInfo = Map<String, dynamic>.from(decoded.first);
+                });
+              }
+            }
           }
         } catch (e) {
           print('⚠️ Error fetching client: $e');
+        }
+      } else {
+        // Fallback: project has no client FK set, but a Client may still be linked via Client.project_id
+        try {
+          final listResponse = await http.get(
+            AppConfig.apiUri(
+              'clients/?project_id=${widget.projectId}$scopeSuffix',
+            ),
+          );
+          if (listResponse.statusCode == 200) {
+            final decoded = jsonDecode(listResponse.body);
+            if (decoded is List && decoded.isNotEmpty && decoded.first is Map) {
+              setState(() {
+                _clientInfo = Map<String, dynamic>.from(decoded.first);
+              });
+            }
+          }
+        } catch (e) {
+          print('⚠️ Error fetching client list fallback: $e');
         }
       }
 
@@ -133,7 +193,11 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         try {
           print('🔍 Attempting to fetch supervisor with ID: $supervisorId');
           final supervisorResponse = await http.get(
-            AppConfig.apiUri('supervisors/$supervisorId/'),
+            (userId != null)
+                ? AppConfig.apiUri('supervisors/$supervisorId/?user_id=$userId')
+                : AppConfig.apiUri(
+                    'supervisors/$supervisorId/?project_id=${widget.projectId}',
+                  ),
           );
           print(
             '📡 Supervisor response status: ${supervisorResponse.statusCode}',
@@ -149,12 +213,46 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
             print(
               '❌ Failed to fetch supervisor: ${supervisorResponse.statusCode}',
             );
+            // Fallback: fetch by project_id in case the FK is only set on the Supervisor side
+            final listResponse = await http.get(
+              AppConfig.apiUri(
+                'supervisors/?project_id=${widget.projectId}$scopeSuffix',
+              ),
+            );
+            if (listResponse.statusCode == 200) {
+              final decoded = jsonDecode(listResponse.body);
+              if (decoded is List &&
+                  decoded.isNotEmpty &&
+                  decoded.first is Map) {
+                setState(() {
+                  _supervisorInfo = Map<String, dynamic>.from(decoded.first);
+                });
+              }
+            }
           }
         } catch (e) {
           print('Error fetching supervisor: $e');
         }
       } else {
         print('⚠️ No supervisor_id found in project data');
+        // Fallback: project has no supervisor FK set, but a Supervisor may still be linked via Supervisors.project_id
+        try {
+          final listResponse = await http.get(
+            AppConfig.apiUri(
+              'supervisors/?project_id=${widget.projectId}$scopeSuffix',
+            ),
+          );
+          if (listResponse.statusCode == 200) {
+            final decoded = jsonDecode(listResponse.body);
+            if (decoded is List && decoded.isNotEmpty && decoded.first is Map) {
+              setState(() {
+                _supervisorInfo = Map<String, dynamic>.from(decoded.first);
+              });
+            }
+          }
+        } catch (e) {
+          print('⚠️ Error fetching supervisor list fallback: $e');
+        }
       }
 
       // Fetch phases for accurate progress calculation

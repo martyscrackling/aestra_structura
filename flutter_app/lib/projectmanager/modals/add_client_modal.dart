@@ -126,7 +126,9 @@ class _AddClientModalState extends State<AddClientModal> {
       });
 
       try {
+        final currentUserId = AuthService().currentUser?['user_id'];
         final clientData = {
+          if (currentUserId != null) 'user_id': currentUserId,
           'invited_by_email': AuthService().currentUser?['email'],
           'invited_by_name':
               '${AuthService().currentUser?['first_name'] ?? ''} ${AuthService().currentUser?['last_name'] ?? ''}'

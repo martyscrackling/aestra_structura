@@ -62,8 +62,10 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
 
   Future<void> _fetchFieldWorkers() async {
     try {
-      print('🔍 Fetching all field workers');
-      final response = await http.get(AppConfig.apiUri('field-workers/'));
+      print('🔍 Fetching field workers for project ${widget.phase.projectId}');
+      final response = await http.get(
+        AppConfig.apiUri('field-workers/?project_id=${widget.phase.projectId}'),
+      );
 
       print('✅ Response status: ${response.statusCode}');
       print('✅ Response body: ${response.body}');
