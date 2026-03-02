@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .email_utils import send_invitation_email
+from .email_utils import send_invitation_email, send_project_assignment_email
 from app import models
 
 
@@ -104,18 +104,43 @@ class ProjectSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         # Create the project first
         project = models.Project.objects.create(**validated_data)
+
+        pm_user = getattr(project, 'user', None)
+        pm_name = ''
+        pm_email = ''
+        if pm_user is not None:
+            pm_name = f"{getattr(pm_user, 'first_name', '') or ''} {getattr(pm_user, 'last_name', '') or ''}".strip()
+            pm_email = (getattr(pm_user, 'email', '') or '').strip()
         
         # Update supervisor's project_id if supervisor was assigned
         if validated_data.get('supervisor'):
             supervisor = validated_data['supervisor']
             supervisor.project_id = project
             supervisor.save()
+
+            send_project_assignment_email(
+                to_email=supervisor.email,
+                first_name=getattr(supervisor, 'first_name', None),
+                role='Supervisor',
+                invited_by_email=pm_email,
+                invited_by_name=pm_name,
+                project_name=project.project_name,
+            )
         
         # Update client's project_id if client was assigned
         if validated_data.get('client'):
             client = validated_data['client']
             client.project_id = project
             client.save()
+
+            send_project_assignment_email(
+                to_email=client.email,
+                first_name=getattr(client, 'first_name', None),
+                role='Client',
+                invited_by_email=pm_email,
+                invited_by_name=pm_name,
+                project_name=project.project_name,
+            )
         
         return project
     
@@ -154,6 +179,34 @@ class ProjectSerializer(serializers.ModelSerializer):
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
+
+        pm_user = getattr(instance, 'user', None)
+        pm_name = ''
+        pm_email = ''
+        if pm_user is not None:
+            pm_name = f"{getattr(pm_user, 'first_name', '') or ''} {getattr(pm_user, 'last_name', '') or ''}".strip()
+            pm_email = (getattr(pm_user, 'email', '') or '').strip()
+
+        # If a new assignment happened, notify the assignee.
+        if new_supervisor and new_supervisor != old_supervisor:
+            send_project_assignment_email(
+                to_email=new_supervisor.email,
+                first_name=getattr(new_supervisor, 'first_name', None),
+                role='Supervisor',
+                invited_by_email=pm_email,
+                invited_by_name=pm_name,
+                project_name=instance.project_name,
+            )
+
+        if new_client and new_client != old_client:
+            send_project_assignment_email(
+                to_email=new_client.email,
+                first_name=getattr(new_client, 'first_name', None),
+                role='Client',
+                invited_by_email=pm_email,
+                invited_by_name=pm_name,
+                project_name=instance.project_name,
+            )
         
         return instance
 
