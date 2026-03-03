@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth/login.dart';
 import 'auth/signup.dart';
 import 'auth/infos.dart';
+import 'auth/change_password.dart';
 import 'projectmanager/dashboard_page.dart';
 import 'projectmanager/projects_page.dart';
 import 'projectmanager/workforce_page.dart';
@@ -70,6 +71,27 @@ class StructuraApp extends StatelessWidget {
           path: '/login',
           builder: (context, state) => const LoginPage(),
           name: 'login',
+        ),
+        GoRoute(
+          path: '/change-password',
+          name: 'change-password',
+          builder: (context, state) {
+            final extra = state.extra;
+            if (extra is! Map) {
+              return const LoginPage();
+            }
+            final email = (extra['email'] ?? '') as String;
+            final currentPassword = (extra['currentPassword'] ?? '') as String;
+            final redirectTo = (extra['redirectTo'] ?? '/login') as String;
+            if (email.isEmpty || currentPassword.isEmpty) {
+              return const LoginPage();
+            }
+            return ChangePasswordPage(
+              email: email,
+              currentPassword: currentPassword,
+              redirectTo: redirectTo,
+            );
+          },
         ),
         GoRoute(
           path: '/signup',

@@ -916,7 +916,7 @@ class _PhaseCard extends StatelessWidget {
               ],
             ],
           ),
-          // Progress bar
+          // Progress barnd
           const SizedBox(height: 12),
           Row(
             children: [

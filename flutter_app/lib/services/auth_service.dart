@@ -100,6 +100,39 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  /// Change password for Supervisor/Client accounts.
+  Future<bool> changePassword({
+    required String email,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final response = await http
+          .post(
+            AppConfig.apiUri('change-password/'),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({
+              "email": email,
+              "current_password": currentPassword,
+              "new_password": newPassword,
+            }),
+          )
+          .timeout(_networkTimeout);
+
+      if (response.statusCode == 200) {
+        final result = jsonDecode(response.body);
+        return result['success'] == true;
+      }
+      return false;
+    } on TimeoutException catch (e) {
+      print('Change password timeout after ${_networkTimeout.inSeconds}s: $e');
+      return false;
+    } catch (e) {
+      print("Change password error: $e");
+      return false;
+    }
+  }
+
   Future<bool> signup(
     String email,
     String password,

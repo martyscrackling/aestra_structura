@@ -310,7 +310,25 @@ class _LoginPageState extends State<LoginPage> {
                   if (loginSuccess) {
                     // Get the user role to determine navigation
                     final userRole = authService.currentUser?['role'];
+                    final forcePasswordChange =
+                        authService.currentUser?['force_password_change'] ==
+                            true;
                     print('Login successful. User role: $userRole');
+
+                    if (forcePasswordChange &&
+                        (userRole == 'Supervisor' || userRole == 'Client')) {
+                      final redirectTo =
+                          userRole == 'Supervisor' ? '/supervisor' : '/client';
+                      context.go(
+                        '/change-password',
+                        extra: {
+                          'email': email,
+                          'currentPassword': password,
+                          'redirectTo': redirectTo,
+                        },
+                      );
+                      return;
+                    }
 
                     if (userRole == 'Supervisor') {
                       // Navigate to Supervisor Dashboard

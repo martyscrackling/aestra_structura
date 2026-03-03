@@ -150,6 +150,7 @@ def login_user(request):
                             'last_name': user.last_name,
                             'role': 'Client',
                             'type': 'Client',
+                            'force_password_change': password == 'PASSWORD',
                         }
                     }, status=status.HTTP_200_OK)
 
@@ -204,6 +205,7 @@ def login_user(request):
                         'last_name': supervisor.last_name,
                         'role': 'Supervisor',
                         'type': 'Supervisor',  # Indicate this is a supervisor
+                        'force_password_change': password == 'PASSWORD',
                     }
                 }, status=status.HTTP_200_OK)
             else:
@@ -231,6 +233,7 @@ def login_user(request):
                         'last_name': client.last_name,
                         'role': 'Client',
                         'type': 'Client',  # Indicate this is a client
+                        'force_password_change': password == 'PASSWORD',
                     }
                 }, status=status.HTTP_200_OK)
             else:
@@ -248,6 +251,94 @@ def login_user(request):
         return Response(
             {'success': False, 'message': str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@csrf_exempt
+@api_view(['POST'])
+def change_password(request):
+    """Change password for Supervisor/Client accounts.
+
+    Body:
+      {
+        "email": "...",
+        "current_password": "...",
+        "new_password": "..."
+      }
+    """
+    try:
+        data = json.loads(request.body)
+        email = (data.get('email') or '').strip()
+        current_password = data.get('current_password') or ''
+        new_password = data.get('new_password') or ''
+
+        if not email or not current_password or not new_password:
+            return Response(
+                {'success': False, 'message': 'Email, current_password, and new_password are required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if new_password == current_password:
+            return Response(
+                {'success': False, 'message': 'New password must be different from current password'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if new_password == 'PASSWORD':
+            return Response(
+                {'success': False, 'message': 'New password must not be PASSWORD'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Supervisors table
+        supervisor = models.Supervisors.objects.filter(email=email).first()
+        if supervisor is not None:
+            if not check_password(current_password, supervisor.password_hash):
+                return Response(
+                    {'success': False, 'message': 'Current password is incorrect'},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+            supervisor.password_hash = new_password
+            supervisor.save(update_fields=['password_hash'])
+            return Response({'success': True, 'message': 'Password updated'}, status=status.HTTP_200_OK)
+
+        # Clients table
+        client = models.Client.objects.filter(email=email).first()
+        if client is not None:
+            if not check_password(current_password, client.password_hash):
+                return Response(
+                    {'success': False, 'message': 'Current password is incorrect'},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+            client.password_hash = new_password
+            client.save(update_fields=['password_hash'])
+            return Response({'success': True, 'message': 'Password updated'}, status=status.HTTP_200_OK)
+
+        # Client users may also exist in the User table with role=Client
+        user = models.User.objects.filter(email=email, role='Client').first()
+        if user is not None:
+            if not check_password(current_password, user.password_hash):
+                return Response(
+                    {'success': False, 'message': 'Current password is incorrect'},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+            user.password_hash = new_password
+            user.save(update_fields=['password_hash'])
+            return Response({'success': True, 'message': 'Password updated'}, status=status.HTTP_200_OK)
+
+        return Response(
+            {'success': False, 'message': 'Email not found in system'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    except json.JSONDecodeError:
+        return Response(
+            {'success': False, 'message': 'Invalid JSON body'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    except Exception as e:
+        return Response(
+            {'success': False, 'message': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
 
