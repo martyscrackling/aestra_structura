@@ -342,10 +342,10 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                     Expanded(
                       child: Text(
                         daysLeft == 0
-                            ? 'Today is the expected end date for this project and you are $progressPercent% progress.'
+                            ? 'Today is the expected end date for this project'
                             : daysLeft == 1
-                            ? '1 day left before the expected end date. Current progress: $progressPercent%.'
-                            : '$daysLeft days left before the expected end date. Current progress: $progressPercent%.',
+                            ? '1 day left before the expected end date.'
+                            : '$daysLeft days left before the expected end date.',
                         style: TextStyle(
                           color: daysLeft <= 3
                               ? const Color(0xFFFF9800)
