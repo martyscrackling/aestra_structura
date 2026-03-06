@@ -342,6 +342,141 @@ def change_password(request):
         )
 
 
+# Subscription Management Endpoints
+@api_view(['GET'])
+def check_subscription_status(request):
+    """
+    Check subscription status for a user (ProjectManager).
+    Query param: user_id
+    
+    Returns subscription status, trial info, and whether user can edit/create.
+    """
+    try:
+        user_id = request.query_params.get('user_id')
+        
+        if not user_id:
+            return Response(
+                {'success': False, 'message': 'user_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            user = models.User.objects.get(user_id=user_id, role='ProjectManager')
+        except models.User.DoesNotExist:
+            return Response(
+                {'success': False, 'message': 'User not found or not a ProjectManager'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        is_valid = user.is_subscription_valid()
+        can_edit = user.can_edit()
+        
+        response_data = {
+            'success': True,
+            'user_id': user.user_id,
+            'email': user.email,
+            'subscription_status': user.subscription_status,
+            'is_subscription_valid': is_valid,
+            'can_edit': can_edit,
+            'can_create': can_edit,
+        }
+        
+        if user.subscription_status == 'trial':
+            response_data.update({
+                'trial_start_date': user.trial_start_date.isoformat() if user.trial_start_date else None,
+                'trial_end_date': user.trial_end_date.isoformat() if user.trial_end_date else None,
+                'trial_days_remaining': user.get_trial_days_remaining(),
+                'trial_status_color': user.get_trial_status_color(),
+            })
+        elif user.subscription_status == 'active':
+            response_data.update({
+                'subscription_start_date': user.subscription_start_date.isoformat() if user.subscription_start_date else None,
+                'subscription_end_date': user.subscription_end_date.isoformat() if user.subscription_end_date else None,
+                'subscription_days_remaining': user.get_subscription_days_remaining(),
+                'subscription_years': user.subscription_years,
+            })
+        
+        return Response(response_data, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Error checking subscription status: {str(e)}")
+        return Response(
+            {'success': False, 'message': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+def activate_subscription(request):
+    """
+    Activate subscription for a user (admin use).
+    Body: {
+        "user_id": int,
+        "subscription_years": int (default 1),
+        "amount": decimal (optional)
+    }
+    """
+    try:
+        data = json.loads(request.body)
+        user_id = data.get('user_id')
+        subscription_years = data.get('subscription_years', 1)
+        amount = data.get('amount', 0)
+        
+        if not user_id:
+            return Response(
+                {'success': False, 'message': 'user_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            user = models.User.objects.get(user_id=user_id, role='ProjectManager')
+        except models.User.DoesNotExist:
+            return Response(
+                {'success': False, 'message': 'User not found or not a ProjectManager'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Activate subscription
+        user.subscription_status = 'active'
+        user.subscription_start_date = timezone.now()
+        user.subscription_end_date = timezone.now() + timedelta(days=365 * subscription_years)
+        user.subscription_years = subscription_years
+        user.payment_date = timezone.now()
+        user.save()
+        
+        # Create payment history record
+        from app.models import PaymentHistory
+        PaymentHistory.objects.create(
+            user=user,
+            amount=amount,
+            subscription_years=subscription_years,
+            payment_status='completed'
+        )
+        
+        # Send confirmation email
+        from app.utils import send_subscription_activated_email
+        send_subscription_activated_email(user)
+        
+        return Response({
+            'success': True,
+            'message': 'Subscription activated successfully',
+            'subscription_end_date': user.subscription_end_date.isoformat(),
+            'subscription_years': user.subscription_years,
+        }, status=status.HTTP_200_OK)
+        
+    except json.JSONDecodeError:
+        return Response(
+            {'success': False, 'message': 'Invalid JSON body'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    except Exception as e:
+        logger.error(f"Error activating subscription: {str(e)}")
+        return Response(
+            {'success': False, 'message': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
 # Address Hierarchy ViewSets
 class RegionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = models.Region.objects.all()
