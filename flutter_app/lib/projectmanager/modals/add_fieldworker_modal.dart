@@ -93,10 +93,15 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
       try {
         final currentUser = AuthService().currentUser;
         final currentUserType = (currentUser?['type'] ?? '').toString();
-        final isRealUser = currentUserType.toLowerCase() == 'user' ||
-            (currentUserType.isEmpty && currentUser?['supervisor_id'] == null && currentUser?['client_id'] == null);
+        final isRealUser =
+            currentUserType.toLowerCase() == 'user' ||
+            (currentUserType.isEmpty &&
+                currentUser?['supervisor_id'] == null &&
+                currentUser?['client_id'] == null);
 
-        final currentUserId = (isRealUser && currentUser != null) ? currentUser['user_id'] : null;
+        final currentUserId = (isRealUser && currentUser != null)
+            ? currentUser['user_id']
+            : null;
 
         final fieldWorkerData = {
           if (currentUserId != null) 'user_id': currentUserId,
@@ -195,7 +200,7 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
         vertical: isMobile ? 24 : 40,
       ),
       child: Container(
-        width: isMobile ? double.infinity : 900,
+        width: isMobile ? double.infinity : 700,
         constraints: BoxConstraints(
           maxHeight: isMobile ? screenHeight * 0.9 : 650,
         ),
@@ -213,23 +218,15 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
               ),
               child: Row(
                 children: [
-                  IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.arrow_back),
-                    color: const Color(0xFF0C1935),
-                    padding: EdgeInsets.zero,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      widget.workerType,
-                      style: TextStyle(
-                        fontSize: isMobile ? 18 : 20,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF0C1935),
-                      ),
+                  Text(
+                    widget.workerType,
+                    style: TextStyle(
+                      fontSize: isMobile ? 18 : 20,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF0C1935),
                     ),
                   ),
+                  const Spacer(),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.close),
@@ -659,8 +656,8 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
       onTap: onTap,
       onChanged: onChanged,
       decoration: InputDecoration(
-        hintText: hintText,
-        hintStyle: TextStyle(fontSize: 14, color: Colors.grey[400]),
+        labelText: hintText,
+        labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
         filled: true,
         fillColor: const Color(0xFFF9FAFB),
         suffixIcon: suffixIcon != null
@@ -673,6 +670,10 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(color: Colors.grey[300]!),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFF0C1935), width: 2),
         ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
