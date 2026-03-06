@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../services/app_config.dart';
 import '../services/auth_service.dart';
+import '../services/subscription_helper.dart';
 
 class ClSettingsPage extends StatefulWidget {
   const ClSettingsPage({super.key});
@@ -121,6 +122,13 @@ class _ClSettingsPageState extends State<ClSettingsPage> {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(payload),
       );
+
+      if (!mounted) return;
+
+      // Check for subscription expiry first
+      if (SubscriptionHelper.handleResponse(context, response)) {
+        return;
+      }
 
       if (response.statusCode != 200) {
         throw Exception('Save failed');

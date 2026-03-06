@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../../services/app_config.dart';
 import '../../services/auth_service.dart';
+import '../../services/subscription_helper.dart';
 
 class AddWorkerModal extends StatefulWidget {
   final String workerType;
@@ -130,6 +131,16 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
 
         debugPrint('Response status: ${response.statusCode}');
         debugPrint('Response body: ${response.body}');
+
+        if (!mounted) return;
+
+        // Check for subscription expiry first
+        if (SubscriptionHelper.handleResponse(context, response)) {
+          setState(() {
+            _isLoading = false;
+          });
+          return;
+        }
 
         if (response.statusCode == 201 || response.statusCode == 200) {
           if (mounted) {
