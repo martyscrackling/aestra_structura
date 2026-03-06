@@ -46,6 +46,39 @@ class _WorkforcePageState extends State<WorkforcePage> {
     return int.tryParse(value.toString());
   }
 
+  String? _resolveMediaUrl(dynamic raw) {
+    if (raw == null) return null;
+    final value = raw.toString().trim();
+    if (value.isEmpty) return null;
+
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return value;
+    }
+
+    final base = Uri.parse(AppConfig.apiBaseUrl);
+    final origin = Uri(
+      scheme: base.scheme,
+      host: base.host,
+      port: base.hasPort ? base.port : null,
+    );
+
+    if (value.startsWith('/')) {
+      return origin.resolve(value).toString();
+    }
+    if (value.startsWith('media/')) {
+      return origin.resolve('/$value').toString();
+    }
+    if (value.startsWith('client_images/')) {
+      return origin.resolve('/media/$value').toString();
+    }
+    if (value.startsWith('fieldworker_images/')) {
+      return origin.resolve('/media/$value').toString();
+    }
+
+    // Fallback: assume it's under MEDIA_URL.
+    return origin.resolve('/media/$value').toString();
+  }
+
   Future<void> _resolveProjectId() async {
     if (_projectId != null) return;
 
@@ -127,12 +160,14 @@ class _WorkforcePageState extends State<WorkforcePage> {
         final List<dynamic> fieldWorkers = jsonDecode(fieldWorkerResponse.body);
         allWorkers.addAll(
           fieldWorkers.map((fieldWorker) {
+            final mediaUrl = _resolveMediaUrl(fieldWorker['photo']);
             return WorkerInfo(
               name: '${fieldWorker['first_name']} ${fieldWorker['last_name']}',
               email: 'N/A',
               phone: fieldWorker['phone_number'] ?? 'N/A',
               role: fieldWorker['role'] ?? 'Unknown',
-              avatarUrl: 'https://randomuser.me/api/portraits/men/1.jpg',
+              avatarUrl:
+                  mediaUrl ?? 'https://randomuser.me/api/portraits/men/1.jpg',
               type: 'Field Worker',
             );
           }).toList(),

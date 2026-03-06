@@ -199,6 +199,8 @@ class FieldWorker(models.Model):
     philhealth_id = models.CharField(max_length=20, null=True, blank=True)
     pagibig_id = models.CharField(max_length=20, null=True, blank=True)
     payrate = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
+    photo = models.FileField(upload_to='fieldworker_images/', null=True, blank=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
     

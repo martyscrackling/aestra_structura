@@ -8,6 +8,8 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 load_dotenv()
 
+from corsheaders.defaults import default_headers
+
 import dj_database_url
 
 
@@ -95,6 +97,11 @@ if os.getenv("CORS_ALLOW_LOCALHOST", "0").strip() == "1":
         r"^http://localhost(:\d+)?$",
         r"^http://127\.0\.0\.1(:\d+)?$",
     ]
+
+# Allow custom headers used by the Flutter clients.
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'x-user-id',
+]
 
 _csrf_trusted = os.getenv("CSRF_TRUSTED_ORIGINS", "").strip()
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_trusted.split(",") if o.strip()]

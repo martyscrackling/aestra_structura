@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -35,6 +36,7 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
   String _selectedRole = 'Mason';
   bool _isCustomRole = false;
   XFile? _selectedImage;
+  Uint8List? _selectedImageBytes;
   bool _isLoading = false;
 
   @override
@@ -61,9 +63,59 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
+      final bytes = await image.readAsBytes();
       setState(() {
         _selectedImage = image;
+        _selectedImageBytes = bytes;
       });
+    }
+  }
+
+  Future<void> _uploadFieldWorkerPhoto({
+    required int fieldWorkerId,
+    required int? currentUserId,
+  }) async {
+    if (_selectedImageBytes == null || _selectedImage == null) return;
+
+    final query = <String, String>{};
+    // If the caller is a Supervisor (no real PM user id available), the backend
+    // allows scoping by project_id.
+    if (currentUserId == null && widget.projectId != null) {
+      query['project_id'] = widget.projectId.toString();
+    }
+
+    final uploadUri = AppConfig.apiUri(
+      query.isEmpty
+          ? 'field-workers/$fieldWorkerId/upload-photo/'
+          : 'field-workers/$fieldWorkerId/upload-photo/?${Uri(queryParameters: query).query}',
+    );
+
+    final request = http.MultipartRequest('POST', uploadUri);
+    if (currentUserId != null) {
+      request.headers['X-User-Id'] = currentUserId.toString();
+    }
+
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'image',
+        _selectedImageBytes!,
+        filename: _selectedImage!.name,
+      ),
+    );
+
+    final streamed = await request.send();
+    final response = await http.Response.fromStream(streamed);
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      String message = 'Failed to upload photo';
+      try {
+        final parsed = jsonDecode(response.body);
+        message =
+            (parsed is Map &&
+                (parsed['detail'] != null || parsed['error'] != null))
+            ? (parsed['detail'] ?? parsed['error']).toString()
+            : message;
+      } catch (_) {}
+      throw Exception(message);
     }
   }
 
@@ -93,10 +145,15 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
       try {
         final currentUser = AuthService().currentUser;
         final currentUserType = (currentUser?['type'] ?? '').toString();
-        final isRealUser = currentUserType.toLowerCase() == 'user' ||
-            (currentUserType.isEmpty && currentUser?['supervisor_id'] == null && currentUser?['client_id'] == null);
+        final isRealUser =
+            currentUserType.toLowerCase() == 'user' ||
+            (currentUserType.isEmpty &&
+                currentUser?['supervisor_id'] == null &&
+                currentUser?['client_id'] == null);
 
-        final currentUserId = (isRealUser && currentUser != null) ? currentUser['user_id'] : null;
+        final currentUserId = (isRealUser && currentUser != null)
+            ? currentUser['user_id']
+            : null;
 
         final fieldWorkerData = {
           if (currentUserId != null) 'user_id': currentUserId,
@@ -139,6 +196,34 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
         debugPrint('Response body: ${response.body}');
 
         if (response.statusCode == 201 || response.statusCode == 200) {
+          int? createdFieldWorkerId;
+          try {
+            final decoded = jsonDecode(response.body);
+            if (decoded is Map) {
+              final rawId = decoded['fieldworker_id'] ?? decoded['id'];
+              if (rawId is int) {
+                createdFieldWorkerId = rawId;
+              } else if (rawId != null) {
+                createdFieldWorkerId = int.tryParse(rawId.toString());
+              }
+            }
+          } catch (_) {}
+
+          if (createdFieldWorkerId != null && _selectedImage != null) {
+            try {
+              await _uploadFieldWorkerPhoto(
+                fieldWorkerId: createdFieldWorkerId,
+                currentUserId: currentUserId,
+              );
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Photo upload failed: $e')),
+                );
+              }
+            }
+          }
+
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Field worker added successfully!')),
@@ -255,10 +340,10 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
                               decoration: BoxDecoration(
                                 color: Colors.grey[200],
                                 borderRadius: BorderRadius.circular(12),
-                                image: _selectedImage != null
-                                    ? const DecorationImage(
-                                        image: AssetImage(
-                                          'assets/images/engineer.jpg',
+                                image: _selectedImageBytes != null
+                                    ? DecorationImage(
+                                        image: MemoryImage(
+                                          _selectedImageBytes!,
                                         ),
                                         fit: BoxFit.cover,
                                       )
@@ -315,10 +400,10 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
                                   decoration: BoxDecoration(
                                     color: Colors.grey[200],
                                     borderRadius: BorderRadius.circular(12),
-                                    image: _selectedImage != null
-                                        ? const DecorationImage(
-                                            image: AssetImage(
-                                              'assets/images/engineer.jpg',
+                                    image: _selectedImageBytes != null
+                                        ? DecorationImage(
+                                            image: MemoryImage(
+                                              _selectedImageBytes!,
                                             ),
                                             fit: BoxFit.cover,
                                           )
