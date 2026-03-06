@@ -385,6 +385,7 @@ class FieldWorkerSerializer(serializers.ModelSerializer):
             'philhealth_id',
             'pagibig_id',
             'payrate',
+            'photo',
             'created_at',
         ]
         extra_kwargs = {
@@ -400,6 +401,7 @@ class FieldWorkerSerializer(serializers.ModelSerializer):
             'philhealth_id': {'required': False, 'allow_null': True},
             'pagibig_id': {'required': False, 'allow_null': True},
             'payrate': {'required': False, 'allow_null': True},
+            'photo': {'required': False, 'allow_null': True},
         }
     
     def create(self, validated_data):

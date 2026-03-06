@@ -1,13 +1,15 @@
 from django.shortcuts import render
 from rest_framework import generics, status, viewsets
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, action
 from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser
 from django.contrib.auth.hashers import check_password
 from django.views.decorators.csrf import csrf_exempt
 from django.db.models import Count, Q
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 import json
+import os
 from datetime import timedelta
 import logging
 
@@ -614,6 +616,47 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
             serializer.save(user_id=pm_user)
         else:
             serializer.save()
+
+    @action(
+        detail=True,
+        methods=['post'],
+        url_path='upload-photo',
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def upload_photo(self, request, pk=None):
+        """Upload/replace a field worker photo.
+
+        Accepts multipart form-data with `image` (preferred) or `photo`.
+        Saves to MEDIA_ROOT/fieldworker_images/ with filename fieldworker_<fieldworker_id>.<ext>
+        """
+        field_worker = self.get_object()
+
+        uploaded = request.FILES.get('image') or request.FILES.get('photo')
+        if uploaded is None:
+            return Response(
+                {'detail': 'No file provided. Use multipart field "image".'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Delete existing photo so the next save reuses the same name.
+        if getattr(field_worker, 'photo', None):
+            try:
+                field_worker.photo.delete(save=False)
+            except Exception:
+                # Best-effort cleanup; continue with overwrite.
+                pass
+
+        ext = os.path.splitext(getattr(uploaded, 'name', '') or '')[1].lower()
+        if not ext:
+            ext = '.jpg'
+
+        filename = f'fieldworker_{field_worker.fieldworker_id}{ext}'
+        field_worker.photo.save(filename, uploaded, save=True)
+
+        return Response(
+            self.get_serializer(field_worker).data,
+            status=status.HTTP_200_OK,
+        )
 
 
 # Client ViewSet
