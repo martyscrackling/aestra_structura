@@ -143,12 +143,14 @@ class _WorkforcePageState extends State<WorkforcePage> {
         final List<dynamic> supervisors = jsonDecode(supervisorResponse.body);
         allWorkers.addAll(
           supervisors.map((supervisor) {
+            final mediaUrl = _resolveMediaUrl(supervisor['photo']);
             return WorkerInfo(
               name: '${supervisor['first_name']} ${supervisor['last_name']}',
               email: supervisor['email'] ?? 'N/A',
               phone: supervisor['phone_number'] ?? 'N/A',
               role: supervisor['role'] ?? 'Supervisor',
-              avatarUrl: 'https://randomuser.me/api/portraits/men/1.jpg',
+              avatarUrl:
+                  mediaUrl ?? 'https://randomuser.me/api/portraits/men/1.jpg',
               type: 'Supervisor',
             );
           }).toList(),

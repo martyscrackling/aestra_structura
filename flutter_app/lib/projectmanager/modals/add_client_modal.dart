@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -22,7 +23,8 @@ class _AddClientModalState extends State<AddClientModal> {
   final _generatedEmailController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  XFile? _selectedImage;
+  Uint8List? _selectedImageBytes;
+  String? _selectedImageFilename;
   bool _isLoading = false;
 
   @override
@@ -47,9 +49,52 @@ class _AddClientModalState extends State<AddClientModal> {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
+      final bytes = await image.readAsBytes();
       setState(() {
-        _selectedImage = image;
+        _selectedImageBytes = bytes;
+        _selectedImageFilename = image.name;
       });
+    }
+  }
+
+  Future<void> _uploadClientPhoto({
+    required int clientId,
+    required int pmUserId,
+  }) async {
+    if (_selectedImageBytes == null) return;
+
+    final uri = AppConfig.apiUri(
+      'clients/$clientId/upload-photo/?user_id=$pmUserId',
+    );
+
+    final request = http.MultipartRequest('POST', uri);
+    request.headers['X-User-Id'] = pmUserId.toString();
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'image',
+        _selectedImageBytes!,
+        filename: _selectedImageFilename ?? 'client_photo.jpg',
+      ),
+    );
+
+    final streamed = await request.send();
+    final response = await http.Response.fromStream(streamed);
+    debugPrint('Upload photo status: ${response.statusCode}');
+    debugPrint('Upload photo body: ${response.body}');
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      String message = 'Failed to upload photo';
+      try {
+        final errorData = jsonDecode(response.body);
+        message =
+            errorData['detail'] ??
+            errorData['error'] ??
+            errorData.toString() ??
+            message;
+      } catch (_) {
+        // ignore
+      }
+      throw Exception(message);
     }
   }
 
@@ -127,8 +172,15 @@ class _AddClientModalState extends State<AddClientModal> {
 
       try {
         final currentUserId = AuthService().currentUser?['user_id'];
+        final pmUserId = currentUserId is int
+            ? currentUserId
+            : int.tryParse(currentUserId?.toString() ?? '');
+
+        if (pmUserId == null) {
+          throw Exception('Missing current user_id');
+        }
+
         final clientData = {
-          if (currentUserId != null) 'user_id': currentUserId,
           'invited_by_email': AuthService().currentUser?['email'],
           'invited_by_name':
               '${AuthService().currentUser?['first_name'] ?? ''} ${AuthService().currentUser?['last_name'] ?? ''}'
@@ -151,7 +203,10 @@ class _AddClientModalState extends State<AddClientModal> {
 
         final response = await http.post(
           AppConfig.apiUri('clients/'),
-          headers: {'Content-Type': 'application/json'},
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User-Id': pmUserId.toString(),
+          },
           body: jsonEncode(clientData),
         );
 
@@ -161,9 +216,33 @@ class _AddClientModalState extends State<AddClientModal> {
         if (!mounted) return;
 
         if (response.statusCode == 201 || response.statusCode == 200) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Client added successfully!')),
-          );
+          int? clientId;
+          try {
+            final decoded = jsonDecode(response.body);
+            if (decoded is Map<String, dynamic>) {
+              final rawId = decoded['client_id'];
+              clientId = rawId is int
+                  ? rawId
+                  : int.tryParse(rawId?.toString() ?? '');
+            }
+          } catch (_) {
+            // ignore
+          }
+
+          String successMessage = 'Client added successfully!';
+
+          if (_selectedImageBytes != null && clientId != null) {
+            try {
+              await _uploadClientPhoto(clientId: clientId, pmUserId: pmUserId);
+            } catch (e) {
+              successMessage =
+                  'Client added, but photo upload failed: ${e.toString()}';
+            }
+          }
+
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(successMessage)));
           Navigator.of(context).pop();
         } else {
           try {
@@ -266,16 +345,16 @@ class _AddClientModalState extends State<AddClientModal> {
                               decoration: BoxDecoration(
                                 color: Colors.grey[200],
                                 borderRadius: BorderRadius.circular(12),
-                                image: _selectedImage != null
-                                    ? const DecorationImage(
-                                        image: AssetImage(
-                                          'assets/images/engineer.jpg',
+                                image: _selectedImageBytes != null
+                                    ? DecorationImage(
+                                        image: MemoryImage(
+                                          _selectedImageBytes!,
                                         ),
                                         fit: BoxFit.cover,
                                       )
                                     : null,
                               ),
-                              child: _selectedImage == null
+                              child: _selectedImageBytes == null
                                   ? Column(
                                       mainAxisAlignment:
                                           MainAxisAlignment.center,
@@ -409,16 +488,16 @@ class _AddClientModalState extends State<AddClientModal> {
                                   decoration: BoxDecoration(
                                     color: Colors.grey[200],
                                     borderRadius: BorderRadius.circular(12),
-                                    image: _selectedImage != null
-                                        ? const DecorationImage(
-                                            image: AssetImage(
-                                              'assets/images/engineer.jpg',
+                                    image: _selectedImageBytes != null
+                                        ? DecorationImage(
+                                            image: MemoryImage(
+                                              _selectedImageBytes!,
                                             ),
                                             fit: BoxFit.cover,
                                           )
                                         : null,
                                   ),
-                                  child: _selectedImage == null
+                                  child: _selectedImageBytes == null
                                       ? Column(
                                           mainAxisAlignment:
                                               MainAxisAlignment.center,

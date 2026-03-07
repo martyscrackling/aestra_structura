@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:typed_data';
 import '../../services/app_config.dart';
 import '../../services/auth_service.dart';
 
@@ -29,6 +30,7 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
   final _payrateController = TextEditingController();
 
   XFile? _selectedImage;
+  Uint8List? _selectedImageBytes;
   bool _isLoading = false;
 
   @override
@@ -57,8 +59,11 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
+      final bytes = await image.readAsBytes();
+      if (!mounted) return;
       setState(() {
         _selectedImage = image;
+        _selectedImageBytes = bytes;
       });
     }
   }
@@ -132,6 +137,39 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
         debugPrint('Response body: ${response.body}');
 
         if (response.statusCode == 201 || response.statusCode == 200) {
+          int? supervisorId;
+          try {
+            final decoded = jsonDecode(response.body);
+            if (decoded is Map) {
+              final rawId = decoded['supervisor_id'] ?? decoded['id'];
+              if (rawId is int) {
+                supervisorId = rawId;
+              } else if (rawId is String) {
+                supervisorId = int.tryParse(rawId);
+              }
+            }
+          } catch (_) {
+            // Ignore parsing errors; supervisor was created but we may not be able to upload a photo.
+          }
+
+          if (_selectedImage != null && supervisorId != null) {
+            final uploadResult = await _uploadSupervisorPhoto(
+              supervisorId: supervisorId,
+              currentUserId: currentUserId,
+            );
+            if (!uploadResult.ok && mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Supervisor created, but photo upload failed (HTTP ${uploadResult.statusCode ?? "?"}).',
+                  ),
+                  backgroundColor: Colors.red,
+                  duration: const Duration(seconds: 5),
+                )
+              );
+            }
+          }
+
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -186,6 +224,56 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
           });
         }
       }
+    }
+  }
+
+  Future<_UploadResult> _uploadSupervisorPhoto({
+    required int supervisorId,
+    required dynamic currentUserId,
+  }) async {
+    final file = _selectedImage;
+    if (file == null) {
+      return const _UploadResult(ok: true);
+    }
+
+    try {
+      final baseUri = AppConfig.apiUri('supervisors/$supervisorId/upload-photo/');
+      final uri = (currentUserId != null)
+          ? baseUri.replace(
+              queryParameters: {
+                ...baseUri.queryParameters,
+                'user_id': currentUserId.toString(),
+              },
+            )
+          : baseUri;
+      final request = http.MultipartRequest('POST', uri);
+
+      // The backend scopes access using a Project Manager user id.
+      if (currentUserId != null) {
+        request.headers['X-User-Id'] = currentUserId.toString();
+        request.fields['user_id'] = currentUserId.toString();
+      }
+
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'image',
+          _selectedImageBytes ?? await file.readAsBytes(),
+          filename: (file.name.isNotEmpty)
+              ? file.name
+              : 'supervisor_$supervisorId.jpg',
+        ),
+      );
+
+      final streamed = await request.send();
+      final response = await http.Response.fromStream(streamed);
+
+      debugPrint('Photo upload status: ${response.statusCode}');
+      debugPrint('Photo upload body: ${response.body}');
+      final ok = response.statusCode >= 200 && response.statusCode < 300;
+      return _UploadResult(ok: ok, statusCode: response.statusCode);
+    } catch (e) {
+      debugPrint('Photo upload error: $e');
+      return const _UploadResult(ok: false);
     }
   }
 
@@ -265,16 +353,14 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
                               decoration: BoxDecoration(
                                 color: Colors.grey[200],
                                 borderRadius: BorderRadius.circular(12),
-                                image: _selectedImage != null
-                                    ? const DecorationImage(
-                                        image: AssetImage(
-                                          'assets/images/engineer.jpg',
-                                        ),
+                                image: _selectedImageBytes != null
+                                    ? DecorationImage(
+                                        image: MemoryImage(_selectedImageBytes!),
                                         fit: BoxFit.cover,
                                       )
                                     : null,
                               ),
-                              child: _selectedImage == null
+                              child: _selectedImageBytes == null
                                   ? Column(
                                       mainAxisAlignment:
                                           MainAxisAlignment.center,
@@ -326,16 +412,14 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
                                   decoration: BoxDecoration(
                                     color: Colors.grey[200],
                                     borderRadius: BorderRadius.circular(12),
-                                    image: _selectedImage != null
-                                        ? const DecorationImage(
-                                            image: AssetImage(
-                                              'assets/images/engineer.jpg',
-                                            ),
+                                    image: _selectedImageBytes != null
+                                        ? DecorationImage(
+                                            image: MemoryImage(_selectedImageBytes!),
                                             fit: BoxFit.cover,
                                           )
                                         : null,
                                   ),
-                                  child: _selectedImage == null
+                                  child: _selectedImageBytes == null
                                       ? Column(
                                           mainAxisAlignment:
                                               MainAxisAlignment.center,
@@ -662,4 +746,11 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
       validator: validator,
     );
   }
+}
+
+class _UploadResult {
+  final bool ok;
+  final int? statusCode;
+
+  const _UploadResult({required this.ok, this.statusCode});
 }

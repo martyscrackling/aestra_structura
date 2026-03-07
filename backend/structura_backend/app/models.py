@@ -77,6 +77,18 @@ class User(models.Model):
         default='ProjectManager'
     )
 
+    # Subscription fields (present in the production DB schema)
+    payment_date = models.DateTimeField(null=True, blank=True)
+    subscription_start_date = models.DateTimeField(null=True, blank=True)
+    subscription_end_date = models.DateTimeField(null=True, blank=True)
+    subscription_status = models.CharField(max_length=50, default='trial')
+    subscription_years = models.IntegerField(default=0)
+    trial_start_date = models.DateTimeField(null=True, blank=True)
+    trial_end_date = models.DateTimeField(null=True, blank=True)
+    warning_1day_sent = models.BooleanField(default=False)
+    warning_3days_sent = models.BooleanField(default=False)
+    warning_7days_sent = models.BooleanField(default=False)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     status = models.CharField(
@@ -156,6 +168,8 @@ class Supervisors(models.Model):
     pagibig_id = models.CharField(max_length=20, null=True, blank=True)
     payrate = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
+    photo = models.FileField(upload_to='supervisor_images/', null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
@@ -234,6 +248,8 @@ class Client(models.Model):
     password_hash = models.CharField(max_length=255, default='PASSWORD')
     phone_number = models.CharField(max_length=20)
     birthdate = models.DateField(null=True, blank=True)
+
+    photo = models.FileField(upload_to='client_images/', null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     status = models.CharField(

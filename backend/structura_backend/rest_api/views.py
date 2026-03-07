@@ -556,6 +556,48 @@ class SupervisorsViewSet(viewsets.ModelViewSet):
 
         serializer.save(created_by=pm_user)
 
+    @action(
+        detail=True,
+        methods=['post'],
+        url_path='upload-photo',
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def upload_photo(self, request, pk=None):
+        """Upload/replace a supervisor photo.
+
+        Accepts multipart form-data with `image` (preferred) or `photo`.
+        Saves to MEDIA_ROOT/supervisor_images/ with filename sv_<user_id>_<supervisor_id>.<ext>
+        """
+        supervisor = self.get_object()
+
+        uploaded = request.FILES.get('image') or request.FILES.get('photo')
+        if uploaded is None:
+            return Response(
+                {'detail': 'No file provided. Use multipart field "image".'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Delete existing photo so the next save reuses the same name.
+        if getattr(supervisor, 'photo', None):
+            try:
+                supervisor.photo.delete(save=False)
+            except Exception:
+                # Best-effort cleanup; continue with overwrite.
+                pass
+
+        ext = os.path.splitext(getattr(uploaded, 'name', '') or '')[1].lower()
+        if not ext:
+            ext = '.jpg'
+
+        pm_user_id = getattr(supervisor, 'created_by_id', None) or _get_request_pm_user_id(request) or 0
+        filename = f'sv_{pm_user_id}_{supervisor.supervisor_id}{ext}'
+        supervisor.photo.save(filename, uploaded, save=True)
+
+        return Response(
+            self.get_serializer(supervisor).data,
+            status=status.HTTP_200_OK,
+        )
+
 
 # Supervisor ViewSet (alias for backwards compatibility)
 class SupervisorViewSet(viewsets.ModelViewSet):
@@ -586,6 +628,46 @@ class SupervisorViewSet(viewsets.ModelViewSet):
             if project is not None and getattr(project, 'user_id', None) is not None:
                 pm_user = project.user
         serializer.save(created_by=pm_user)
+
+    @action(
+        detail=True,
+        methods=['post'],
+        url_path='upload-photo',
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def upload_photo(self, request, pk=None):
+        """Upload/replace a supervisor photo.
+
+        Accepts multipart form-data with `image` (preferred) or `photo`.
+        Saves to MEDIA_ROOT/supervisor_images/ with filename sv_<user_id>_<supervisor_id>.<ext>
+        """
+        supervisor = self.get_object()
+
+        uploaded = request.FILES.get('image') or request.FILES.get('photo')
+        if uploaded is None:
+            return Response(
+                {'detail': 'No file provided. Use multipart field "image".'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if getattr(supervisor, 'photo', None):
+            try:
+                supervisor.photo.delete(save=False)
+            except Exception:
+                pass
+
+        ext = os.path.splitext(getattr(uploaded, 'name', '') or '')[1].lower()
+        if not ext:
+            ext = '.jpg'
+
+        pm_user_id = getattr(supervisor, 'created_by_id', None) or _get_request_pm_user_id(request) or 0
+        filename = f'sv_{pm_user_id}_{supervisor.supervisor_id}{ext}'
+        supervisor.photo.save(filename, uploaded, save=True)
+
+        return Response(
+            self.get_serializer(supervisor).data,
+            status=status.HTTP_200_OK,
+        )
 
 
 # FieldWorker ViewSet
@@ -650,7 +732,14 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
         if not ext:
             ext = '.jpg'
 
-        filename = f'fieldworker_{field_worker.fieldworker_id}{ext}'
+        owner_user_id = getattr(field_worker, 'user_id_id', None)
+        if owner_user_id in (None, ''):
+            project = getattr(field_worker, 'project_id', None)
+            owner_user_id = getattr(project, 'user_id_id', None) if project is not None else None
+        if owner_user_id in (None, ''):
+            owner_user_id = 0
+
+        filename = f'fw_{owner_user_id}_{field_worker.fieldworker_id}{ext}'
         field_worker.photo.save(filename, uploaded, save=True)
 
         return Response(
@@ -689,6 +778,48 @@ class ClientViewSet(viewsets.ModelViewSet):
             if project is not None and getattr(project, 'user_id', None) is not None:
                 pm_user = project.user
         serializer.save(created_by=pm_user)
+
+    @action(
+        detail=True,
+        methods=['post'],
+        url_path='upload-photo',
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def upload_photo(self, request, pk=None):
+        """Upload/replace a client photo.
+
+        Accepts multipart form-data with `image` (preferred) or `photo`.
+        Saves to MEDIA_ROOT/client_images/ with filename cl_<user_id>_<client_id>.<ext>
+        """
+        client = self.get_object()
+
+        uploaded = request.FILES.get('image') or request.FILES.get('photo')
+        if uploaded is None:
+            return Response(
+                {'detail': 'No file provided. Use multipart field "image".'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Delete existing photo so the next save reuses the same name.
+        if getattr(client, 'photo', None):
+            try:
+                client.photo.delete(save=False)
+            except Exception:
+                # Best-effort cleanup; continue with overwrite.
+                pass
+
+        ext = os.path.splitext(getattr(uploaded, 'name', '') or '')[1].lower()
+        if not ext:
+            ext = '.jpg'
+
+        pm_user_id = getattr(client, 'created_by_id', None) or _get_request_pm_user_id(request) or 0
+        filename = f'cl_{pm_user_id}_{client.client_id}{ext}'
+        client.photo.save(filename, uploaded, save=True)
+
+        return Response(
+            self.get_serializer(client).data,
+            status=status.HTTP_200_OK,
+        )
 
 
 # Phase ViewSet

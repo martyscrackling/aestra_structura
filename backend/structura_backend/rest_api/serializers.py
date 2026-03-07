@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.db import IntegrityError, transaction
 from .email_utils import send_invitation_email, send_project_assignment_email
 from app import models
 
@@ -249,6 +250,7 @@ class SupervisorsSerializer(serializers.ModelSerializer):
             'philhealth_id',
             'pagibig_id',
             'payrate',
+            'photo',
             'created_at',
         ]
         extra_kwargs = {
@@ -266,6 +268,7 @@ class SupervisorsSerializer(serializers.ModelSerializer):
             'philhealth_id': {'required': False, 'allow_null': True},
             'pagibig_id': {'required': False, 'allow_null': True},
             'payrate': {'required': False, 'allow_null': True},
+            'photo': {'required': False, 'allow_null': True},
         }
     
     def create(self, validated_data):
@@ -328,6 +331,7 @@ class SupervisorSerializer(serializers.ModelSerializer):
             'philhealth_id',
             'pagibig_id',
             'payrate',
+            'photo',
             'created_at',
         ]
         extra_kwargs = {
@@ -345,6 +349,7 @@ class SupervisorSerializer(serializers.ModelSerializer):
             'philhealth_id': {'required': False, 'allow_null': True},
             'pagibig_id': {'required': False, 'allow_null': True},
             'payrate': {'required': False, 'allow_null': True},
+            'photo': {'required': False, 'allow_null': True},
         }
     
     def create(self, validated_data):
@@ -451,6 +456,7 @@ class ClientSerializer(serializers.ModelSerializer):
             'password_hash',
             'phone_number',
             'birthdate',
+            'photo',
             'status',
             'created_at',
         ]
@@ -465,6 +471,7 @@ class ClientSerializer(serializers.ModelSerializer):
             'last_name': {'required': False, 'allow_null': True},
             'middle_name': {'required': False, 'allow_null': True},
             'birthdate': {'required': False, 'allow_null': True},
+            'photo': {'required': False, 'allow_null': True},
         }
     
     def create(self, validated_data):
@@ -473,24 +480,39 @@ class ClientSerializer(serializers.ModelSerializer):
         project_name = validated_data.pop('project_name', '')
 
         plain_password = validated_data.get('password_hash', 'PASSWORD')
-        # Auto-create User account if user_id is not provided
-        if 'user_id' not in validated_data or validated_data.get('user_id') is None:
-            user = models.User.objects.create(
-                email=validated_data['email'],
-                password_hash=validated_data['password_hash'],
-                first_name=validated_data['first_name'],
-                middle_name=validated_data.get('middle_name'),
-                last_name=validated_data['last_name'],
-                birthdate=validated_data.get('birthdate'),
-                phone=validated_data.get('phone_number'),
-                role='Client',
-                status='Active'
-            )
-            validated_data['user_id'] = user
-        
-        # Create client with all fields
-        client = models.Client(**validated_data)
-        client.save()
+        try:
+            with transaction.atomic():
+                # Auto-create (or reuse) a Client user account if user_id is not provided.
+                if 'user_id' not in validated_data or validated_data.get('user_id') is None:
+                    email = (validated_data.get('email') or '').strip().lower()
+                    existing_user = models.User.objects.filter(email=email).first()
+                    if existing_user is not None:
+                        if (existing_user.role or '').strip() != 'Client':
+                            raise serializers.ValidationError({
+                                'email': 'This email is already registered as a non-client user.'
+                            })
+                        validated_data['user_id'] = existing_user
+                    else:
+                        user = models.User.objects.create(
+                            email=validated_data['email'],
+                            password_hash=validated_data['password_hash'],
+                            first_name=validated_data.get('first_name'),
+                            middle_name=validated_data.get('middle_name'),
+                            last_name=validated_data.get('last_name'),
+                            birthdate=validated_data.get('birthdate'),
+                            phone=validated_data.get('phone_number'),
+                            role='Client',
+                            status='Active',
+                        )
+                        validated_data['user_id'] = user
+
+                # Create client profile row.
+                client = models.Client(**validated_data)
+                client.save()
+        except IntegrityError:
+            raise serializers.ValidationError({
+                'detail': 'A client/user with this email already exists.'
+            })
 
         send_invitation_email(
             to_email=client.email,

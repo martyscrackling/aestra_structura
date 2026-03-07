@@ -18,6 +18,22 @@ class _ClientsPageState extends State<ClientsPage> {
   late Future<List<ClientInfo>> _clientsFuture;
   String _searchQuery = '';
 
+  String _resolvePhotoUrl(dynamic rawPhoto) {
+    final photo = (rawPhoto?.toString() ?? '').trim();
+    if (photo.isEmpty) return '';
+    if (photo.startsWith('http://') || photo.startsWith('https://')) {
+      return photo;
+    }
+
+    // AppConfig.apiBaseUrl includes `/api/`; media is served from the same origin under `/media/`.
+    final apiBase = Uri.parse(AppConfig.apiBaseUrl);
+    final origin = apiBase.origin;
+    if (photo.startsWith('/')) {
+      return '$origin$photo';
+    }
+    return '$origin/$photo';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -49,6 +65,7 @@ class _ClientsPageState extends State<ClientsPage> {
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
         return data.map((client) {
+          final photoUrl = _resolvePhotoUrl(client['photo']);
           return ClientInfo(
             id: client['client_id'],
             name: '${client['first_name']} ${client['last_name']}',
@@ -56,7 +73,7 @@ class _ClientsPageState extends State<ClientsPage> {
             email: client['email'],
             phone: client['phone_number'],
             location: 'Philippines',
-            avatarUrl: 'https://randomuser.me/api/portraits/men/1.jpg',
+            avatarUrl: photoUrl,
           );
         }).toList();
       } else {
@@ -303,6 +320,8 @@ class ClientCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasAvatar = info.avatarUrl.trim().isNotEmpty;
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -323,7 +342,17 @@ class ClientCard extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 26,
-                backgroundImage: NetworkImage(info.avatarUrl),
+                backgroundImage: hasAvatar
+                    ? NetworkImage(info.avatarUrl)
+                    : null,
+                backgroundColor: Colors.grey[200],
+                child: hasAvatar
+                    ? null
+                    : Icon(
+                        Icons.person_outline,
+                        color: Colors.grey[500],
+                        size: 28,
+                      ),
               ),
               const SizedBox(width: 12),
               Expanded(
