@@ -145,6 +145,9 @@ class _WorkforcePageState extends State<WorkforcePage> {
           supervisors.map((supervisor) {
             final mediaUrl = _resolveMediaUrl(supervisor['photo']);
             return WorkerInfo(
+              userId: _tryParseInt(supervisor['user_id']),
+              supervisorId:
+                  _tryParseInt(supervisor['supervisor_id'] ?? supervisor['id']),
               name: '${supervisor['first_name']} ${supervisor['last_name']}',
               email: supervisor['email'] ?? 'N/A',
               phone: supervisor['phone_number'] ?? 'N/A',
@@ -164,6 +167,10 @@ class _WorkforcePageState extends State<WorkforcePage> {
           fieldWorkers.map((fieldWorker) {
             final mediaUrl = _resolveMediaUrl(fieldWorker['photo']);
             return WorkerInfo(
+              userId: _tryParseInt(fieldWorker['user_id']),
+              fieldWorkerId: _tryParseInt(
+                fieldWorker['fieldworker_id'] ?? fieldWorker['id'],
+              ),
               name: '${fieldWorker['first_name']} ${fieldWorker['last_name']}',
               email: 'N/A',
               phone: fieldWorker['phone_number'] ?? 'N/A',
@@ -966,6 +973,9 @@ class WorkerGroup {
 
 class WorkerInfo {
   const WorkerInfo({
+    this.userId,
+    this.supervisorId,
+    this.fieldWorkerId,
     required this.name,
     required this.email,
     required this.phone,
@@ -974,6 +984,9 @@ class WorkerInfo {
     this.type = 'Supervisor',
   });
 
+  final int? userId;
+  final int? supervisorId;
+  final int? fieldWorkerId;
   final String name;
   final String email;
   final String phone;

@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'widgets/responsive_page_layout.dart';
 import 'workforce_page.dart';
 import 'modals/view_edit_worker_modal.dart';
+import '../services/app_config.dart';
+import '../services/auth_service.dart';
 
 class WorkerProject {
   final String projectName;
@@ -21,48 +25,294 @@ class WorkerProject {
   });
 }
 
-class WorkerProfilePage extends StatelessWidget {
+class WorkerProfilePage extends StatefulWidget {
   final WorkerInfo worker;
 
   const WorkerProfilePage({super.key, required this.worker});
 
-  static final List<WorkerProject> _activeProjects = [
-    WorkerProject(
-      projectName: 'Super Highway',
-      location: 'Divisoria, Zamboanga City',
-      startDate: '08/20/2025',
-      endDate: '08/20/2026',
-      progress: 0.55,
-      status: 'In Progress',
-    ),
-    WorkerProject(
-      projectName: "Richmond's House",
-      location: 'Sta. Maria, Zamboanga City',
-      startDate: '02/03/2025',
-      endDate: '09/20/2025',
-      progress: 0.30,
-      status: 'In Progress',
-    ),
-  ];
+  @override
+  State<WorkerProfilePage> createState() => _WorkerProfilePageState();
+}
 
-  static final List<WorkerProject> _finishedProjects = [
-    WorkerProject(
-      projectName: 'Bulacan Flood Control',
-      location: 'Bulacan, Philippines',
-      startDate: '01/15/2024',
-      endDate: '08/20/2024',
-      progress: 1.0,
-      status: 'Completed',
-    ),
-    WorkerProject(
-      projectName: 'City Hall Renovation',
-      location: 'Zamboanga City',
-      startDate: '05/10/2023',
-      endDate: '12/15/2023',
-      progress: 1.0,
-      status: 'Completed',
-    ),
-  ];
+class _WorkerProfilePageState extends State<WorkerProfilePage> {
+  bool _isLoading = true;
+  String? _error;
+  List<WorkerProject> _activeProjects = const [];
+  List<WorkerProject> _finishedProjects = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchWorkerProjects();
+  }
+
+  int? _tryParseInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString());
+  }
+
+  String _projectStatusLabel(String raw) {
+    final value = raw.trim();
+    if (value.isEmpty) return 'Planning';
+    switch (value.toLowerCase()) {
+      case 'completed':
+        return 'Completed';
+      case 'in_progress':
+      case 'in progress':
+        return 'In Progress';
+      case 'pending':
+        return 'Pending';
+      case 'planning':
+        return 'Planning';
+      default:
+        return value;
+    }
+  }
+
+  String _formatDate(String raw) {
+    try {
+      if (raw.trim().isEmpty) return 'N/A';
+      final dt = DateTime.parse(raw);
+      final mm = dt.month.toString().padLeft(2, '0');
+      final dd = dt.day.toString().padLeft(2, '0');
+      return '$mm/$dd/${dt.year}';
+    } catch (_) {
+      return raw;
+    }
+  }
+
+  String _buildLocation(Map<String, dynamic> project) {
+    try {
+      String? asNonEmptyString(dynamic value, {bool allowNumericOnly = false}) {
+        if (value == null) return null;
+        final s = value.toString().trim();
+        if (s.isEmpty || s == 'null') return null;
+        final numericOnly = RegExp(r'^\d+$').hasMatch(s);
+        if (!allowNumericOnly && numericOnly) return null;
+        return s;
+      }
+
+      // Prefer human-readable *_name fields when available.
+      final street = asNonEmptyString(project['street']);
+      final barangay = asNonEmptyString(project['barangay_name']) ??
+          asNonEmptyString(project['barangay']);
+      final city = asNonEmptyString(project['city_name']) ??
+          asNonEmptyString(project['city']);
+      final province = asNonEmptyString(project['province_name']) ??
+          asNonEmptyString(project['province']);
+
+      final parts = <String>[];
+      if (street != null) parts.add(street);
+      if (barangay != null) parts.add(barangay);
+      if (city != null) parts.add(city);
+      if (province != null) parts.add(province);
+      if (parts.isNotEmpty) return parts.join(', ');
+
+      // Fallbacks
+      return asNonEmptyString(project['location'], allowNumericOnly: false) ??
+          'N/A';
+    } catch (_) {
+      return 'N/A';
+    }
+  }
+
+  // Calculate progress based on subtasks (matching projects_page.dart)
+  Future<double> _calculateProjectProgress(int projectId) async {
+    try {
+      final response = await http.get(
+        AppConfig.apiUri('phases/?project_id=$projectId'),
+      );
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is! List) return 0.0;
+        final phases = decoded.whereType<Map>().toList();
+
+        int totalSubtasks = 0;
+        int completedSubtasks = 0;
+
+        for (final phase in phases) {
+          final phaseMap = Map<String, dynamic>.from(phase);
+          final subtasks = (phaseMap['subtasks'] as List<dynamic>?) ?? [];
+          totalSubtasks += subtasks.length;
+
+          for (final subtask in subtasks) {
+            if (subtask is! Map) continue;
+            final subtaskMap = Map<String, dynamic>.from(subtask);
+            if ((subtaskMap['status'] as String?) == 'completed') {
+              completedSubtasks++;
+            }
+          }
+        }
+
+        if (totalSubtasks == 0) return 0.0;
+        return completedSubtasks / totalSubtasks;
+      }
+    } catch (_) {
+      // ignore
+    }
+    return 0.0;
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchProjectsList({int? userId}) async {
+    try {
+      final uri = (userId != null && userId > 0)
+          ? AppConfig.apiUri('projects/?user_id=$userId')
+          : AppConfig.apiUri('projects/');
+
+      final response = await http.get(uri);
+      if (response.statusCode != 200) return [];
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! List) return [];
+
+      return decoded
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<bool> _projectHasFieldWorker({
+    required int projectId,
+    required int fieldWorkerId,
+  }) async {
+    try {
+      final response = await http.get(
+        AppConfig.apiUri('field-workers/?project_id=$projectId'),
+      );
+      if (response.statusCode != 200) return false;
+      final decoded = jsonDecode(response.body);
+      if (decoded is! List) return false;
+      for (final item in decoded) {
+        if (item is! Map) continue;
+        final map = Map<String, dynamic>.from(item);
+        final id = _tryParseInt(map['fieldworker_id'] ?? map['field_worker_id']);
+        if (id == fieldWorkerId) return true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _fetchWorkerProjects() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final currentUserId =
+          _tryParseInt(AuthService().currentUser?['user_id']);
+
+      final worker = widget.worker;
+      List<Map<String, dynamic>> projects = [];
+
+      if (worker.type == 'Supervisor' && worker.supervisorId != null) {
+        // Primary: fetch projects visible to the current user, then filter by supervisor_id.
+        final allProjects = await _fetchProjectsList(userId: currentUserId);
+        final supervisorId = worker.supervisorId;
+        projects = allProjects.where((p) {
+          final pid = _tryParseInt(
+            p['supervisor_id'] ?? p['supervisor'] ?? p['supervisorId'],
+          );
+          return pid != null && pid == supervisorId;
+        }).toList();
+      } else if (worker.type == 'Field Worker' && worker.fieldWorkerId != null) {
+        // Best-effort: if backend supports projects-by-field-worker, use it.
+        final id = worker.fieldWorkerId!;
+        final queryKeys = ['field_worker_id', 'fieldworker_id', 'field_worker'];
+
+        for (final key in queryKeys) {
+          final uri = (currentUserId != null && currentUserId > 0)
+              ? AppConfig.apiUri('projects/?$key=$id&user_id=$currentUserId')
+              : AppConfig.apiUri('projects/?$key=$id');
+          final response = await http.get(uri);
+          if (response.statusCode != 200) continue;
+          final decoded = jsonDecode(response.body);
+          if (decoded is! List) continue;
+          projects = decoded
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+          break;
+        }
+
+        // Fallback: infer project membership via field-workers/?project_id.
+        if (projects.isEmpty) {
+          final allProjects = await _fetchProjectsList(userId: currentUserId);
+          final matched = <Map<String, dynamic>>[];
+          for (final project in allProjects) {
+            final projectId = _tryParseInt(project['project_id']);
+            if (projectId == null || projectId <= 0) continue;
+            final hasWorker = await _projectHasFieldWorker(
+              projectId: projectId,
+              fieldWorkerId: id,
+            );
+            if (hasWorker) matched.add(project);
+          }
+          projects = matched;
+        }
+      } else {
+        projects = [];
+      }
+
+      final active = <WorkerProject>[];
+      final finished = <WorkerProject>[];
+
+      for (final project in projects) {
+        final projectId = _tryParseInt(project['project_id']) ?? 0;
+        final rawStatus = (project['status'] as String?) ?? 'Planning';
+        final status = _projectStatusLabel(rawStatus);
+
+        final progress = (status == 'Completed' || projectId <= 0)
+            ? 1.0
+            : await _calculateProjectProgress(projectId);
+
+        final startDate = _formatDate((project['start_date'] as String?) ?? '');
+        final endDate = _formatDate((project['end_date'] as String?) ?? '');
+        final location = _buildLocation(project);
+        final name = (project['project_name'] as String?) ??
+            (project['title'] as String?) ??
+            'Unknown';
+
+        final item = WorkerProject(
+          projectName: name,
+          location: location,
+          startDate: startDate,
+          endDate: endDate,
+          progress: progress,
+          status: status,
+        );
+
+        final isFinished =
+            status.toLowerCase() == 'completed' || progress >= 0.999;
+        if (isFinished) {
+          finished.add(item);
+        } else {
+          active.add(item);
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _activeProjects = active;
+        _finishedProjects = finished;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Failed to load projects: $e';
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -73,6 +323,23 @@ class WorkerProfilePage extends StatelessWidget {
         builder: (context) {
           final screenWidth = MediaQuery.of(context).size.width;
           final isMobile = screenWidth < 768;
+
+          if (_isLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (_error != null) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  _error!,
+                  style: const TextStyle(color: Color(0xFF6B7280)),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
+          }
 
           return SingleChildScrollView(
             padding: EdgeInsets.symmetric(
@@ -93,7 +360,7 @@ class WorkerProfilePage extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '${worker.role} Profile',
+                        '${widget.worker.role} Profile',
                         style: TextStyle(
                           fontSize: isMobile ? 20 : 24,
                           fontWeight: FontWeight.w700,
@@ -125,14 +392,15 @@ class WorkerProfilePage extends StatelessWidget {
                             // Profile Image
                             CircleAvatar(
                               radius: 40,
-                              backgroundImage: NetworkImage(worker.avatarUrl),
+                              backgroundImage:
+                                  NetworkImage(widget.worker.avatarUrl),
                             ),
                             const SizedBox(height: 16),
                             // Profile Info
                             Column(
                               children: [
                                 Text(
-                                  worker.name,
+                                  widget.worker.name,
                                   style: const TextStyle(
                                     fontSize: 20,
                                     fontWeight: FontWeight.w700,
@@ -151,7 +419,7 @@ class WorkerProfilePage extends StatelessWidget {
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Text(
-                                    worker.role,
+                                    widget.worker.role,
                                     style: const TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
@@ -171,7 +439,7 @@ class WorkerProfilePage extends StatelessWidget {
                                     const SizedBox(width: 8),
                                     Flexible(
                                       child: Text(
-                                        worker.email,
+                                        widget.worker.email,
                                         style: const TextStyle(
                                           fontSize: 14,
                                           color: Color(0xFF6B7280),
@@ -192,7 +460,7 @@ class WorkerProfilePage extends StatelessWidget {
                                     ),
                                     const SizedBox(width: 8),
                                     Text(
-                                      worker.phone,
+                                      widget.worker.phone,
                                       style: const TextStyle(
                                         fontSize: 14,
                                         color: Color(0xFF6B7280),
@@ -211,7 +479,7 @@ class WorkerProfilePage extends StatelessWidget {
                                   showDialog(
                                     context: context,
                                     builder: (context) =>
-                                        ViewEditWorkerModal(worker: worker),
+                                        ViewEditWorkerModal(worker: widget.worker),
                                   );
                                 },
                                 style: ElevatedButton.styleFrom(
@@ -246,7 +514,8 @@ class WorkerProfilePage extends StatelessWidget {
                             // Profile Image
                             CircleAvatar(
                               radius: 50,
-                              backgroundImage: NetworkImage(worker.avatarUrl),
+                              backgroundImage:
+                                  NetworkImage(widget.worker.avatarUrl),
                             ),
                             const SizedBox(width: 24),
                             // Profile Info
@@ -255,7 +524,7 @@ class WorkerProfilePage extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    worker.name,
+                                    widget.worker.name,
                                     style: const TextStyle(
                                       fontSize: 22,
                                       fontWeight: FontWeight.w700,
@@ -273,7 +542,7 @@ class WorkerProfilePage extends StatelessWidget {
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Text(
-                                      worker.role,
+                                      widget.worker.role,
                                       style: const TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.w600,
@@ -291,7 +560,7 @@ class WorkerProfilePage extends StatelessWidget {
                                       ),
                                       const SizedBox(width: 8),
                                       Text(
-                                        worker.email,
+                                        widget.worker.email,
                                         style: const TextStyle(
                                           fontSize: 14,
                                           color: Color(0xFF6B7280),
@@ -309,7 +578,7 @@ class WorkerProfilePage extends StatelessWidget {
                                       ),
                                       const SizedBox(width: 8),
                                       Text(
-                                        worker.phone,
+                                        widget.worker.phone,
                                         style: const TextStyle(
                                           fontSize: 14,
                                           color: Color(0xFF6B7280),
@@ -326,7 +595,7 @@ class WorkerProfilePage extends StatelessWidget {
                                 showDialog(
                                   context: context,
                                   builder: (context) =>
-                                      ViewEditWorkerModal(worker: worker),
+                                      ViewEditWorkerModal(worker: widget.worker),
                                 );
                               },
                               style: ElevatedButton.styleFrom(
@@ -411,6 +680,14 @@ class _ProjectSection extends StatelessWidget {
           ),
         ),
         SizedBox(height: isMobile ? 12 : 16),
+        if (projects.isEmpty)
+          Text(
+            'No projects assigned.',
+            style: TextStyle(
+              fontSize: isMobile ? 13 : 14,
+              color: const Color(0xFF6B7280),
+            ),
+          ),
         ...projects.map(
           (project) => Padding(
             padding: EdgeInsets.only(bottom: isMobile ? 12 : 16),
