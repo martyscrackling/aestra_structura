@@ -32,6 +32,95 @@ class ProjectDetailsPage extends StatefulWidget {
 }
 
 class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
+  String? _asNonEmptyString(dynamic value) {
+    if (value == null) return null;
+    final s = value.toString().trim();
+    if (s.isEmpty || s == 'null') return null;
+    return s;
+  }
+
+  String? _resolveMediaUrl(dynamic raw) {
+    if (raw == null) return null;
+    final value = raw.toString().trim();
+    if (value.isEmpty || value == 'null') return null;
+
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return value;
+    }
+
+    // AppConfig.apiBaseUrl includes `/api/`; media is served from the same origin.
+    final base = Uri.parse(AppConfig.apiBaseUrl);
+    final origin = Uri(
+      scheme: base.scheme,
+      host: base.host,
+      port: base.hasPort ? base.port : null,
+    );
+
+    if (value.startsWith('/')) {
+      return origin.resolve(value).toString();
+    }
+    if (value.startsWith('media/')) {
+      return origin.resolve('/$value').toString();
+    }
+    if (value.startsWith('client_images/')) {
+      return origin.resolve('/media/$value').toString();
+    }
+    if (value.startsWith('fieldworker_images/')) {
+      return origin.resolve('/media/$value').toString();
+    }
+
+    // Fallback: assume it's under MEDIA_URL.
+    return origin.resolve('/media/$value').toString();
+  }
+
+  Widget _buildProfileAvatar({
+    required double radius,
+    required String? photoUrl,
+    IconData fallbackIcon = Icons.person_outline,
+  }) {
+    final size = radius * 2;
+    final url = (photoUrl ?? '').trim();
+
+    Widget fallback() {
+      return Container(
+        width: size,
+        height: size,
+        color: Colors.grey[200],
+        child: Icon(fallbackIcon, color: Colors.grey[500], size: radius),
+      );
+    }
+
+    if (url.isEmpty) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: Colors.grey[200],
+        child: Icon(fallbackIcon, color: Colors.grey[500], size: radius),
+      );
+    }
+
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: Colors.grey[200],
+      child: ClipOval(
+        child: Image.network(
+          url,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return fallback();
+          },
+          errorBuilder: (context, error, stackTrace) {
+            return fallback();
+          },
+        ),
+      ),
+    );
+  }
+
+  bool _showDaysLeftReminder = true;
+
   int? _toInt(dynamic value) {
     if (value == null) return null;
     if (value is int) return value;
@@ -286,6 +375,10 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
   Widget build(BuildContext context) {
     final daysLeft = _calculateDaysLeft();
     final progressPercent = (_calculateProjectProgress() * 100).round();
+    final projectDescription =
+        _asNonEmptyString(_projectInfo?['description']) ??
+        _asNonEmptyString(_projectInfo?['project_description']) ??
+        _asNonEmptyString(_projectInfo?['details']);
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: Color(0xFFF4F6F9),
@@ -311,7 +404,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (daysLeft != null)
+            if (daysLeft != null && _showDaysLeftReminder)
               Container(
                 width: double.infinity,
                 margin: const EdgeInsets.only(bottom: 16),
@@ -353,6 +446,26 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                           fontWeight: FontWeight.w600,
                           fontSize: 15,
                         ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Dismiss reminder',
+                      onPressed: () {
+                        setState(() {
+                          _showDaysLeftReminder = false;
+                        });
+                      },
+                      icon: Icon(
+                        Icons.close,
+                        size: 18,
+                        color: daysLeft <= 3
+                            ? const Color(0xFFFF9800)
+                            : const Color(0xFF2196F3),
+                      ),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 36,
+                        minHeight: 36,
                       ),
                     ),
                   ],
@@ -408,10 +521,42 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
             const SizedBox(height: 6),
 
             // Location
-            Text(
-              widget.projectLocation,
-              style: const TextStyle(fontSize: 15, color: Colors.grey),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(top: 1),
+                  child: Icon(
+                    Icons.location_on_outlined,
+                    size: 18,
+                    color: Colors.grey,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    widget.projectLocation,
+                    style: const TextStyle(fontSize: 15, color: Colors.grey),
+                  ),
+                ),
+              ],
             ),
+
+            if (projectDescription != null) ...[
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.only(left: 24),
+                child: Text(
+                  projectDescription,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Color(0xFF6B7280),
+                  ),
+                ),
+              ),
+            ],
 
             const SizedBox(height: 25),
 
@@ -542,6 +687,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                           '${_clientInfo!['first_name']} ${_clientInfo!['last_name']}',
                       email: _clientInfo!['email'] ?? 'N/A',
                       phone: _clientInfo!['phone_number'] ?? 'N/A',
+                      photoUrl: _resolveMediaUrl(_clientInfo!['photo']),
                       isMobile: true,
                     )
                   else
@@ -561,6 +707,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                           '${_supervisorInfo!['first_name']} ${_supervisorInfo!['last_name']}',
                       email: _supervisorInfo!['email'] ?? 'N/A',
                       phone: _supervisorInfo!['phone_number'] ?? 'N/A',
+                      photoUrl: _resolveMediaUrl(_supervisorInfo!['photo']),
                       isMobile: true,
                     )
                   else
@@ -587,6 +734,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                           '${_clientInfo!['first_name']} ${_clientInfo!['last_name']}',
                       email: _clientInfo!['email'] ?? 'N/A',
                       phone: _clientInfo!['phone_number'] ?? 'N/A',
+                      photoUrl: _resolveMediaUrl(_clientInfo!['photo']),
                       isMobile: false,
                     )
                   else
@@ -608,6 +756,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                           '${_supervisorInfo!['first_name']} ${_supervisorInfo!['last_name']}',
                       email: _supervisorInfo!['email'] ?? 'N/A',
                       phone: _supervisorInfo!['phone_number'] ?? 'N/A',
+                      photoUrl: _resolveMediaUrl(_supervisorInfo!['photo']),
                       isMobile: false,
                     )
                   else
@@ -858,6 +1007,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     required String name,
     required String email,
     required String phone,
+    required String? photoUrl,
     required bool isMobile,
   }) {
     return isMobile
@@ -878,15 +1028,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    CircleAvatar(
-                      radius: 26,
-                      backgroundColor: const Color(0xFFE8F5E9),
-                      child: const Icon(
-                        Icons.person,
-                        size: 26,
-                        color: Color(0xFF10B981),
-                      ),
-                    ),
+                    _buildProfileAvatar(radius: 26, photoUrl: photoUrl),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
@@ -964,15 +1106,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      CircleAvatar(
-                        radius: 26,
-                        backgroundColor: const Color(0xFFE8F5E9),
-                        child: const Icon(
-                          Icons.person,
-                          size: 26,
-                          color: Color(0xFF10B981),
-                        ),
-                      ),
+                      _buildProfileAvatar(radius: 26, photoUrl: photoUrl),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(

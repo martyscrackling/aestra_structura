@@ -165,7 +165,7 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
                   ),
                   backgroundColor: Colors.red,
                   duration: const Duration(seconds: 5),
-                )
+                ),
               );
             }
           }
@@ -237,7 +237,9 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
     }
 
     try {
-      final baseUri = AppConfig.apiUri('supervisors/$supervisorId/upload-photo/');
+      final baseUri = AppConfig.apiUri(
+        'supervisors/$supervisorId/upload-photo/',
+      );
       final uri = (currentUserId != null)
           ? baseUri.replace(
               queryParameters: {
@@ -347,7 +349,9 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
                                 borderRadius: BorderRadius.circular(12),
                                 image: _selectedImageBytes != null
                                     ? DecorationImage(
-                                        image: MemoryImage(_selectedImageBytes!),
+                                        image: MemoryImage(
+                                          _selectedImageBytes!,
+                                        ),
                                         fit: BoxFit.cover,
                                       )
                                     : null,
@@ -406,7 +410,9 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
                                     borderRadius: BorderRadius.circular(12),
                                     image: _selectedImageBytes != null
                                         ? DecorationImage(
-                                            image: MemoryImage(_selectedImageBytes!),
+                                            image: MemoryImage(
+                                              _selectedImageBytes!,
+                                            ),
                                             fit: BoxFit.cover,
                                           )
                                         : null,

@@ -218,16 +218,38 @@ class _ProjectsPageState extends State<ProjectsPage> {
 
   String _buildLocation(Map<String, dynamic> project) {
     try {
-      List<String> parts = [];
+      String? asNonEmptyString(dynamic value, {bool allowNumericOnly = false}) {
+        if (value == null) return null;
+        final s = value.toString().trim();
+        if (s.isEmpty || s == 'null') return null;
+        final numericOnly = RegExp(r'^\d+$').hasMatch(s);
+        if (!allowNumericOnly && numericOnly) return null;
+        return s;
+      }
 
-      final street = project['street'];
-      if (street != null) parts.add(street.toString());
+      // Prefer human-readable *_name fields when available.
+      final street = asNonEmptyString(project['street']);
+      final barangay = asNonEmptyString(project['barangay_name']) ??
+          asNonEmptyString(project['barangay']);
+      final city = asNonEmptyString(project['city_name']) ??
+          asNonEmptyString(project['city']);
+      final province = asNonEmptyString(project['province_name']) ??
+          asNonEmptyString(project['province']);
 
-      final barangay = project['barangay'];
-      if (barangay != null) parts.add(barangay.toString());
+      final parts = <String>[];
+      if (street != null) parts.add(street);
+      if (barangay != null) parts.add(barangay);
+      if (city != null) parts.add(city);
+      if (province != null) parts.add(province);
 
-      final city = project['city'];
-      if (city != null) parts.add(city.toString());
+      // Fallback for APIs that return a single address/location string.
+      if (parts.isEmpty) {
+        final fallback = asNonEmptyString(project['project_location']) ??
+            asNonEmptyString(project['project_address']) ??
+            asNonEmptyString(project['address']) ??
+            asNonEmptyString(project['location']);
+        if (fallback != null) return fallback;
+      }
 
       return parts.isNotEmpty ? parts.join(', ') : 'Unknown Location';
     } catch (e) {
