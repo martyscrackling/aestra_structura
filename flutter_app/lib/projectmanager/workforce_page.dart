@@ -146,8 +146,9 @@ class _WorkforcePageState extends State<WorkforcePage> {
             final mediaUrl = _resolveMediaUrl(supervisor['photo']);
             return WorkerInfo(
               userId: _tryParseInt(supervisor['user_id']),
-              supervisorId:
-                  _tryParseInt(supervisor['supervisor_id'] ?? supervisor['id']),
+              supervisorId: _tryParseInt(
+                supervisor['supervisor_id'] ?? supervisor['id'],
+              ),
               name: '${supervisor['first_name']} ${supervisor['last_name']}',
               email: supervisor['email'] ?? 'N/A',
               phone: supervisor['phone_number'] ?? 'N/A',
@@ -245,38 +246,32 @@ class _WorkforcePageState extends State<WorkforcePage> {
                 ],
               ),
             )
-          : SingleChildScrollView(
-              padding: EdgeInsets.symmetric(
-                horizontal: isMobile ? 16 : 24,
-                vertical: isMobile ? 16 : 24,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildTotals(),
-                  const SizedBox(height: 24),
-                  ..._groups.map(
-                    (group) => Padding(
-                      padding: const EdgeInsets.only(bottom: 32),
-                      child: WorkerGroupSection(
-                        group: group,
-                        projectId: _projectId,
-                        onWorkerAdded: _fetchWorkerGroups,
-                        filteredWorkers: _getFilteredWorkers(),
-                        searchQuery: _searchQuery,
-                        filterType: _filterType,
-                        onSearchChanged: (query) {
-                          setState(() => _searchQuery = query);
-                        },
-                        onFilterChanged: (filter) {
-                          setState(() => _filterType = filter);
-                        },
-                      ),
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildTotals(),
+                const SizedBox(height: 24),
+                ..._groups.map(
+                  (group) => Padding(
+                    padding: const EdgeInsets.only(bottom: 32),
+                    child: WorkerGroupSection(
+                      group: group,
+                      projectId: _projectId,
+                      onWorkerAdded: _fetchWorkerGroups,
+                      filteredWorkers: _getFilteredWorkers(),
+                      searchQuery: _searchQuery,
+                      filterType: _filterType,
+                      onSearchChanged: (query) {
+                        setState(() => _searchQuery = query);
+                      },
+                      onFilterChanged: (filter) {
+                        setState(() => _filterType = filter);
+                      },
                     ),
                   ),
-                  SizedBox(height: isMobile ? 80 : 0),
-                ],
-              ),
+                ),
+                SizedBox(height: isMobile ? 80 : 0),
+              ],
             ),
     );
   }
@@ -642,7 +637,7 @@ class WorkerGroupSection extends StatelessWidget {
                         child: TextField(
                           onChanged: onSearchChanged,
                           decoration: InputDecoration(
-                            hintText: 'Search...',
+                            hintText: 'Search workers...',
                             hintStyle: const TextStyle(fontSize: 13),
                             prefixIcon: const Icon(Icons.search, size: 18),
                             filled: true,
@@ -891,14 +886,26 @@ class WorkerProfileCard extends StatelessWidget {
                     ),
                     SizedBox(height: isMobile ? 2 : 4),
                     if (worker.email != 'N/A') ...[
-                      Text(
-                        worker.email,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFF6B7280),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.email_outlined,
+                            size: 11,
+                            color: Color(0xFF6B7280),
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              worker.email,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Color(0xFF6B7280),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 2),
                     ],

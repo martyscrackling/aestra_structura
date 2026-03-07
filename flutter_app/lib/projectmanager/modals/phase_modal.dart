@@ -281,7 +281,7 @@ class _PhaseModalState extends State<PhaseModal> {
               ),
               child: Row(
                 children: [
-                  Flexible(
+                  Expanded(
                     child: Container(
                       padding: EdgeInsets.symmetric(
                         horizontal: isMobile ? 8 : 12,
@@ -299,10 +299,10 @@ class _PhaseModalState extends State<PhaseModal> {
                       ),
                     ),
                   ),
-                  const Spacer(),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.close),
+                    color: Colors.grey[600],
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                   ),
@@ -338,6 +338,13 @@ class _PhaseModalState extends State<PhaseModal> {
                             borderRadius: BorderRadius.circular(8),
                             borderSide: const BorderSide(
                               color: Color(0xFFE5E7EB),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF0C1935),
+                              width: 2,
                             ),
                           ),
                         ),
@@ -446,6 +453,13 @@ class _PhaseModalState extends State<PhaseModal> {
                               color: Color(0xFFE5E7EB),
                             ),
                           ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF0C1935),
+                              width: 2,
+                            ),
+                          ),
                         ),
                       ),
 
@@ -474,6 +488,13 @@ class _PhaseModalState extends State<PhaseModal> {
                             borderRadius: BorderRadius.circular(8),
                             borderSide: const BorderSide(
                               color: Color(0xFFE5E7EB),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF0C1935),
+                              width: 2,
                             ),
                           ),
                         ),
@@ -619,7 +640,10 @@ class _PhaseModalState extends State<PhaseModal> {
                           )
                         : const Text(
                             'Add',
-                            style: TextStyle(fontWeight: FontWeight.w600),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
                           ),
                   ),
                 ],

@@ -101,6 +101,7 @@ class ProjectTaskDetailsPage extends StatefulWidget {
   final double progress;
   final String? budget;
   final int projectId;
+  final String? projectStartDate;
 
   const ProjectTaskDetailsPage({
     super.key,
@@ -110,6 +111,7 @@ class ProjectTaskDetailsPage extends StatefulWidget {
     required this.progress,
     this.budget,
     required this.projectId,
+    this.projectStartDate,
   });
 
   @override
@@ -120,6 +122,7 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
   List<Phase> _phases = [];
   bool _isLoading = true;
   String? _error;
+  bool _isGanttView = false; // View mode: false = list view, true = gantt chart
 
   // Calculate overall project progress based on phases (matching task_progress.dart)
   double _calculateProjectProgress() {
@@ -295,209 +298,206 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
                   child: Text(
                     '${(_calculateProjectProgress() * 100).round()}%',
                     style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: _calculateProjectProgress() >= 1
-                                      ? const Color(0xFF10B981)
-                                      : const Color(0xFFFF7A18),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            if (widget.budget != null) ...[
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFE8F5E9),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.account_balance_wallet_outlined,
-                                      size: 16,
-                                      color: Color(0xFF2E7D32),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      '₱ ${widget.budget}',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                        color: Color(0xFF2E7D32),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                            ],
-                            CircleAvatar(
-                              radius: 20,
-                              backgroundImage: AssetImage(widget.projectImage),
-                            ),
-                          ],
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: _calculateProjectProgress() >= 1
+                          ? const Color(0xFF10B981)
+                          : const Color(0xFFFF7A18),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                if (widget.budget != null) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE8F5E9),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.account_balance_wallet_outlined,
+                          size: 16,
+                          color: Color(0xFF2E7D32),
                         ),
-                        const SizedBox(height: 24),
-
-                        // Tabs
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          padding: const EdgeInsets.all(4),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _TabButton(
-                                label: 'Add Phase',
-                                icon: Icons.list,
-                                isSelected: true,
-                                onPressed: () {
-                                  showDialog(
-                                    context: context,
-                                    builder: (context) => PhaseModal(
-                                      projectTitle: widget.projectTitle,
-                                      projectId: widget.projectId,
-                                    ),
-                                  ).then((_) => _fetchPhases());
-                                },
-                              ),
-                            ],
+                        const SizedBox(width: 6),
+                        Text(
+                          '₱ ${widget.budget}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF2E7D32),
                           ),
                         ),
-                        const SizedBox(height: 24),
-
-                        // Search and Filter
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                decoration: InputDecoration(
-                                  filled: true,
-                                  fillColor: Colors.white,
-                                  prefixIcon: const Icon(
-                                    Icons.search,
-                                    size: 18,
-                                  ),
-                                  hintText: 'Search task...',
-                                  hintStyle: const TextStyle(fontSize: 13),
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                  ),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            OutlinedButton.icon(
-                              onPressed: () {},
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFF0C1935),
-                                side: const BorderSide(
-                                  color: Color(0xFFE5E7EB),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 12,
-                                ),
-                              ),
-                              icon: const Icon(Icons.filter_list, size: 18),
-                              label: const Text('Filter'),
-                            ),
-                            const SizedBox(width: 12),
-                            OutlinedButton.icon(
-                              onPressed: () {},
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFF0C1935),
-                                side: const BorderSide(
-                                  color: Color(0xFFE5E7EB),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 12,
-                                ),
-                              ),
-                              icon: const Icon(Icons.sort, size: 18),
-                              label: const Text('Sort: Date Created'),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Loading state
-                        if (_isLoading)
-                          const Center(
-                            child: Padding(
-                              padding: EdgeInsets.all(40),
-                              child: CircularProgressIndicator(),
-                            ),
-                          )
-                        else if (_error != null)
-                          Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(40),
-                              child: Text(
-                                'Error: $_error',
-                                style: const TextStyle(color: Colors.red),
-                              ),
-                            ),
-                          )
-                        else if (_phases.isEmpty)
-                          Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(60),
-                              child: Column(
-                                children: [
-                                  Icon(
-                                    Icons.inbox_outlined,
-                                    size: 64,
-                                    color: Colors.grey[400],
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    'No phases yet, add first',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color: Colors.grey[600],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          )
-                        else ...[
-                          // To Do Section (Phases)
-                          _PhaseSection(
-                            title: 'To Do',
-                            count: _todoPhases.length,
-                            phases: _todoPhases,
-                            onRefresh: _fetchPhases,
-                          ),
-                          const SizedBox(height: 24),
-
-                          // Finished Section (Phases)
-                          _PhaseSection(
-                            title: 'Finished',
-                            count: _completedPhases.length,
-                            phases: _completedPhases,
-                            onRefresh: _fetchPhases,
-                          ),
-                        ],
-                        SizedBox(height: isMobile ? 80 : 32), // Space for bottom nav
                       ],
                     ),
                   ),
+                  const SizedBox(width: 12),
+                ],
+                CircleAvatar(
+                  radius: 20,
+                  backgroundImage: AssetImage(widget.projectImage),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            // Tabs
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _TabButton(
+                  label: 'Add Phase',
+                  icon: Icons.list,
+                  isSelected: true,
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => PhaseModal(
+                        projectTitle: widget.projectTitle,
+                        projectId: widget.projectId,
+                      ),
+                    ).then((_) => _fetchPhases());
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            // Search and Filter
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.white,
+                      prefixIcon: const Icon(Icons.search, size: 18),
+                      hintText: 'Search task...',
+                      hintStyle: const TextStyle(fontSize: 13),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  onPressed: () {},
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF0C1935),
+                    side: const BorderSide(color: Color(0xFFE5E7EB)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
+                  icon: const Icon(Icons.filter_list, size: 18),
+                  label: const Text('Filter'),
+                ),
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  onPressed: () {},
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF0C1935),
+                    side: const BorderSide(color: Color(0xFFE5E7EB)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
+                  icon: const Icon(Icons.sort, size: 18),
+                  label: const Text('Sort: Date Created'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            // Loading state
+            if (_isLoading)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(40),
+                  child: CircularProgressIndicator(),
+                ),
+              )
+            else if (_error != null)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(40),
+                  child: Text(
+                    'Error: $_error',
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ),
+              )
+            else if (_phases.isEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(60),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.inbox_outlined,
+                        size: 64,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No phases yet, add first',
+                        style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else ...[
+              // To Do Section (Phases)
+              _PhaseSection(
+                title: 'To Do',
+                count: _todoPhases.length,
+                phases: _todoPhases,
+                onRefresh: _fetchPhases,
+                isGanttView: _isGanttView,
+                onToggleView: () {
+                  setState(() {
+                    _isGanttView = !_isGanttView;
+                  });
+                },
+                projectStartDate: widget.projectStartDate,
+              ),
+              const SizedBox(height: 24),
+
+              // Finished Section (Phases)
+              _PhaseSection(
+                title: 'Finished',
+                count: _completedPhases.length,
+                phases: _completedPhases,
+                onRefresh: _fetchPhases,
+                isGanttView: _isGanttView,
+                onToggleView: () {
+                  setState(() {
+                    _isGanttView = !_isGanttView;
+                  });
+                },
+                projectStartDate: widget.projectStartDate,
+              ),
+            ],
+            SizedBox(height: isMobile ? 80 : 32), // Space for bottom nav
+          ],
+        ),
+      ),
     );
   }
 }
@@ -520,11 +520,13 @@ class _TabButton extends StatelessWidget {
     return ElevatedButton.icon(
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(
-        backgroundColor: isSelected ? Colors.blue : Colors.transparent,
+        backgroundColor: isSelected
+            ? const Color(0xFF0C1935)
+            : Colors.transparent,
         foregroundColor: isSelected ? Colors.white : const Color(0xFF6B7280),
         elevation: 0,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
       icon: Icon(icon, size: 18),
       label: Text(label),
@@ -729,12 +731,18 @@ class _PhaseSection extends StatelessWidget {
   final int count;
   final List<Phase> phases;
   final VoidCallback onRefresh;
+  final bool isGanttView;
+  final VoidCallback onToggleView;
+  final String? projectStartDate;
 
   const _PhaseSection({
     required this.title,
     required this.count,
     required this.phases,
     required this.onRefresh,
+    required this.isGanttView,
+    required this.onToggleView,
+    this.projectStartDate,
   });
 
   @override
@@ -767,12 +775,55 @@ class _PhaseSection extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
-                IconButton(
-                  onPressed: onRefresh,
-                  icon: const Icon(Icons.refresh, size: 20),
-                  color: const Color(0xFF6B7280),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
+                // Toggle switch for view mode
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.view_list,
+                      size: 18,
+                      color: !isGanttView
+                          ? const Color(0xFF0C1935)
+                          : const Color(0xFF6B7280),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: onToggleView,
+                      child: Container(
+                        width: 44,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          color: isGanttView
+                              ? const Color(0xFF0C1935)
+                              : const Color(0xFFE5E7EB),
+                        ),
+                        child: AnimatedAlign(
+                          duration: const Duration(milliseconds: 200),
+                          alignment: isGanttView
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
+                          child: Container(
+                            width: 20,
+                            height: 20,
+                            margin: const EdgeInsets.symmetric(horizontal: 2),
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      Icons.stairs,
+                      size: 18,
+                      color: isGanttView
+                          ? const Color(0xFF0C1935)
+                          : const Color(0xFF6B7280),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -786,6 +837,8 @@ class _PhaseSection extends StatelessWidget {
                 style: TextStyle(color: Color(0xFF6B7280)),
               ),
             )
+          else if (isGanttView)
+            _GanttChartView(phases: phases, projectStartDate: projectStartDate)
           else
             ...phases.map((phase) => _PhaseCard(phase: phase)),
         ],
@@ -996,5 +1049,335 @@ class _PhaseCard extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+// Gantt Chart View Widget
+class _GanttChartView extends StatelessWidget {
+  final List<Phase> phases;
+  final String? projectStartDate;
+
+  const _GanttChartView({required this.phases, this.projectStartDate});
+
+  @override
+  Widget build(BuildContext context) {
+    if (phases.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(20),
+        child: Text(
+          'No phases to display',
+          style: TextStyle(color: Color(0xFF6B7280)),
+        ),
+      );
+    }
+
+    // Parse project start date
+    DateTime projectStart;
+    try {
+      projectStart = projectStartDate != null
+          ? DateTime.parse(projectStartDate!)
+          : DateTime.now();
+    } catch (e) {
+      projectStart = DateTime.now();
+    }
+
+    // Calculate sequential phase dates based on duration
+    List<Map<String, dynamic>> sequentialPhases = [];
+    DateTime currentDate = projectStart;
+
+    for (int i = 0; i < phases.length; i++) {
+      final phase = phases[i];
+      final duration = phase.daysDuration ?? 30; // Default 30 days if not set
+
+      final startDate = currentDate;
+      final endDate = currentDate.add(Duration(days: duration));
+
+      sequentialPhases.add({
+        'phase': phase,
+        'startDate': startDate,
+        'endDate': endDate,
+        'index': i,
+      });
+
+      currentDate = endDate; // Next phase starts after this one ends
+    }
+
+    // Calculate total project duration
+    final lastPhase = sequentialPhases.last;
+    final totalDays = lastPhase['endDate'].difference(projectStart).inDays;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final screenWidth = MediaQuery.of(context).size.width;
+        final isMobile = screenWidth < 768;
+
+        // Calculate responsive chart width
+        // Subtract padding (40) and label width (200)
+        final availableWidth = constraints.maxWidth > 0
+            ? constraints.maxWidth -
+                  40 -
+                  220 // 40 for padding, 220 for label + spacing
+            : screenWidth - 40 - 220;
+
+        final chartWidth = (availableWidth > 400 ? availableWidth : 400)
+            .toDouble();
+
+        return Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Timeline header with months
+              _buildTimelineHeader(projectStart, totalDays, chartWidth),
+              const SizedBox(height: 20),
+
+              // Phases as Gantt bars
+              ...sequentialPhases.map((phaseData) {
+                final phase = phaseData['phase'] as Phase;
+                final startDate = phaseData['startDate'] as DateTime;
+                final endDate = phaseData['endDate'] as DateTime;
+                final index = phaseData['index'] as int;
+
+                return _buildGanttBar(
+                  context,
+                  phase,
+                  startDate,
+                  endDate,
+                  projectStart,
+                  totalDays,
+                  chartWidth,
+                  index,
+                );
+              }).toList(),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildTimelineHeader(
+    DateTime projectStart,
+    int totalDays,
+    double chartWidth,
+  ) {
+    List<Widget> timeMarkers = [];
+
+    // Generate month/day markers
+    DateTime currentDate = projectStart;
+    int daysShown = 0;
+
+    while (daysShown < totalDays) {
+      final daysInCurrentMonth = DateTime(
+        currentDate.year,
+        currentDate.month + 1,
+        0,
+      ).day;
+
+      final remainingDaysInMonth = daysInCurrentMonth - currentDate.day + 1;
+      final daysToShow = remainingDaysInMonth < (totalDays - daysShown)
+          ? remainingDaysInMonth
+          : (totalDays - daysShown);
+
+      final widthPercent = daysToShow / totalDays;
+      final width = chartWidth * widthPercent;
+
+      timeMarkers.add(
+        Container(
+          width: width,
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          decoration: BoxDecoration(
+            border: Border(
+              right: BorderSide(color: Colors.grey[300]!),
+              bottom: BorderSide(color: Colors.grey[300]!),
+            ),
+          ),
+          child: Text(
+            _getMonthName(currentDate.month) + ' ${currentDate.year}',
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF6B7280),
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+
+      daysShown += daysToShow;
+      currentDate = DateTime(currentDate.year, currentDate.month + 1, 1);
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(width: 200), // Space for phase names
+        Expanded(child: Row(children: timeMarkers)),
+      ],
+    );
+  }
+
+  Widget _buildGanttBar(
+    BuildContext context,
+    Phase phase,
+    DateTime startDate,
+    DateTime endDate,
+    DateTime projectStart,
+    int totalDays,
+    double chartWidth,
+    int index,
+  ) {
+    final startOffset = startDate.difference(projectStart).inDays;
+    final duration = endDate.difference(startDate).inDays;
+
+    final startPercent = startOffset / totalDays;
+    final widthPercent = duration / totalDays;
+
+    final barStartPosition = chartWidth * startPercent;
+    final barWidth = chartWidth * widthPercent;
+
+    // Alternating colors: dark blue (#0C1935) and orange (#FF7A18)
+    final barColor = index % 2 == 0
+        ? const Color(0xFF0C1935)
+        : const Color(0xFFFF7A18);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Phase name (fixed width)
+          SizedBox(
+            width: 180,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  phase.phaseName,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF0C1935),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Text(
+                      '${duration} days',
+                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                    ),
+                    if (phase.subtasks.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      const Icon(
+                        Icons.checklist,
+                        size: 12,
+                        color: Color(0xFF6B7280),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          '${phase.subtasks.where((s) => s.status == 'completed').length}/${phase.subtasks.length} completed',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: Color(0xFF6B7280),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 20),
+
+          // Gantt bar container - clickable
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => SubtaskManagePage(phase: phase),
+                  ),
+                );
+              },
+              child: Stack(
+                children: [
+                  // Background grid
+                  Container(
+                    height: 50,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey[200]!),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  // Gantt bar
+                  Positioned(
+                    left: barStartPosition,
+                    child: Container(
+                      width: barWidth,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: barColor,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            phase.phaseName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${_formatDate(startDate)} - ${_formatDate(endDate)}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.month}/${date.day}';
+  }
+
+  String _getMonthName(int month) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return months[month - 1];
   }
 }

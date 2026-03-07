@@ -839,6 +839,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                                 progress: widget.progress,
                                 budget: widget.budget,
                                 projectId: widget.projectId,
+                                projectStartDate: _projectInfo?['start_date'],
                               ),
                         ),
                       );

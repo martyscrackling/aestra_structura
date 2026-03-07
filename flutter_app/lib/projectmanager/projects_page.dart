@@ -229,11 +229,14 @@ class _ProjectsPageState extends State<ProjectsPage> {
 
       // Prefer human-readable *_name fields when available.
       final street = asNonEmptyString(project['street']);
-      final barangay = asNonEmptyString(project['barangay_name']) ??
+      final barangay =
+          asNonEmptyString(project['barangay_name']) ??
           asNonEmptyString(project['barangay']);
-      final city = asNonEmptyString(project['city_name']) ??
+      final city =
+          asNonEmptyString(project['city_name']) ??
           asNonEmptyString(project['city']);
-      final province = asNonEmptyString(project['province_name']) ??
+      final province =
+          asNonEmptyString(project['province_name']) ??
           asNonEmptyString(project['province']);
 
       final parts = <String>[];
@@ -244,7 +247,8 @@ class _ProjectsPageState extends State<ProjectsPage> {
 
       // Fallback for APIs that return a single address/location string.
       if (parts.isEmpty) {
-        final fallback = asNonEmptyString(project['project_location']) ??
+        final fallback =
+            asNonEmptyString(project['project_location']) ??
             asNonEmptyString(project['project_address']) ??
             asNonEmptyString(project['address']) ??
             asNonEmptyString(project['location']);
@@ -487,7 +491,7 @@ class _ProjectsHeader extends StatelessWidget {
                       backgroundColor: const Color(0xFFFF7A18),
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(20),
                       ),
                     ),
                     onPressed: () {
@@ -498,12 +502,12 @@ class _ProjectsHeader extends StatelessWidget {
                         onRefresh();
                       });
                     },
-                    icon: const Icon(Icons.add, size: 18, color: Colors.black),
+                    icon: const Icon(Icons.add, size: 18, color: Colors.white),
                     label: const Text(
                       'Create',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
-                        color: Colors.black,
+                        color: Colors.white,
                         fontSize: 13,
                       ),
                     ),
@@ -566,7 +570,7 @@ class _ProjectsHeader extends StatelessWidget {
               backgroundColor: const Color(0xFFFF7A18),
               padding: const EdgeInsets.symmetric(horizontal: 18),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(20),
               ),
             ),
             onPressed: () {
@@ -577,12 +581,12 @@ class _ProjectsHeader extends StatelessWidget {
                 onRefresh();
               });
             },
-            icon: const Icon(Icons.add, size: 18, color: Colors.black),
+            icon: const Icon(Icons.add, size: 18, color: Colors.white),
             label: const Text(
               'Create Project',
               style: TextStyle(
                 fontWeight: FontWeight.w600,
-                color: Colors.black,
+                color: Colors.white,
               ),
             ),
           ),
@@ -615,20 +619,31 @@ class _SearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: isMobile ? null : 220,
-      height: 40,
+      width: isMobile ? null : 200,
+      height: 36,
       child: TextField(
         controller: controller,
         decoration: InputDecoration(
           filled: true,
-          fillColor: Colors.white,
+          fillColor: Colors.grey[100],
           prefixIcon: const Icon(Icons.search, size: 18),
           hintText: 'Search projects…',
           hintStyle: TextStyle(fontSize: isMobile ? 12 : 13),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 8,
+          ),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide.none,
+            borderRadius: BorderRadius.circular(30),
+            borderSide: BorderSide(color: Colors.grey[300]!),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(30),
+            borderSide: BorderSide(color: Colors.grey[300]!),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(30),
+            borderSide: const BorderSide(color: Color(0xFF0C1935), width: 2),
           ),
         ),
       ),
@@ -658,57 +673,80 @@ class _ProjectTypeFilterDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dropdown = DropdownButton<String?>(
-      value: value,
-      isDense: true,
-      onChanged: onChanged,
-      items: <DropdownMenuItem<String?>>[
-        const DropdownMenuItem(
-          value: null,
-          child: Text(
-            'All Types',
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF0C1935),
-            ),
-          ),
-        ),
-        ..._types.map(
-          (type) => DropdownMenuItem(
-            value: type,
-            child: Text(
-              type,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF0C1935),
-              ),
-            ),
-          ),
-        ),
-      ],
-      icon: const Icon(Icons.filter_list, size: 18, color: Color(0xFF0C1935)),
-    );
+    final displayText = value ?? 'All';
 
     if (isMobile) {
       return SizedBox(
-        height: 40,
-        width: 40,
-        child: _DropdownShell(
-          child: DropdownButtonHideUnderline(
-            child: ButtonTheme(alignedDropdown: true, child: dropdown),
+        height: 36,
+        child: PopupMenuButton<String?>(
+          onSelected: onChanged,
+          itemBuilder: (BuildContext context) => <PopupMenuEntry<String?>>[
+            const PopupMenuItem<String?>(value: null, child: Text('All')),
+            ..._types.map(
+              (type) => PopupMenuItem<String?>(value: type, child: Text(type)),
+            ),
+          ],
+          child: OutlinedButton(
+            onPressed: null,
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              side: BorderSide(color: Colors.grey[300]!),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: Row(
+              children: const [
+                Icon(Icons.tune, size: 16, color: Color(0xFF0C1935)),
+                SizedBox(width: 4),
+                Icon(Icons.arrow_drop_down, size: 18, color: Color(0xFF0C1935)),
+              ],
+            ),
           ),
         ),
       );
     }
 
     return SizedBox(
-      height: 40,
-      width: 180,
-      child: _DropdownShell(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: DropdownButtonHideUnderline(child: dropdown),
+      height: 36,
+      child: PopupMenuButton<String?>(
+        onSelected: onChanged,
+        itemBuilder: (BuildContext context) => <PopupMenuEntry<String?>>[
+          const PopupMenuItem<String?>(value: null, child: Text('All')),
+          ..._types.map(
+            (type) => PopupMenuItem<String?>(value: type, child: Text(type)),
+          ),
+        ],
+        child: OutlinedButton(
+          onPressed: null,
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            side: BorderSide(color: Colors.grey[300]!),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.tune, size: 16, color: Color(0xFF0C1935)),
+              const SizedBox(width: 6),
+              Text(
+                displayText,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF0C1935),
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Icon(
+                Icons.arrow_drop_down,
+                size: 18,
+                color: Color(0xFF0C1935),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
