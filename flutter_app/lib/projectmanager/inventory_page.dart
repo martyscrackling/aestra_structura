@@ -3,7 +3,6 @@ import 'widgets/responsive_page_layout.dart';
 import 'modals/tool_details_modal.dart';
 import 'modals/add_inventory_item_modal.dart';
 import 'modals/manage_usage_modal.dart';
-import 'materials_page.dart';
 
 class ToolItem {
   final String id;
@@ -131,46 +130,42 @@ class _InventoryPageState extends State<InventoryPage> {
               const SizedBox(height: 18),
               // Search and Add button row
               if (isMobile) ...[
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        onChanged: (v) => setState(() => _query = v),
-                        decoration: InputDecoration(
-                          hintText: 'Search tools...',
-                          isDense: true,
-                          prefixIcon: const Icon(Icons.search, size: 20),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          filled: true,
-                          fillColor: Colors.grey[100],
+                SizedBox(
+                  height: 36,
+                  child: TextField(
+                    onChanged: (v) => setState(() => _query = v),
+                    decoration: InputDecoration(
+                      hintText: 'Search tools...',
+                      hintStyle: const TextStyle(fontSize: 13),
+                      prefixIcon: const Icon(Icons.search, size: 18),
+                      filled: true,
+                      fillColor: Colors.grey[100],
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(30),
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(30),
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(30),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF0C1935),
+                          width: 2,
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    OutlinedButton(
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const MaterialsPage(),
-                          ),
-                        );
-                      },
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: primary,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 12,
-                        ),
-                      ),
-                      child: const Icon(Icons.layers, size: 20),
-                    ),
-                  ],
+                  ),
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
+                  height: 40,
                   child: ElevatedButton.icon(
                     onPressed: () async {
                       final result = await showDialog(
@@ -194,57 +189,69 @@ class _InventoryPageState extends State<InventoryPage> {
                 const SizedBox(height: 12),
               ] else
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    const Spacer(),
-                    // Search field (compact)
+                    // Add Item button
                     SizedBox(
-                      width: isWide ? 360 : 200,
-                      child: TextField(
-                        onChanged: (v) => setState(() => _query = v),
-                        decoration: InputDecoration(
-                          hintText: 'Search tools, category, status',
-                          isDense: true,
-                          prefixIcon: const Icon(Icons.search, size: 20),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          filled: true,
-                          fillColor: Colors.grey[100],
+                      height: 40,
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          final result = await showDialog(
+                            context: context,
+                            builder: (ctx) => const AddInventoryItemModal(),
+                          );
+                          if (result != null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Added: ${result['name']}'),
+                              ),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.add, color: Colors.white),
+                        label: const Text(
+                          'Add Item',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primary,
                         ),
                       ),
                     ),
                     const SizedBox(width: 12),
-                    TextButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const MaterialsPage(),
+                    // Search field (compact)
+                    SizedBox(
+                      height: 36,
+                      width: 200,
+                      child: TextField(
+                        onChanged: (v) => setState(() => _query = v),
+                        decoration: InputDecoration(
+                          hintText: 'Search tools...',
+                          hintStyle: const TextStyle(fontSize: 13),
+                          prefixIcon: const Icon(Icons.search, size: 18),
+                          filled: true,
+                          fillColor: Colors.grey[100],
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
                           ),
-                        );
-                      },
-                      icon: const Icon(Icons.layers),
-                      label: const Text('Materials'),
-                      style: TextButton.styleFrom(foregroundColor: primary),
-                    ),
-                    const SizedBox(width: 12),
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        final result = await showDialog(
-                          context: context,
-                          builder: (ctx) => const AddInventoryItemModal(),
-                        );
-                        if (result != null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Added: ${result['name']}')),
-                          );
-                        }
-                      },
-                      icon: const Icon(Icons.add, color: Colors.white),
-                      label: const Text(
-                        'Add Item',
-                        style: TextStyle(color: Colors.white),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(30),
+                            borderSide: BorderSide(color: Colors.grey[300]!),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(30),
+                            borderSide: BorderSide(color: Colors.grey[300]!),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(30),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF0C1935),
+                              width: 2,
+                            ),
+                          ),
+                        ),
                       ),
-                      style: ElevatedButton.styleFrom(backgroundColor: primary),
                     ),
                   ],
                 ),
@@ -257,9 +264,9 @@ class _InventoryPageState extends State<InventoryPage> {
                   Text(
                     'All Tools & Machines',
                     style: TextStyle(
-                      fontSize: isMobile ? 14 : 16,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.grey[800],
+                      fontSize: isMobile ? 14 : 18,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF0C1935),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -363,8 +370,9 @@ class _InventoryPageState extends State<InventoryPage> {
                     child: Text(
                       'Currently In Use',
                       style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF0C1935),
                       ),
                     ),
                   ),

@@ -150,55 +150,56 @@ class _ClientsHeader extends StatelessWidget {
       children: [
         if (!isMobile) ...[
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text(
-                    'Clients',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF0C1935),
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    'Stay in touch with every partner and account.',
-                    style: TextStyle(fontSize: 14, color: Color(0xFF6B7280)),
-                  ),
-                ],
-              ),
-              const Spacer(),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              const Spacer(),
-              SizedBox(
-                width: 360,
-                child: TextField(
-                  onChanged: onSearchChanged,
-                  decoration: InputDecoration(
-                    hintText: 'Search clients...',
-                    isDense: true,
-                    prefixIcon: const Icon(Icons.search, size: 20),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    filled: true,
-                    fillColor: Colors.grey[100],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
               SizedBox(
                 height: 40,
                 child: _AddClientButton(onClientAdded: onClientAdded),
               ),
+              const SizedBox(width: 12),
+              SizedBox(
+                height: 36,
+                width: 200,
+                child: TextField(
+                  onChanged: onSearchChanged,
+                  decoration: InputDecoration(
+                    hintText: 'Search clients...',
+                    hintStyle: const TextStyle(fontSize: 13),
+                    prefixIcon: const Icon(Icons.search, size: 18),
+                    filled: true,
+                    fillColor: Colors.grey[100],
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(30),
+                      borderSide: BorderSide(color: Colors.grey[300]!),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(30),
+                      borderSide: BorderSide(color: Colors.grey[300]!),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(30),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF0C1935),
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ],
+          ),
+          const SizedBox(height: 18),
+          const Text(
+            'All Clients',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF0C1935),
+            ),
           ),
         ] else ...[
           const Text(
@@ -209,23 +210,37 @@ class _ClientsHeader extends StatelessWidget {
               color: Color(0xFF0C1935),
             ),
           ),
-          const SizedBox(height: 4),
-          const Text(
-            'Stay in touch with every partner and account.',
-            style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
-          ),
           const SizedBox(height: 16),
-          TextField(
-            onChanged: onSearchChanged,
-            decoration: InputDecoration(
-              hintText: 'Search clients...',
-              isDense: true,
-              prefixIcon: const Icon(Icons.search, size: 20),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
+          SizedBox(
+            height: 36,
+            child: TextField(
+              onChanged: onSearchChanged,
+              decoration: InputDecoration(
+                hintText: 'Search clients...',
+                hintStyle: const TextStyle(fontSize: 13),
+                prefixIcon: const Icon(Icons.search, size: 18),
+                filled: true,
+                fillColor: Colors.grey[100],
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(30),
+                  borderSide: BorderSide(color: Colors.grey[300]!),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(30),
+                  borderSide: BorderSide(color: Colors.grey[300]!),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(30),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF0C1935),
+                    width: 2,
+                  ),
+                ),
               ),
-              filled: true,
-              fillColor: Colors.grey[100],
             ),
           ),
           const SizedBox(height: 12),

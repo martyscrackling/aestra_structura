@@ -611,11 +611,643 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final isMobile = screenWidth < 600;
+
+    // Reusable form fields column (used in both mobile and desktop layouts)
+    Widget formFields = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Project Information
+        const Text(
+          'Project\'s information',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF0C1935),
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Project Name
+        TextFormField(
+          controller: _nameController,
+          decoration: InputDecoration(
+            labelText: 'Project Name',
+            labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            filled: true,
+            fillColor: const Color(0xFFF9FAFB),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFF0C1935), width: 2),
+            ),
+          ),
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Please enter project name';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 12),
+
+        // Project Description
+        TextFormField(
+          controller: _descriptionController,
+          maxLines: 4,
+          decoration: InputDecoration(
+            labelText: 'Project Description (Optional)',
+            labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            filled: true,
+            fillColor: const Color(0xFFF9FAFB),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFF0C1935), width: 2),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Address - Cascading Dropdowns
+        const Text(
+          'Project Address',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF0C1935),
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Region Dropdown
+        _isLoadingRegions
+            ? const Center(child: CircularProgressIndicator())
+            : DropdownButtonFormField<int>(
+                value: _selectedRegionId,
+                decoration: InputDecoration(
+                  labelText: 'Region',
+                  labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                  filled: true,
+                  fillColor: const Color(0xFFF9FAFB),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey[300]!),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey[300]!),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF0C1935),
+                      width: 2,
+                    ),
+                  ),
+                ),
+                items: _regions.map((region) {
+                  return DropdownMenuItem<int>(
+                    value: region['id'] as int,
+                    child: Text(region['name'] as String),
+                  );
+                }).toList(),
+                onChanged: (int? value) {
+                  if (value != null) {
+                    setState(() {
+                      _selectedRegionId = value;
+                    });
+                    _fetchProvinces(value);
+                  }
+                },
+              ),
+        const SizedBox(height: 12),
+
+        // Province Dropdown
+        DropdownButtonFormField<int>(
+          value: _selectedProvinceId,
+          decoration: InputDecoration(
+            labelText: 'Province',
+            labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            filled: true,
+            fillColor: const Color(0xFFF9FAFB),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFF0C1935), width: 2),
+            ),
+          ),
+          items: _provinces.map((province) {
+            return DropdownMenuItem<int>(
+              value: province['id'] as int,
+              child: Text(province['name'] as String),
+            );
+          }).toList(),
+          onChanged: (int? value) {
+            if (value != null) {
+              setState(() {
+                _selectedProvinceId = value;
+              });
+              _fetchCities(value);
+            }
+          },
+        ),
+        const SizedBox(height: 12),
+
+        // City Dropdown
+        DropdownButtonFormField<int>(
+          value: _selectedCityId,
+          decoration: InputDecoration(
+            labelText: 'City',
+            labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            filled: true,
+            fillColor: const Color(0xFFF9FAFB),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFF0C1935), width: 2),
+            ),
+          ),
+          items: _cities.map((city) {
+            return DropdownMenuItem<int>(
+              value: city['id'] as int,
+              child: Text(city['name'] as String),
+            );
+          }).toList(),
+          onChanged: (int? value) {
+            if (value != null) {
+              setState(() {
+                _selectedCityId = value;
+              });
+              _fetchBarangays(value);
+            }
+          },
+        ),
+        const SizedBox(height: 12),
+
+        // Barangay Dropdown
+        DropdownButtonFormField<int>(
+          value: _selectedBarangayId,
+          decoration: InputDecoration(
+            labelText: 'Barangay',
+            labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            filled: true,
+            fillColor: const Color(0xFFF9FAFB),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFF0C1935), width: 2),
+            ),
+          ),
+          items: _barangays.map((barangay) {
+            return DropdownMenuItem<int>(
+              value: barangay['id'] as int,
+              child: Text(barangay['name'] as String),
+            );
+          }).toList(),
+          onChanged: (int? value) {
+            setState(() {
+              _selectedBarangayId = value;
+            });
+          },
+        ),
+        const SizedBox(height: 12),
+
+        // Street Address
+        TextFormField(
+          controller: _streetController,
+          decoration: InputDecoration(
+            labelText: 'Street Address (Optional)',
+            labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            filled: true,
+            fillColor: const Color(0xFFF9FAFB),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFF0C1935), width: 2),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Project Type
+        DropdownButtonFormField<String>(
+          value: _selectedProjectType,
+          decoration: InputDecoration(
+            labelText: 'Project Type',
+            labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            filled: true,
+            fillColor: const Color(0xFFF9FAFB),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFF0C1935), width: 2),
+            ),
+          ),
+          items: _projectTypes.map((String type) {
+            return DropdownMenuItem<String>(value: type, child: Text(type));
+          }).toList(),
+          onChanged: (String? newValue) {
+            setState(() {
+              _selectedProjectType = newValue;
+            });
+          },
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Please select project type';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 12),
+
+        // Start Date and End Date
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Start Date',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF0C1935),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: _startDateController,
+                    readOnly: true,
+                    decoration: InputDecoration(
+                      labelText: 'Start Date',
+                      labelStyle: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
+                      filled: true,
+                      fillColor: const Color(0xFFF9FAFB),
+                      suffixIcon: const Icon(
+                        Icons.calendar_today_outlined,
+                        size: 18,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF0C1935),
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                    onTap: () => _selectDate(context, _startDateController),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Required';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Duration (Days)',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF0C1935),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: _durationController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: 'Duration (Days)',
+                      labelStyle: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
+                      filled: true,
+                      fillColor: const Color(0xFFF9FAFB),
+                      suffixIcon: const Icon(Icons.timer_outlined, size: 18),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF0C1935),
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                    onChanged: (value) => _calculateEndDate(),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Required';
+                      }
+                      if (int.tryParse(value) == null ||
+                          int.parse(value) <= 0) {
+                        return 'Enter valid days';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+
+        // Show calculated end date
+        if (_calculatedEndDate != null) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE8F5E9),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.event_available,
+                  size: 18,
+                  color: Color(0xFF2E7D32),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Expected End Date: $_calculatedEndDate',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF2E7D32),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 12),
+
+        // Client
+        _isLoadingClients
+            ? const CircularProgressIndicator()
+            : DropdownButtonFormField<int>(
+                value: _selectedClientId,
+                decoration: InputDecoration(
+                  labelText: 'Client',
+                  labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                  filled: true,
+                  fillColor: const Color(0xFFF9FAFB),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey[300]!),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey[300]!),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF0C1935),
+                      width: 2,
+                    ),
+                  ),
+                ),
+                items: (() {
+                  final filteredClients = _clients
+                      .where(
+                        (client) =>
+                            (client['client_id'] as int?) != null &&
+                            (client['client_id'] as int) > 0,
+                      )
+                      .toList();
+
+                  // Sort alphabetically by name
+                  filteredClients.sort((a, b) {
+                    final nameA =
+                        '${a['first_name'] ?? ''} ${a['last_name'] ?? ''}'
+                            .trim()
+                            .toLowerCase();
+                    final nameB =
+                        '${b['first_name'] ?? ''} ${b['last_name'] ?? ''}'
+                            .trim()
+                            .toLowerCase();
+                    return nameA.compareTo(nameB);
+                  });
+
+                  return filteredClients.map((client) {
+                    final clientId = client['client_id'] as int;
+                    final firstName = client['first_name'] as String? ?? '';
+                    final lastName = client['last_name'] as String? ?? '';
+                    final displayName = '$firstName $lastName'.trim();
+                    return DropdownMenuItem<int>(
+                      value: clientId,
+                      child: Text(
+                        displayName.isEmpty ? 'Unknown' : displayName,
+                      ),
+                    );
+                  }).toList();
+                })(),
+                onChanged: (int? newValue) {
+                  setState(() {
+                    _selectedClientId = newValue;
+                  });
+                },
+              ),
+        const SizedBox(height: 12),
+
+        // Supervisor in-charge
+        _isLoadingSupervisors
+            ? const CircularProgressIndicator()
+            : DropdownButtonFormField<int>(
+                value: _selectedSupervisorId,
+                decoration: InputDecoration(
+                  labelText: 'Supervisor',
+                  labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                  filled: true,
+                  fillColor: const Color(0xFFF9FAFB),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey[300]!),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey[300]!),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF0C1935),
+                      width: 2,
+                    ),
+                  ),
+                ),
+                items: (() {
+                  final filteredSupervisors = _supervisors
+                      .where(
+                        (supervisor) =>
+                            (supervisor['supervisor_id'] as int?) != null &&
+                            (supervisor['supervisor_id'] as int) > 0,
+                      )
+                      .toList();
+
+                  // Sort alphabetically by name
+                  filteredSupervisors.sort((a, b) {
+                    final nameA =
+                        '${a['first_name'] ?? ''} ${a['last_name'] ?? ''}'
+                            .trim()
+                            .toLowerCase();
+                    final nameB =
+                        '${b['first_name'] ?? ''} ${b['last_name'] ?? ''}'
+                            .trim()
+                            .toLowerCase();
+                    return nameA.compareTo(nameB);
+                  });
+
+                  return filteredSupervisors.map((supervisor) {
+                    final supervisorId = supervisor['supervisor_id'] as int;
+                    final firstName = supervisor['first_name'] as String? ?? '';
+                    final lastName = supervisor['last_name'] as String? ?? '';
+                    final displayName = '$firstName $lastName'.trim();
+                    return DropdownMenuItem<int>(
+                      value: supervisorId,
+                      child: Text(
+                        displayName.isEmpty ? 'Unknown' : displayName,
+                      ),
+                    );
+                  }).toList();
+                })(),
+                onChanged: (int? newValue) {
+                  setState(() {
+                    _selectedSupervisorId = newValue;
+                  });
+                },
+              ),
+        const SizedBox(height: 12),
+
+        // Budget
+        TextFormField(
+          controller: _budgetController,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            labelText: 'Project Budget',
+            labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            prefixText: '₱ ',
+            prefixStyle: const TextStyle(
+              fontSize: 14,
+              color: Color(0xFF0C1935),
+              fontWeight: FontWeight.w600,
+            ),
+            filled: true,
+            fillColor: const Color(0xFFF9FAFB),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFF0C1935), width: 2),
+            ),
+          ),
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Please enter project budget';
+            }
+            return null;
+          },
+        ),
+      ],
+    );
+
     return Dialog(
       backgroundColor: Colors.transparent,
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 16 : 40,
+        vertical: isMobile ? 24 : 40,
+      ),
       child: Container(
-        width: 600,
-        constraints: const BoxConstraints(maxHeight: 800),
+        width: isMobile ? double.infinity : 700,
+        constraints: BoxConstraints(
+          maxHeight: isMobile ? screenHeight * 0.9 : 650,
+        ),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
@@ -625,18 +1257,18 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
           children: [
             // Header
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: EdgeInsets.all(isMobile ? 16 : 20),
               decoration: const BoxDecoration(
                 border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
               ),
               child: Row(
                 children: [
-                  const Text(
+                  Text(
                     'Create a Project',
                     style: TextStyle(
-                      fontSize: 20,
+                      fontSize: isMobile ? 18 : 20,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFF0C1935),
+                      color: const Color(0xFF0C1935),
                     ),
                   ),
                   const Spacer(),
@@ -653,803 +1285,261 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
 
             // Form Content
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Project Image Section
-                      const Text(
-                        'Project\'s Image',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF0C1935),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Image format: jpg, jpeg, png and minimum size 300 x 300px',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
+              child: isMobile
+                  ? SingleChildScrollView(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
                         children: [
-                          // Image preview
-                          if (_selectedImage != null)
-                            Container(
-                              width: 100,
-                              height: 80,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8),
-                                image: DecorationImage(
-                                  image: FileImage(File(_selectedImage!.path)),
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                            )
-                          else
-                            Container(
-                              width: 100,
-                              height: 80,
-                              decoration: BoxDecoration(
-                                color: Colors.grey[200],
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Center(
-                                child: Icon(
-                                  Icons.image,
-                                  color: Colors.grey,
-                                  size: 40,
-                                ),
-                              ),
-                            ),
-                          const SizedBox(width: 16),
-                          InkWell(
+                          // Image on top for mobile
+                          GestureDetector(
                             onTap: _pickImage,
                             child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
+                              width: 120,
+                              height: 120,
                               decoration: BoxDecoration(
-                                border: Border.all(color: Colors.blue),
-                                borderRadius: BorderRadius.circular(8),
+                                color: Colors.grey[200],
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              child: Column(
-                                children: [
-                                  const Icon(
-                                    Icons.cloud_upload_outlined,
-                                    color: Colors.blue,
-                                    size: 28,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  const Text(
-                                    'New Image',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.blue,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  if (_selectedImage != null)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 8.0),
-                                      child: Text(
-                                        _selectedImage!.name,
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.black,
+                              child: _selectedImage == null
+                                  ? Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.image_outlined,
+                                          size: 40,
+                                          color: Colors.grey[400],
                                         ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Upload photo',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  : ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: kIsWeb
+                                          ? Image.network(
+                                              _selectedImage!.path,
+                                              fit: BoxFit.cover,
+                                              width: 120,
+                                              height: 120,
+                                            )
+                                          : Image.file(
+                                              File(_selectedImage!.path),
+                                              fit: BoxFit.cover,
+                                              width: 120,
+                                              height: 120,
+                                            ),
                                     ),
-                                ],
-                              ),
                             ),
                           ),
+                          const SizedBox(height: 20),
+                          Form(key: _formKey, child: formFields),
                         ],
                       ),
-                      const SizedBox(height: 24),
-
-                      // Project Information
-                      const Text(
-                        'Project\'s information',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF0C1935),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Project Name
-                      TextFormField(
-                        controller: _nameController,
-                        decoration: InputDecoration(
-                          hintText: 'Enter Project\'s name',
-                          hintStyle: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[400],
-                          ),
-                          filled: true,
-                          fillColor: const Color(0xFFF9FAFB),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey[300]!),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey[300]!),
-                          ),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter project name';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Project Description
-                      TextFormField(
-                        controller: _descriptionController,
-                        maxLines: 4,
-                        decoration: InputDecoration(
-                          hintText: 'Enter Project Description (Optional)',
-                          hintStyle: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[400],
-                          ),
-                          filled: true,
-                          fillColor: const Color(0xFFF9FAFB),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey[300]!),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey[300]!),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Address - Cascading Dropdowns
-                      const Text(
-                        'Project Address',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF0C1935),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Region Dropdown
-                      _isLoadingRegions
-                          ? const Center(child: CircularProgressIndicator())
-                          : DropdownButtonFormField<int>(
-                              value: _selectedRegionId,
-                              decoration: InputDecoration(
-                                hintText: 'Select Region',
-                                hintStyle: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[400],
-                                ),
-                                filled: true,
-                                fillColor: const Color(0xFFF9FAFB),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey[300]!,
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey[300]!,
-                                  ),
-                                ),
-                              ),
-                              items: _regions.map((region) {
-                                return DropdownMenuItem<int>(
-                                  value: region['id'] as int,
-                                  child: Text(region['name'] as String),
-                                );
-                              }).toList(),
-                              onChanged: (int? value) {
-                                if (value != null) {
-                                  setState(() {
-                                    _selectedRegionId = value;
-                                  });
-                                  _fetchProvinces(value);
-                                }
-                              },
-                            ),
-                      const SizedBox(height: 12),
-
-                      // Province Dropdown
-                      DropdownButtonFormField<int>(
-                        value: _selectedProvinceId,
-                        decoration: InputDecoration(
-                          hintText: 'Select Province',
-                          hintStyle: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[400],
-                          ),
-                          filled: true,
-                          fillColor: const Color(0xFFF9FAFB),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey[300]!),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey[300]!),
-                          ),
-                        ),
-                        items: _provinces.map((province) {
-                          return DropdownMenuItem<int>(
-                            value: province['id'] as int,
-                            child: Text(province['name'] as String),
-                          );
-                        }).toList(),
-                        onChanged: (int? value) {
-                          if (value != null) {
-                            setState(() {
-                              _selectedProvinceId = value;
-                            });
-                            _fetchCities(value);
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 12),
-
-                      // City Dropdown
-                      DropdownButtonFormField<int>(
-                        value: _selectedCityId,
-                        decoration: InputDecoration(
-                          hintText: 'Select City',
-                          hintStyle: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[400],
-                          ),
-                          filled: true,
-                          fillColor: const Color(0xFFF9FAFB),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey[300]!),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey[300]!),
-                          ),
-                        ),
-                        items: _cities.map((city) {
-                          return DropdownMenuItem<int>(
-                            value: city['id'] as int,
-                            child: Text(city['name'] as String),
-                          );
-                        }).toList(),
-                        onChanged: (int? value) {
-                          if (value != null) {
-                            setState(() {
-                              _selectedCityId = value;
-                            });
-                            _fetchBarangays(value);
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Barangay Dropdown
-                      DropdownButtonFormField<int>(
-                        value: _selectedBarangayId,
-                        decoration: InputDecoration(
-                          hintText: 'Select Barangay',
-                          hintStyle: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[400],
-                          ),
-                          filled: true,
-                          fillColor: const Color(0xFFF9FAFB),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey[300]!),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey[300]!),
-                          ),
-                        ),
-                        items: _barangays.map((barangay) {
-                          return DropdownMenuItem<int>(
-                            value: barangay['id'] as int,
-                            child: Text(barangay['name'] as String),
-                          );
-                        }).toList(),
-                        onChanged: (int? value) {
-                          setState(() {
-                            _selectedBarangayId = value;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Street Address
-                      TextFormField(
-                        controller: _streetController,
-                        decoration: InputDecoration(
-                          hintText: 'Enter Street Address (Optional)',
-                          hintStyle: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[400],
-                          ),
-                          filled: true,
-                          fillColor: const Color(0xFFF9FAFB),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey[300]!),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey[300]!),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Project Type
-                      DropdownButtonFormField<String>(
-                        value: _selectedProjectType,
-                        decoration: InputDecoration(
-                          hintText: 'Project type',
-                          hintStyle: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[400],
-                          ),
-                          filled: true,
-                          fillColor: const Color(0xFFF9FAFB),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey[300]!),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey[300]!),
-                          ),
-                        ),
-                        items: _projectTypes.map((String type) {
-                          return DropdownMenuItem<String>(
-                            value: type,
-                            child: Text(type),
-                          );
-                        }).toList(),
-                        onChanged: (String? newValue) {
-                          setState(() {
-                            _selectedProjectType = newValue;
-                          });
-                        },
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please select project type';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Start Date and End Date
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Start Date',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF0C1935),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                TextFormField(
-                                  controller: _startDateController,
-                                  readOnly: true,
-                                  decoration: InputDecoration(
-                                    hintText: 'September 28, 2025',
-                                    hintStyle: TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.grey[400],
-                                    ),
-                                    filled: true,
-                                    fillColor: const Color(0xFFF9FAFB),
-                                    suffixIcon: const Icon(
-                                      Icons.calendar_today_outlined,
-                                      size: 18,
-                                    ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: BorderSide(
-                                        color: Colors.grey[300]!,
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: BorderSide(
-                                        color: Colors.grey[300]!,
-                                      ),
-                                    ),
-                                  ),
-                                  onTap: () => _selectDate(
-                                    context,
-                                    _startDateController,
-                                  ),
-                                  validator: (value) {
-                                    if (value == null || value.isEmpty) {
-                                      return 'Required';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Duration (Days)',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF0C1935),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                TextFormField(
-                                  controller: _durationController,
-                                  keyboardType: TextInputType.number,
-                                  decoration: InputDecoration(
-                                    hintText: 'Enter days',
-                                    hintStyle: TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.grey[400],
-                                    ),
-                                    filled: true,
-                                    fillColor: const Color(0xFFF9FAFB),
-                                    suffixIcon: const Icon(
-                                      Icons.timer_outlined,
-                                      size: 18,
-                                    ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: BorderSide(
-                                        color: Colors.grey[300]!,
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: BorderSide(
-                                        color: Colors.grey[300]!,
-                                      ),
-                                    ),
-                                  ),
-                                  onChanged: (value) => _calculateEndDate(),
-                                  validator: (value) {
-                                    if (value == null || value.isEmpty) {
-                                      return 'Required';
-                                    }
-                                    if (int.tryParse(value) == null ||
-                                        int.parse(value) <= 0) {
-                                      return 'Enter valid days';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      // Show calculated end date
-                      if (_calculatedEndDate != null) ...[
-                        const SizedBox(height: 8),
+                    )
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Left side - Image (Desktop)
                         Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE8F5E9),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
+                          width: 240,
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
                             children: [
-                              const Icon(
-                                Icons.event_available,
-                                size: 18,
-                                color: Color(0xFF2E7D32),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Expected End Date: $_calculatedEndDate',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color: Color(0xFF2E7D32),
+                              GestureDetector(
+                                onTap: _pickImage,
+                                child: Container(
+                                  width: 192,
+                                  height: 280,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[200],
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: _selectedImage == null
+                                      ? Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              Icons.image_outlined,
+                                              size: 60,
+                                              color: Colors.grey[400],
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              'Click to upload photo',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey[600],
+                                              ),
+                                            ),
+                                          ],
+                                        )
+                                      : ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          child: kIsWeb
+                                              ? Image.network(
+                                                  _selectedImage!.path,
+                                                  fit: BoxFit.cover,
+                                                  width: 192,
+                                                  height: 280,
+                                                )
+                                              : Image.file(
+                                                  File(_selectedImage!.path),
+                                                  fit: BoxFit.cover,
+                                                  width: 192,
+                                                  height: 280,
+                                                ),
+                                        ),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      ],
-                      const SizedBox(height: 12),
 
-                      // Client
-                      _isLoadingClients
-                          ? const CircularProgressIndicator()
-                          : DropdownButtonFormField<int>(
-                              value: _selectedClientId,
-                              decoration: InputDecoration(
-                                hintText: 'Select client',
-                                hintStyle: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[400],
-                                ),
-                                filled: true,
-                                fillColor: const Color(0xFFF9FAFB),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey[300]!,
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey[300]!,
-                                  ),
-                                ),
-                              ),
-                              items: (() {
-                                final filteredClients = _clients
-                                    .where(
-                                      (client) =>
-                                          (client['client_id'] as int?) !=
-                                              null &&
-                                          (client['client_id'] as int) > 0,
-                                    )
-                                    .toList();
+                        // Divider
+                        Container(width: 1, color: const Color(0xFFE5E7EB)),
 
-                                // Sort alphabetically by name
-                                filteredClients.sort((a, b) {
-                                  final nameA =
-                                      '${a['first_name'] ?? ''} ${a['last_name'] ?? ''}'
-                                          .trim()
-                                          .toLowerCase();
-                                  final nameB =
-                                      '${b['first_name'] ?? ''} ${b['last_name'] ?? ''}'
-                                          .trim()
-                                          .toLowerCase();
-                                  return nameA.compareTo(nameB);
-                                });
-
-                                return filteredClients.map((client) {
-                                  final clientId = client['client_id'] as int;
-                                  final firstName =
-                                      client['first_name'] as String? ?? '';
-                                  final lastName =
-                                      client['last_name'] as String? ?? '';
-                                  final displayName = '$firstName $lastName'
-                                      .trim();
-                                  return DropdownMenuItem<int>(
-                                    value: clientId,
-                                    child: Text(
-                                      displayName.isEmpty
-                                          ? 'Unknown'
-                                          : displayName,
-                                    ),
-                                  );
-                                }).toList();
-                              })(),
-                              onChanged: (int? newValue) {
-                                setState(() {
-                                  _selectedClientId = newValue;
-                                });
-                              },
-                            ),
-                      const SizedBox(height: 12),
-
-                      // Supervisor in-charge
-                      _isLoadingSupervisors
-                          ? const CircularProgressIndicator()
-                          : DropdownButtonFormField<int>(
-                              value: _selectedSupervisorId,
-                              decoration: InputDecoration(
-                                hintText: 'Select supervisor',
-                                hintStyle: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[400],
-                                ),
-                                filled: true,
-                                fillColor: const Color(0xFFF9FAFB),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey[300]!,
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey[300]!,
-                                  ),
-                                ),
-                              ),
-                              items: (() {
-                                final filteredSupervisors = _supervisors
-                                    .where(
-                                      (supervisor) =>
-                                          (supervisor['supervisor_id']
-                                                  as int?) !=
-                                              null &&
-                                          (supervisor['supervisor_id'] as int) >
-                                              0,
-                                    )
-                                    .toList();
-
-                                // Sort alphabetically by name
-                                filteredSupervisors.sort((a, b) {
-                                  final nameA =
-                                      '${a['first_name'] ?? ''} ${a['last_name'] ?? ''}'
-                                          .trim()
-                                          .toLowerCase();
-                                  final nameB =
-                                      '${b['first_name'] ?? ''} ${b['last_name'] ?? ''}'
-                                          .trim()
-                                          .toLowerCase();
-                                  return nameA.compareTo(nameB);
-                                });
-
-                                return filteredSupervisors.map((supervisor) {
-                                  final supervisorId =
-                                      supervisor['supervisor_id'] as int;
-                                  final firstName =
-                                      supervisor['first_name'] as String? ?? '';
-                                  final lastName =
-                                      supervisor['last_name'] as String? ?? '';
-                                  final displayName = '$firstName $lastName'
-                                      .trim();
-                                  return DropdownMenuItem<int>(
-                                    value: supervisorId,
-                                    child: Text(
-                                      displayName.isEmpty
-                                          ? 'Unknown'
-                                          : displayName,
-                                    ),
-                                  );
-                                }).toList();
-                              })(),
-                              onChanged: (int? newValue) {
-                                setState(() {
-                                  _selectedSupervisorId = newValue;
-                                });
-                              },
-                            ),
-                      const SizedBox(height: 12),
-
-                      // Budget
-                      TextFormField(
-                        controller: _budgetController,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          hintText: 'Enter Project Budget',
-                          hintStyle: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[400],
-                          ),
-                          prefixText: '₱ ',
-                          prefixStyle: const TextStyle(
-                            fontSize: 14,
-                            color: Color(0xFF0C1935),
-                            fontWeight: FontWeight.w600,
-                          ),
-                          filled: true,
-                          fillColor: const Color(0xFFF9FAFB),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey[300]!),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey[300]!),
+                        // Right side - Form (Desktop)
+                        Expanded(
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.all(24),
+                            child: Form(key: _formKey, child: formFields),
                           ),
                         ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter project budget';
-                          }
-                          return null;
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+                      ],
+                    ),
             ),
 
             // Footer Buttons
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: EdgeInsets.all(isMobile ? 16 : 20),
               decoration: const BoxDecoration(
                 border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
               ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        side: const BorderSide(color: Color(0xFFE5E7EB)),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF6B7280),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _isSubmitting ? null : _handleSubmit,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        backgroundColor: const Color(0xFFFF7A18),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: _isSubmitting
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.white,
-                                ),
+              child: isMobile
+                  ? Column(
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _isSubmitting ? null : _handleSubmit,
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              backgroundColor: const Color(0xFFFF7A18),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
                               ),
-                            )
-                          : const Text(
-                              'Next',
+                            ),
+                            child: _isSubmitting
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                : const Text(
+                                    'Create Project',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              side: const BorderSide(color: Color(0xFFE5E7EB)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: const Text(
+                              'Cancel',
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.white,
+                                color: Color(0xFF6B7280),
                               ),
                             ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              side: const BorderSide(color: Color(0xFFE5E7EB)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: const Text(
+                              'Cancel',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF6B7280),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: _isSubmitting ? null : _handleSubmit,
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              backgroundColor: const Color(0xFFFF7A18),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: _isSubmitting
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                : const Text(
+                                    'Create Project',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              ),
             ),
           ],
         ),

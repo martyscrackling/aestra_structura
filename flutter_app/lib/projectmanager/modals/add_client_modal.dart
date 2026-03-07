@@ -135,8 +135,8 @@ class _AddClientModalState extends State<AddClientModal> {
           onChanged: onChanged,
           onTap: onTap,
           decoration: InputDecoration(
-            hintText: hintText,
-            hintStyle: TextStyle(fontSize: 13, color: Colors.grey[400]),
+            labelText: hintText,
+            labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
             filled: true,
             fillColor: const Color(0xFFF9FAFB),
             border: OutlineInputBorder(
@@ -146,6 +146,10 @@ class _AddClientModalState extends State<AddClientModal> {
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFF0C1935), width: 2),
             ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 12,

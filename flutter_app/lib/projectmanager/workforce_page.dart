@@ -488,25 +488,32 @@ class WorkerGroupSection extends StatelessWidget {
                           child: TextField(
                             onChanged: onSearchChanged,
                             decoration: InputDecoration(
-                              hintText: 'Search...',
+                              hintText: 'Search workers...',
                               hintStyle: const TextStyle(fontSize: 13),
                               prefixIcon: const Icon(Icons.search, size: 18),
                               filled: true,
-                              fillColor: Colors.white,
+                              fillColor: Colors.grey[100],
                               contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 12,
                                 vertical: 8,
                               ),
                               border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(30),
                                 borderSide: BorderSide(
                                   color: Colors.grey[300]!,
                                 ),
                               ),
                               enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(30),
                                 borderSide: BorderSide(
                                   color: Colors.grey[300]!,
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(30),
+                                borderSide: const BorderSide(
+                                  color: Color(0xFF0C1935),
+                                  width: 2,
                                 ),
                               ),
                             ),
@@ -567,145 +574,161 @@ class WorkerGroupSection extends StatelessWidget {
                 ],
               )
             else
-              Row(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      SizedBox(
+                        height: 40,
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            final result = await showDialog<String>(
+                              context: context,
+                              builder: (context) =>
+                                  const SelectWorkerTypeModal(),
+                            );
+
+                            if (!context.mounted) return;
+
+                            if (result != null) {
+                              dynamic modalResult;
+                              if (result == 'supervisor') {
+                                modalResult = await showDialog(
+                                  context: context,
+                                  builder: (context) => const AddWorkerModal(
+                                    workerType: 'Supervisor',
+                                  ),
+                                );
+                                if (!context.mounted) return;
+                              } else if (result == 'fieldworker') {
+                                modalResult = await showDialog(
+                                  context: context,
+                                  builder: (context) => AddFieldWorkerModal(
+                                    workerType: 'Field Worker',
+                                    projectId: projectId,
+                                  ),
+                                );
+                                if (!context.mounted) return;
+                              }
+
+                              if (modalResult == true) {
+                                onWorkerAdded();
+                              }
+                            }
+                          },
+                          icon: const Icon(Icons.add, color: Colors.white),
+                          label: const Text(
+                            'Add Workers',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFF7A18),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      SizedBox(
+                        height: 36,
+                        width: 200,
+                        child: TextField(
+                          onChanged: onSearchChanged,
+                          decoration: InputDecoration(
+                            hintText: 'Search...',
+                            hintStyle: const TextStyle(fontSize: 13),
+                            prefixIcon: const Icon(Icons.search, size: 18),
+                            filled: true,
+                            fillColor: Colors.grey[100],
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(30),
+                              borderSide: BorderSide(color: Colors.grey[300]!),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(30),
+                              borderSide: BorderSide(color: Colors.grey[300]!),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(30),
+                              borderSide: const BorderSide(
+                                color: Color(0xFF0C1935),
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      SizedBox(
+                        height: 36,
+                        child: PopupMenuButton<String>(
+                          onSelected: onFilterChanged,
+                          itemBuilder: (BuildContext context) =>
+                              <PopupMenuEntry<String>>[
+                                const PopupMenuItem<String>(
+                                  value: 'All',
+                                  child: Text('All'),
+                                ),
+                                const PopupMenuItem<String>(
+                                  value: 'Supervisor',
+                                  child: Text('Supervisor'),
+                                ),
+                                const PopupMenuItem<String>(
+                                  value: 'Field Worker',
+                                  child: Text('Field Worker'),
+                                ),
+                              ],
+                          child: OutlinedButton(
+                            onPressed: null,
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              side: BorderSide(color: Colors.grey[300]!),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.tune,
+                                  size: 16,
+                                  color: Color(0xFF0C1935),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  filterType,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF0C1935),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(
+                                  Icons.arrow_drop_down,
+                                  size: 18,
+                                  color: Color(0xFF0C1935),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
                   Text(
                     group.title,
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
                       color: Color(0xFF0C1935),
-                    ),
-                  ),
-                  const Spacer(),
-                  SizedBox(
-                    height: 40,
-                    child: ElevatedButton.icon(
-                      onPressed: () async {
-                        final result = await showDialog<String>(
-                          context: context,
-                          builder: (context) => const SelectWorkerTypeModal(),
-                        );
-
-                        if (!context.mounted) return;
-
-                        if (result != null) {
-                          dynamic modalResult;
-                          if (result == 'supervisor') {
-                            modalResult = await showDialog(
-                              context: context,
-                              builder: (context) => const AddWorkerModal(
-                                workerType: 'Supervisor',
-                              ),
-                            );
-                            if (!context.mounted) return;
-                          } else if (result == 'fieldworker') {
-                            modalResult = await showDialog(
-                              context: context,
-                              builder: (context) => AddFieldWorkerModal(
-                                workerType: 'Field Worker',
-                                projectId: projectId,
-                              ),
-                            );
-                            if (!context.mounted) return;
-                          }
-
-                          if (modalResult == true) {
-                            onWorkerAdded();
-                          }
-                        }
-                      },
-                      icon: const Icon(Icons.add, color: Colors.white),
-                      label: const Text(
-                        'Add new',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFF7A18),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    height: 36,
-                    width: 200,
-                    child: TextField(
-                      onChanged: onSearchChanged,
-                      decoration: InputDecoration(
-                        hintText: 'Search...',
-                        hintStyle: const TextStyle(fontSize: 13),
-                        prefixIcon: const Icon(Icons.search, size: 18),
-                        filled: true,
-                        fillColor: Colors.white,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    height: 36,
-                    child: PopupMenuButton<String>(
-                      onSelected: onFilterChanged,
-                      itemBuilder: (BuildContext context) =>
-                          <PopupMenuEntry<String>>[
-                            const PopupMenuItem<String>(
-                              value: 'All',
-                              child: Text('All'),
-                            ),
-                            const PopupMenuItem<String>(
-                              value: 'Supervisor',
-                              child: Text('Supervisor'),
-                            ),
-                            const PopupMenuItem<String>(
-                              value: 'Field Worker',
-                              child: Text('Field Worker'),
-                            ),
-                          ],
-                      child: OutlinedButton(
-                        onPressed: null,
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          side: BorderSide(color: Colors.grey[300]!),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.tune,
-                              size: 16,
-                              color: Color(0xFF0C1935),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              filterType,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF0C1935),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            const Icon(
-                              Icons.arrow_drop_down,
-                              size: 18,
-                              color: Color(0xFF0C1935),
-                            ),
-                          ],
-                        ),
-                      ),
                     ),
                   ),
                 ],

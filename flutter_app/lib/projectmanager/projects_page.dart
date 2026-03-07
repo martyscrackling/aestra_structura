@@ -324,23 +324,14 @@ class _ProjectsPageState extends State<ProjectsPage> {
                       );
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue[600],
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isMobile ? 24 : 32,
-                        vertical: 12,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                      backgroundColor: const Color(0xFFFF7A18),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
                       ),
                     ),
-                    child: const Text(
-                      'Add Now',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
+                    child: const Text('Add Now'),
                   ),
                 ],
               ),
