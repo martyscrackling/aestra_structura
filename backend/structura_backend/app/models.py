@@ -160,6 +160,12 @@ class Supervisors(models.Model):
     password_hash = models.CharField(max_length=255, default='PASSWORD')
     phone_number = models.CharField(max_length=20)
     birthdate = models.DateField(null=True, blank=True)
+
+    # Address Information
+    region = models.ForeignKey(Region, on_delete=models.SET_NULL, null=True, blank=True)
+    province = models.ForeignKey(Province, on_delete=models.SET_NULL, null=True, blank=True)
+    city = models.ForeignKey(City, on_delete=models.SET_NULL, null=True, blank=True)
+    barangay = models.ForeignKey(Barangay, on_delete=models.SET_NULL, null=True, blank=True)
     
     # Supervisor-specific fields
     role = models.CharField(max_length=50, choices=ROLE_CHOICES, default='Supervisor')

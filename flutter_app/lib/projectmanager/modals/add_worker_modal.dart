@@ -29,6 +29,18 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
   final _pagIbigIdController = TextEditingController();
   final _payrateController = TextEditingController();
 
+  // Address hierarchy state
+  int? _selectedRegionId;
+  int? _selectedProvinceId;
+  int? _selectedCityId;
+  int? _selectedBarangayId;
+
+  List<Map<String, dynamic>> _regions = [];
+  List<Map<String, dynamic>> _provinces = [];
+  List<Map<String, dynamic>> _cities = [];
+  List<Map<String, dynamic>> _barangays = [];
+  bool _isLoadingRegions = false;
+
   XFile? _selectedImage;
   Uint8List? _selectedImageBytes;
   bool _isLoading = false;
@@ -37,6 +49,7 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
   void initState() {
     super.initState();
     _passwordController.text = 'PASSWORD';
+    _fetchRegions();
   }
 
   @override
@@ -85,6 +98,120 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
     }
   }
 
+  Future<void> _fetchRegions() async {
+    try {
+      setState(() => _isLoadingRegions = true);
+      final response = await http.get(AppConfig.apiUri('regions/'));
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        final regions = data.cast<Map<String, dynamic>>();
+
+        // Default to Region IX - Zamboanga Peninsula (id: 10).
+        final defaultRegion = regions.where((r) => r['id'] == 10).firstOrNull;
+        final selectedRegionId =
+            (defaultRegion?['id'] as int?) ??
+            (regions.isNotEmpty ? regions.first['id'] as int? : null);
+
+        setState(() {
+          _regions = regions;
+          _selectedRegionId = selectedRegionId;
+        });
+
+        if (selectedRegionId != null) {
+          await _fetchProvinces(selectedRegionId);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching regions: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingRegions = false);
+      }
+    }
+  }
+
+  Future<void> _fetchProvinces(int regionId) async {
+    try {
+      final response = await http.get(
+        AppConfig.apiUri('provinces/?region=$regionId'),
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        final provinces = data.cast<Map<String, dynamic>>();
+
+        // Default to Zamboanga del Sur (id: 50).
+        final defaultProvince =
+            provinces.where((p) => p['id'] == 50).firstOrNull;
+        final selectedProvinceId =
+            (defaultProvince?['id'] as int?) ??
+            (provinces.isNotEmpty ? provinces.first['id'] as int? : null);
+
+        setState(() {
+          _provinces = provinces;
+          _selectedProvinceId = selectedProvinceId;
+          _cities = [];
+          _barangays = [];
+          _selectedCityId = null;
+          _selectedBarangayId = null;
+        });
+
+        if (selectedProvinceId != null) {
+          await _fetchCities(selectedProvinceId);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching provinces: $e');
+    }
+  }
+
+  Future<void> _fetchCities(int provinceId) async {
+    try {
+      final response = await http.get(
+        AppConfig.apiUri('cities/?province=$provinceId'),
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        final cities = data.cast<Map<String, dynamic>>();
+
+        // Default to Zamboanga City (id: 825).
+        final defaultCity = cities.where((c) => c['id'] == 825).firstOrNull;
+        final selectedCityId =
+            (defaultCity?['id'] as int?) ??
+            (cities.isNotEmpty ? cities.first['id'] as int? : null);
+
+        setState(() {
+          _cities = cities;
+          _selectedCityId = selectedCityId;
+          _barangays = [];
+          _selectedBarangayId = null;
+        });
+
+        if (selectedCityId != null) {
+          await _fetchBarangays(selectedCityId);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching cities: $e');
+    }
+  }
+
+  Future<void> _fetchBarangays(int cityId) async {
+    try {
+      final response = await http.get(
+        AppConfig.apiUri('barangays/?city=$cityId'),
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        setState(() {
+          _barangays = data.cast<Map<String, dynamic>>();
+          _selectedBarangayId = null;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching barangays: $e');
+    }
+  }
+
   Future<void> _handleSubmit() async {
     if (_formKey.currentState!.validate()) {
       setState(() {
@@ -111,6 +238,10 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
           'birthdate': _birthdateController.text.trim().isEmpty
               ? null
               : _birthdateController.text.trim(),
+            'region': _selectedRegionId,
+            'province': _selectedProvinceId,
+            'city': _selectedCityId,
+            'barangay': _selectedBarangayId,
           'sss_id': _sssIdController.text.trim().isEmpty
               ? null
               : _sssIdController.text.trim(),
@@ -596,6 +727,15 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
     final spacing = isMobile ? 12.0 : 16.0;
     return [
       // First Name
+      const Text(
+        'Personal Information',
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFF0C1935),
+        ),
+      ),
+      SizedBox(height: spacing),
       _buildTextField(
         controller: _firstNameController,
         hintText: 'First Name',
@@ -674,31 +814,142 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
       ),
       SizedBox(height: spacing),
 
+      // Address - Cascading Dropdowns
+      const Text(
+        'Address',
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFF0C1935),
+        ),
+      ),
+      SizedBox(height: spacing),
+
+      // Region
+      _isLoadingRegions
+          ? const Center(child: CircularProgressIndicator())
+          : DropdownButtonFormField<int>(
+              value: _selectedRegionId,
+              decoration: _dropdownDecoration('Region'),
+              items: _regions.map((region) {
+                return DropdownMenuItem<int>(
+                  value: region['id'] as int,
+                  child: Text(region['name'] as String),
+                );
+              }).toList(),
+              onChanged: (int? value) {
+                if (value == null) return;
+                setState(() {
+                  _selectedRegionId = value;
+                  _selectedProvinceId = null;
+                  _selectedCityId = null;
+                  _selectedBarangayId = null;
+                  _provinces = [];
+                  _cities = [];
+                  _barangays = [];
+                });
+                _fetchProvinces(value);
+              },
+            ),
+      SizedBox(height: spacing),
+
+      // Province
+      DropdownButtonFormField<int>(
+        value: _selectedProvinceId,
+        decoration: _dropdownDecoration('Province'),
+        items: _provinces.map((province) {
+          return DropdownMenuItem<int>(
+            value: province['id'] as int,
+            child: Text(province['name'] as String),
+          );
+        }).toList(),
+        onChanged: (int? value) {
+          if (value == null) return;
+          setState(() {
+            _selectedProvinceId = value;
+            _selectedCityId = null;
+            _selectedBarangayId = null;
+            _cities = [];
+            _barangays = [];
+          });
+          _fetchCities(value);
+        },
+      ),
+      SizedBox(height: spacing),
+
+      // City
+      DropdownButtonFormField<int>(
+        value: _selectedCityId,
+        decoration: _dropdownDecoration('City'),
+        items: _cities.map((city) {
+          return DropdownMenuItem<int>(
+            value: city['id'] as int,
+            child: Text(city['name'] as String),
+          );
+        }).toList(),
+        onChanged: (int? value) {
+          if (value == null) return;
+          setState(() {
+            _selectedCityId = value;
+            _selectedBarangayId = null;
+            _barangays = [];
+          });
+          _fetchBarangays(value);
+        },
+      ),
+      SizedBox(height: spacing),
+
+      // Barangay
+      DropdownButtonFormField<int>(
+        value: _selectedBarangayId,
+        decoration: _dropdownDecoration('Barangay'),
+        items: _barangays.map((barangay) {
+          return DropdownMenuItem<int>(
+            value: barangay['id'] as int,
+            child: Text(barangay['name'] as String),
+          );
+        }).toList(),
+        onChanged: (int? value) {
+          setState(() {
+            _selectedBarangayId = value;
+          });
+        },
+      ),
+      SizedBox(height: spacing),
       // SSS ID
+      const Text(
+        'ID Numbers (Optional)',
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFF0C1935),
+        ),
+      ),
+      SizedBox(height: spacing),
       _buildTextField(
         controller: _sssIdController,
-        hintText: 'SSS ID (Optional)',
+        hintText: 'SSS ID',
       ),
       SizedBox(height: spacing),
 
       // PhilHealth ID
       _buildTextField(
         controller: _philHealthIdController,
-        hintText: 'PhilHealth ID (Optional)',
+        hintText: 'PhilHealth ID',
       ),
       SizedBox(height: spacing),
 
       // PagIbig ID
       _buildTextField(
         controller: _pagIbigIdController,
-        hintText: 'PagIbig ID (Optional)',
+        hintText: 'PagIbig ID',
       ),
       SizedBox(height: spacing),
 
       // Payrate
       _buildTextField(
         controller: _payrateController,
-        hintText: 'Payrate (Optional)',
+        hintText: 'Payrate',
         keyboardType: TextInputType.number,
       ),
     ];
@@ -746,6 +997,28 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
         ),
       ),
       validator: validator,
+    );
+  }
+
+  InputDecoration _dropdownDecoration(String label) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
+      filled: true,
+      fillColor: const Color(0xFFF9FAFB),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: Colors.grey[300]!),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: Colors.grey[300]!),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFF0C1935), width: 2),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
     );
   }
 }

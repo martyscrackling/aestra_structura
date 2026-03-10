@@ -96,11 +96,14 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
 
       // Prefer human-readable *_name fields when available.
       final street = asNonEmptyString(project['street']);
-      final barangay = asNonEmptyString(project['barangay_name']) ??
+      final barangay =
+          asNonEmptyString(project['barangay_name']) ??
           asNonEmptyString(project['barangay']);
-      final city = asNonEmptyString(project['city_name']) ??
+      final city =
+          asNonEmptyString(project['city_name']) ??
           asNonEmptyString(project['city']);
-      final province = asNonEmptyString(project['province_name']) ??
+      final province =
+          asNonEmptyString(project['province_name']) ??
           asNonEmptyString(project['province']);
 
       final parts = <String>[];
@@ -191,7 +194,9 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
       for (final item in decoded) {
         if (item is! Map) continue;
         final map = Map<String, dynamic>.from(item);
-        final id = _tryParseInt(map['fieldworker_id'] ?? map['field_worker_id']);
+        final id = _tryParseInt(
+          map['fieldworker_id'] ?? map['field_worker_id'],
+        );
         if (id == fieldWorkerId) return true;
       }
       return false;
@@ -207,8 +212,7 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
     });
 
     try {
-      final currentUserId =
-          _tryParseInt(AuthService().currentUser?['user_id']);
+      final currentUserId = _tryParseInt(AuthService().currentUser?['user_id']);
 
       final worker = widget.worker;
       List<Map<String, dynamic>> projects = [];
@@ -223,7 +227,8 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
           );
           return pid != null && pid == supervisorId;
         }).toList();
-      } else if (worker.type == 'Field Worker' && worker.fieldWorkerId != null) {
+      } else if (worker.type == 'Field Worker' &&
+          worker.fieldWorkerId != null) {
         // Best-effort: if backend supports projects-by-field-worker, use it.
         final id = worker.fieldWorkerId!;
         final queryKeys = ['field_worker_id', 'fieldworker_id', 'field_worker'];
@@ -277,7 +282,8 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
         final startDate = _formatDate((project['start_date'] as String?) ?? '');
         final endDate = _formatDate((project['end_date'] as String?) ?? '');
         final location = _buildLocation(project);
-        final name = (project['project_name'] as String?) ??
+        final name =
+            (project['project_name'] as String?) ??
             (project['title'] as String?) ??
             'Unknown';
 
@@ -392,8 +398,9 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
                             // Profile Image
                             CircleAvatar(
                               radius: 40,
-                              backgroundImage:
-                                  NetworkImage(widget.worker.avatarUrl),
+                              backgroundImage: NetworkImage(
+                                widget.worker.avatarUrl,
+                              ),
                             ),
                             const SizedBox(height: 16),
                             // Profile Info
@@ -478,8 +485,9 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
                                 onPressed: () {
                                   showDialog(
                                     context: context,
-                                    builder: (context) =>
-                                        ViewEditWorkerModal(worker: widget.worker),
+                                    builder: (context) => ViewEditWorkerModal(
+                                      worker: widget.worker,
+                                    ),
                                   );
                                 },
                                 style: ElevatedButton.styleFrom(
@@ -514,8 +522,9 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
                             // Profile Image
                             CircleAvatar(
                               radius: 50,
-                              backgroundImage:
-                                  NetworkImage(widget.worker.avatarUrl),
+                              backgroundImage: NetworkImage(
+                                widget.worker.avatarUrl,
+                              ),
                             ),
                             const SizedBox(width: 24),
                             // Profile Info
@@ -594,8 +603,9 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
                               onPressed: () {
                                 showDialog(
                                   context: context,
-                                  builder: (context) =>
-                                      ViewEditWorkerModal(worker: widget.worker),
+                                  builder: (context) => ViewEditWorkerModal(
+                                    worker: widget.worker,
+                                  ),
                                 );
                               },
                               style: ElevatedButton.styleFrom(
