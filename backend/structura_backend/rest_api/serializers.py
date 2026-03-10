@@ -480,6 +480,10 @@ class ClientSerializer(serializers.ModelSerializer):
             'password_hash',
             'phone_number',
             'birthdate',
+            'region',
+            'province',
+            'city',
+            'barangay',
             'photo',
             'status',
             'created_at',
@@ -495,6 +499,10 @@ class ClientSerializer(serializers.ModelSerializer):
             'last_name': {'required': False, 'allow_null': True},
             'middle_name': {'required': False, 'allow_null': True},
             'birthdate': {'required': False, 'allow_null': True},
+            'region': {'required': False, 'allow_null': True},
+            'province': {'required': False, 'allow_null': True},
+            'city': {'required': False, 'allow_null': True},
+            'barangay': {'required': False, 'allow_null': True},
             'photo': {'required': False, 'allow_null': True},
         }
     
@@ -525,6 +533,10 @@ class ClientSerializer(serializers.ModelSerializer):
                             last_name=validated_data.get('last_name'),
                             birthdate=validated_data.get('birthdate'),
                             phone=validated_data.get('phone_number'),
+                            region=validated_data.get('region'),
+                            province=validated_data.get('province'),
+                            city=validated_data.get('city'),
+                            barangay=validated_data.get('barangay'),
                             role='Client',
                             status='Active',
                         )

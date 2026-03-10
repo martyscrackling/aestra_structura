@@ -260,6 +260,10 @@ class Client(models.Model):
     password_hash = models.CharField(max_length=255, default='PASSWORD')
     phone_number = models.CharField(max_length=20)
     birthdate = models.DateField(null=True, blank=True)
+    region = models.ForeignKey(Region, on_delete=models.SET_NULL, null=True, blank=True)
+    province = models.ForeignKey(Province, on_delete=models.SET_NULL, null=True, blank=True)
+    city = models.ForeignKey(City, on_delete=models.SET_NULL, null=True, blank=True)
+    barangay = models.ForeignKey(Barangay, on_delete=models.SET_NULL, null=True, blank=True)
 
     photo = models.FileField(upload_to='client_images/', null=True, blank=True)
 

@@ -23,6 +23,18 @@ class _AddClientModalState extends State<AddClientModal> {
   final _generatedEmailController = TextEditingController();
   final _passwordController = TextEditingController();
 
+  int? _selectedRegionId;
+  int? _selectedProvinceId;
+  int? _selectedCityId;
+  int? _selectedBarangayId;
+
+  List<Map<String, dynamic>> _regions = [];
+  List<Map<String, dynamic>> _provinces = [];
+  List<Map<String, dynamic>> _cities = [];
+  List<Map<String, dynamic>> _barangays = [];
+
+  bool _isLoadingRegions = false;
+
   Uint8List? _selectedImageBytes;
   String? _selectedImageFilename;
   bool _isLoading = false;
@@ -31,6 +43,7 @@ class _AddClientModalState extends State<AddClientModal> {
   void initState() {
     super.initState();
     _passwordController.text = 'PASSWORD';
+    _fetchRegions();
   }
 
   @override
@@ -54,6 +67,114 @@ class _AddClientModalState extends State<AddClientModal> {
         _selectedImageBytes = bytes;
         _selectedImageFilename = image.name;
       });
+    }
+  }
+
+  Future<void> _fetchRegions() async {
+    try {
+      setState(() => _isLoadingRegions = true);
+      final response = await http.get(AppConfig.apiUri('regions/'));
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        final regions = data.cast<Map<String, dynamic>>();
+
+        final regionIndex = regions.indexWhere((r) => r['id'] == 10);
+        final regionId = regionIndex >= 0
+            ? (regions[regionIndex]['id'] as int?)
+            : null;
+
+        setState(() {
+          _regions = regions;
+          _selectedRegionId = regionId;
+        });
+
+        if (regionId != null) {
+          await _fetchProvinces(regionId);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching regions: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingRegions = false);
+      }
+    }
+  }
+
+  Future<void> _fetchProvinces(int regionId) async {
+    try {
+      final response = await http.get(
+        AppConfig.apiUri('provinces/?region=$regionId'),
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        final provinces = data.cast<Map<String, dynamic>>();
+
+        final provinceIndex = provinces.indexWhere((p) => p['id'] == 50);
+        final provinceId = provinceIndex >= 0
+            ? (provinces[provinceIndex]['id'] as int?)
+            : null;
+
+        setState(() {
+          _provinces = provinces;
+          _selectedProvinceId = provinceId;
+          _cities = [];
+          _selectedCityId = null;
+          _barangays = [];
+          _selectedBarangayId = null;
+        });
+
+        if (provinceId != null) {
+          await _fetchCities(provinceId);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching provinces: $e');
+    }
+  }
+
+  Future<void> _fetchCities(int provinceId) async {
+    try {
+      final response = await http.get(
+        AppConfig.apiUri('cities/?province=$provinceId'),
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        final cities = data.cast<Map<String, dynamic>>();
+
+        final cityIndex = cities.indexWhere((c) => c['id'] == 825);
+        final cityId = cityIndex >= 0 ? (cities[cityIndex]['id'] as int?) : null;
+
+        setState(() {
+          _cities = cities;
+          _selectedCityId = cityId;
+          _barangays = [];
+          _selectedBarangayId = null;
+        });
+
+        if (cityId != null) {
+          await _fetchBarangays(cityId);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching cities: $e');
+    }
+  }
+
+  Future<void> _fetchBarangays(int cityId) async {
+    try {
+      final response = await http.get(
+        AppConfig.apiUri('barangays/?city=$cityId'),
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        setState(() {
+          _barangays = data.cast<Map<String, dynamic>>();
+          _selectedBarangayId = null;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching barangays: $e');
     }
   }
 
@@ -201,6 +322,10 @@ class _AddClientModalState extends State<AddClientModal> {
           'birthdate': _birthdateController.text.trim().isEmpty
               ? null
               : _birthdateController.text.trim(),
+            'region': _selectedRegionId,
+            'province': _selectedProvinceId,
+            'city': _selectedCityId,
+            'barangay': _selectedBarangayId,
         };
 
         debugPrint('Sending client data: $clientData');
@@ -383,6 +508,15 @@ class _AddClientModalState extends State<AddClientModal> {
                           ),
                           const SizedBox(height: 20),
                           // Form for mobile
+                          const Text(
+                            'Personal Information',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF0C1935),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
                           Form(
                             key: _formKey,
                             child: Column(
@@ -469,6 +603,211 @@ class _AddClientModalState extends State<AddClientModal> {
                                   ),
                                 ),
                                 const SizedBox(height: 12),
+
+                                const Text(
+                                  'Address',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF0C1935),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+
+                                _isLoadingRegions
+                                    ? const Center(
+                                        child: CircularProgressIndicator(),
+                                      )
+                                    : DropdownButtonFormField<int>(
+                                        value: _selectedRegionId,
+                                        decoration: InputDecoration(
+                                          labelText: 'Region',
+                                          labelStyle: TextStyle(
+                                            fontSize: 14,
+                                            color: Colors.grey[600],
+                                          ),
+                                          filled: true,
+                                          fillColor: const Color(0xFFF9FAFB),
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                            borderSide: BorderSide(
+                                              color: Colors.grey[300]!,
+                                            ),
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                            borderSide: BorderSide(
+                                              color: Colors.grey[300]!,
+                                            ),
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                            borderSide: const BorderSide(
+                                              color: Color(0xFF0C1935),
+                                              width: 2,
+                                            ),
+                                          ),
+                                        ),
+                                        items: _regions.map((region) {
+                                          return DropdownMenuItem<int>(
+                                            value: region['id'] as int,
+                                            child: Text(region['name'] as String),
+                                          );
+                                        }).toList(),
+                                        onChanged: (int? value) {
+                                          if (value != null) {
+                                            setState(() {
+                                              _selectedRegionId = value;
+                                            });
+                                            _fetchProvinces(value);
+                                          }
+                                        },
+                                      ),
+                                const SizedBox(height: 12),
+
+                                DropdownButtonFormField<int>(
+                                  value: _selectedProvinceId,
+                                  decoration: InputDecoration(
+                                    labelText: 'Province',
+                                    labelStyle: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey[600],
+                                    ),
+                                    filled: true,
+                                    fillColor: const Color(0xFFF9FAFB),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: BorderSide(
+                                        color: Colors.grey[300]!,
+                                      ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: BorderSide(
+                                        color: Colors.grey[300]!,
+                                      ),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: const BorderSide(
+                                        color: Color(0xFF0C1935),
+                                        width: 2,
+                                      ),
+                                    ),
+                                  ),
+                                  items: _provinces.map((province) {
+                                    return DropdownMenuItem<int>(
+                                      value: province['id'] as int,
+                                      child: Text(province['name'] as String),
+                                    );
+                                  }).toList(),
+                                  onChanged: (int? value) {
+                                    if (value != null) {
+                                      setState(() {
+                                        _selectedProvinceId = value;
+                                      });
+                                      _fetchCities(value);
+                                    }
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+
+                                DropdownButtonFormField<int>(
+                                  value: _selectedCityId,
+                                  decoration: InputDecoration(
+                                    labelText: 'City',
+                                    labelStyle: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey[600],
+                                    ),
+                                    filled: true,
+                                    fillColor: const Color(0xFFF9FAFB),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: BorderSide(
+                                        color: Colors.grey[300]!,
+                                      ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: BorderSide(
+                                        color: Colors.grey[300]!,
+                                      ),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: const BorderSide(
+                                        color: Color(0xFF0C1935),
+                                        width: 2,
+                                      ),
+                                    ),
+                                  ),
+                                  items: _cities.map((city) {
+                                    return DropdownMenuItem<int>(
+                                      value: city['id'] as int,
+                                      child: Text(city['name'] as String),
+                                    );
+                                  }).toList(),
+                                  onChanged: (int? value) {
+                                    if (value != null) {
+                                      setState(() {
+                                        _selectedCityId = value;
+                                      });
+                                      _fetchBarangays(value);
+                                    }
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+
+                                DropdownButtonFormField<int>(
+                                  value: _selectedBarangayId,
+                                  decoration: InputDecoration(
+                                    labelText: 'Barangay',
+                                    labelStyle: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey[600],
+                                    ),
+                                    filled: true,
+                                    fillColor: const Color(0xFFF9FAFB),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: BorderSide(
+                                        color: Colors.grey[300]!,
+                                      ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: BorderSide(
+                                        color: Colors.grey[300]!,
+                                      ),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: const BorderSide(
+                                        color: Color(0xFF0C1935),
+                                        width: 2,
+                                      ),
+                                    ),
+                                  ),
+                                  items: _barangays.map((barangay) {
+                                    return DropdownMenuItem<int>(
+                                      value: barangay['id'] as int,
+                                      child: Text(barangay['name'] as String),
+                                    );
+                                  }).toList(),
+                                  onChanged: (int? value) {
+                                    setState(() {
+                                      _selectedBarangayId = value;
+                                    });
+                                  },
+                                ),
+                                const SizedBox(height: 12),
                               ],
                             ),
                           ),
@@ -540,6 +879,16 @@ class _AddClientModalState extends State<AddClientModal> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  const Text(
+                                    'Personal Information',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF0C1935),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+
                                   // First Name
                                   _buildTextField(
                                     controller: _firstNameController,
@@ -620,6 +969,210 @@ class _AddClientModalState extends State<AddClientModal> {
                                       context,
                                       _birthdateController,
                                     ),
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  const Text(
+                                    'Address',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF0C1935),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+
+                                  _isLoadingRegions
+                                      ? const Center(
+                                          child: CircularProgressIndicator(),
+                                        )
+                                      : DropdownButtonFormField<int>(
+                                          value: _selectedRegionId,
+                                          decoration: InputDecoration(
+                                            labelText: 'Region',
+                                            labelStyle: TextStyle(
+                                              fontSize: 14,
+                                              color: Colors.grey[600],
+                                            ),
+                                            filled: true,
+                                            fillColor: const Color(0xFFF9FAFB),
+                                            border: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              borderSide: BorderSide(
+                                                color: Colors.grey[300]!,
+                                              ),
+                                            ),
+                                            enabledBorder: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              borderSide: BorderSide(
+                                                color: Colors.grey[300]!,
+                                              ),
+                                            ),
+                                            focusedBorder: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              borderSide: const BorderSide(
+                                                color: Color(0xFF0C1935),
+                                                width: 2,
+                                              ),
+                                            ),
+                                          ),
+                                          items: _regions.map((region) {
+                                            return DropdownMenuItem<int>(
+                                              value: region['id'] as int,
+                                              child: Text(
+                                                region['name'] as String,
+                                              ),
+                                            );
+                                          }).toList(),
+                                          onChanged: (int? value) {
+                                            if (value != null) {
+                                              setState(() {
+                                                _selectedRegionId = value;
+                                              });
+                                              _fetchProvinces(value);
+                                            }
+                                          },
+                                        ),
+                                  const SizedBox(height: 16),
+
+                                  DropdownButtonFormField<int>(
+                                    value: _selectedProvinceId,
+                                    decoration: InputDecoration(
+                                      labelText: 'Province',
+                                      labelStyle: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.grey[600],
+                                      ),
+                                      filled: true,
+                                      fillColor: const Color(0xFFF9FAFB),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: BorderSide(
+                                          color: Colors.grey[300]!,
+                                        ),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: BorderSide(
+                                          color: Colors.grey[300]!,
+                                        ),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: const BorderSide(
+                                          color: Color(0xFF0C1935),
+                                          width: 2,
+                                        ),
+                                      ),
+                                    ),
+                                    items: _provinces.map((province) {
+                                      return DropdownMenuItem<int>(
+                                        value: province['id'] as int,
+                                        child: Text(province['name'] as String),
+                                      );
+                                    }).toList(),
+                                    onChanged: (int? value) {
+                                      if (value != null) {
+                                        setState(() {
+                                          _selectedProvinceId = value;
+                                        });
+                                        _fetchCities(value);
+                                      }
+                                    },
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  DropdownButtonFormField<int>(
+                                    value: _selectedCityId,
+                                    decoration: InputDecoration(
+                                      labelText: 'City',
+                                      labelStyle: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.grey[600],
+                                      ),
+                                      filled: true,
+                                      fillColor: const Color(0xFFF9FAFB),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: BorderSide(
+                                          color: Colors.grey[300]!,
+                                        ),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: BorderSide(
+                                          color: Colors.grey[300]!,
+                                        ),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: const BorderSide(
+                                          color: Color(0xFF0C1935),
+                                          width: 2,
+                                        ),
+                                      ),
+                                    ),
+                                    items: _cities.map((city) {
+                                      return DropdownMenuItem<int>(
+                                        value: city['id'] as int,
+                                        child: Text(city['name'] as String),
+                                      );
+                                    }).toList(),
+                                    onChanged: (int? value) {
+                                      if (value != null) {
+                                        setState(() {
+                                          _selectedCityId = value;
+                                        });
+                                        _fetchBarangays(value);
+                                      }
+                                    },
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  DropdownButtonFormField<int>(
+                                    value: _selectedBarangayId,
+                                    decoration: InputDecoration(
+                                      labelText: 'Barangay',
+                                      labelStyle: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.grey[600],
+                                      ),
+                                      filled: true,
+                                      fillColor: const Color(0xFFF9FAFB),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: BorderSide(
+                                          color: Colors.grey[300]!,
+                                        ),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: BorderSide(
+                                          color: Colors.grey[300]!,
+                                        ),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: const BorderSide(
+                                          color: Color(0xFF0C1935),
+                                          width: 2,
+                                        ),
+                                      ),
+                                    ),
+                                    items: _barangays.map((barangay) {
+                                      return DropdownMenuItem<int>(
+                                        value: barangay['id'] as int,
+                                        child: Text(barangay['name'] as String),
+                                      );
+                                    }).toList(),
+                                    onChanged: (int? value) {
+                                      setState(() {
+                                        _selectedBarangayId = value;
+                                      });
+                                    },
                                   ),
                                   const SizedBox(height: 16),
                                 ],
