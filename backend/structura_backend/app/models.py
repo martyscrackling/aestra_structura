@@ -213,6 +213,12 @@ class FieldWorker(models.Model):
     last_name = models.CharField(max_length=100, null=True, blank=True)
     phone_number = models.CharField(max_length=20)
     birthdate = models.DateField(null=True, blank=True)
+
+    # Address Information
+    region = models.ForeignKey(Region, on_delete=models.SET_NULL, null=True, blank=True)
+    province = models.ForeignKey(Province, on_delete=models.SET_NULL, null=True, blank=True)
+    city = models.ForeignKey(City, on_delete=models.SET_NULL, null=True, blank=True)
+    barangay = models.ForeignKey(Barangay, on_delete=models.SET_NULL, null=True, blank=True)
     
     role = models.CharField(max_length=50, default='Mason')
     sss_id = models.CharField(max_length=20, null=True, blank=True)

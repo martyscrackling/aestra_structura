@@ -39,9 +39,23 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
   Uint8List? _selectedImageBytes;
   bool _isLoading = false;
 
+  // Address hierarchy state
+  int? _selectedRegionId;
+  int? _selectedProvinceId;
+  int? _selectedCityId;
+  int? _selectedBarangayId;
+
+  List<Map<String, dynamic>> _regions = [];
+  List<Map<String, dynamic>> _provinces = [];
+  List<Map<String, dynamic>> _cities = [];
+  List<Map<String, dynamic>> _barangays = [];
+
+  bool _isLoadingRegions = false;
+
   @override
   void initState() {
     super.initState();
+    _fetchRegions();
   }
 
   @override
@@ -136,6 +150,119 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
     }
   }
 
+  Future<void> _fetchRegions() async {
+    try {
+      setState(() => _isLoadingRegions = true);
+      final response = await http.get(AppConfig.apiUri('regions/'));
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        final regions = data.cast<Map<String, dynamic>>();
+
+        int? defaultRegionId;
+        final defaultRegionIndex = regions.indexWhere((r) => r['id'] == 10);
+        if (defaultRegionIndex >= 0) {
+          defaultRegionId = regions[defaultRegionIndex]['id'] as int;
+        }
+
+        setState(() {
+          _regions = regions;
+          _selectedRegionId = defaultRegionId ?? _selectedRegionId;
+        });
+
+        if (_selectedRegionId != null) {
+          await _fetchProvinces(_selectedRegionId!);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching regions: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingRegions = false);
+      }
+    }
+  }
+
+  Future<void> _fetchProvinces(int regionId) async {
+    try {
+      final response = await http.get(
+        AppConfig.apiUri('provinces/?region=$regionId'),
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        final provinces = data.cast<Map<String, dynamic>>();
+
+        int? defaultProvinceId;
+        final defaultProvinceIndex = provinces.indexWhere((p) => p['id'] == 50);
+        if (defaultProvinceIndex >= 0) {
+          defaultProvinceId = provinces[defaultProvinceIndex]['id'] as int;
+        }
+
+        setState(() {
+          _provinces = provinces;
+          _cities = [];
+          _barangays = [];
+          _selectedProvinceId = defaultProvinceId;
+          _selectedCityId = null;
+          _selectedBarangayId = null;
+        });
+
+        if (_selectedProvinceId != null) {
+          await _fetchCities(_selectedProvinceId!);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching provinces: $e');
+    }
+  }
+
+  Future<void> _fetchCities(int provinceId) async {
+    try {
+      final response = await http.get(
+        AppConfig.apiUri('cities/?province=$provinceId'),
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        final cities = data.cast<Map<String, dynamic>>();
+
+        int? defaultCityId;
+        final defaultCityIndex = cities.indexWhere((c) => c['id'] == 825);
+        if (defaultCityIndex >= 0) {
+          defaultCityId = cities[defaultCityIndex]['id'] as int;
+        }
+
+        setState(() {
+          _cities = cities;
+          _barangays = [];
+          _selectedCityId = defaultCityId;
+          _selectedBarangayId = null;
+        });
+
+        if (_selectedCityId != null) {
+          await _fetchBarangays(_selectedCityId!);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching cities: $e');
+    }
+  }
+
+  Future<void> _fetchBarangays(int cityId) async {
+    try {
+      final response = await http.get(
+        AppConfig.apiUri('barangays/?city=$cityId'),
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        setState(() {
+          _barangays = data.cast<Map<String, dynamic>>();
+          _selectedBarangayId = null;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching barangays: $e');
+    }
+  }
+
   Future<void> _handleSubmit() async {
     if (_formKey.currentState!.validate()) {
       setState(() {
@@ -182,6 +309,10 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
           'payrate': _payrateController.text.trim().isEmpty
               ? null
               : double.tryParse(_payrateController.text.trim()),
+          'region': _selectedRegionId,
+          'province': _selectedProvinceId,
+          'city': _selectedCityId,
+          'barangay': _selectedBarangayId,
         };
 
         debugPrint('Creating field worker: $fieldWorkerData');
@@ -575,6 +706,12 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
   List<Widget> _buildFormFields(bool isMobile) {
     final spacing = isMobile ? 12.0 : 16.0;
     return [
+      const Text(
+        'Personal Information',
+        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+      ),
+      SizedBox(height: spacing),
+
       _buildTextField(
         controller: _firstNameController,
         hintText: 'First Name',
@@ -620,6 +757,189 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
         readOnly: true,
         suffixIcon: Icons.calendar_today_outlined,
         onTap: () => _selectDate(context, _birthdateController),
+      ),
+      SizedBox(height: spacing),
+      const Text(
+        'Address',
+        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+      ),
+      SizedBox(height: spacing),
+
+      _isLoadingRegions
+          ? const Center(child: CircularProgressIndicator())
+          : DropdownButtonFormField<int>(
+              value: _selectedRegionId,
+              decoration: InputDecoration(
+                labelText: 'Region',
+                labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                filled: true,
+                fillColor: const Color(0xFFF9FAFB),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: Colors.grey[300]!),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: Colors.grey[300]!),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF0C1935),
+                    width: 2,
+                  ),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+              ),
+              items: _regions.map((region) {
+                return DropdownMenuItem<int>(
+                  value: region['id'] as int,
+                  child: Text(region['name'] as String),
+                );
+              }).toList(),
+              onChanged: (int? value) async {
+                if (value == null) return;
+                setState(() {
+                  _selectedRegionId = value;
+                  _selectedProvinceId = null;
+                  _selectedCityId = null;
+                  _selectedBarangayId = null;
+                  _provinces = [];
+                  _cities = [];
+                  _barangays = [];
+                });
+                await _fetchProvinces(value);
+              },
+            ),
+      SizedBox(height: spacing),
+      DropdownButtonFormField<int>(
+        value: _selectedProvinceId,
+        decoration: InputDecoration(
+          labelText: 'Province',
+          labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
+          filled: true,
+          fillColor: const Color(0xFFF9FAFB),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: Colors.grey[300]!),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: Colors.grey[300]!),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: Color(0xFF0C1935), width: 2),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 12,
+          ),
+        ),
+        items: _provinces.map((province) {
+          return DropdownMenuItem<int>(
+            value: province['id'] as int,
+            child: Text(province['name'] as String),
+          );
+        }).toList(),
+        onChanged: (int? value) async {
+          if (value == null) return;
+          setState(() {
+            _selectedProvinceId = value;
+            _selectedCityId = null;
+            _selectedBarangayId = null;
+            _cities = [];
+            _barangays = [];
+          });
+          await _fetchCities(value);
+        },
+      ),
+      SizedBox(height: spacing),
+      DropdownButtonFormField<int>(
+        value: _selectedCityId,
+        decoration: InputDecoration(
+          labelText: 'City',
+          labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
+          filled: true,
+          fillColor: const Color(0xFFF9FAFB),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: Colors.grey[300]!),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: Colors.grey[300]!),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: Color(0xFF0C1935), width: 2),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 12,
+          ),
+        ),
+        items: _cities.map((city) {
+          return DropdownMenuItem<int>(
+            value: city['id'] as int,
+            child: Text(city['name'] as String),
+          );
+        }).toList(),
+        onChanged: (int? value) async {
+          if (value == null) return;
+          setState(() {
+            _selectedCityId = value;
+            _selectedBarangayId = null;
+            _barangays = [];
+          });
+          await _fetchBarangays(value);
+        },
+      ),
+      SizedBox(height: spacing),
+      DropdownButtonFormField<int>(
+        value: _selectedBarangayId,
+        decoration: InputDecoration(
+          labelText: 'Barangay (Optional)',
+          labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
+          filled: true,
+          fillColor: const Color(0xFFF9FAFB),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: Colors.grey[300]!),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: Colors.grey[300]!),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: Color(0xFF0C1935), width: 2),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 12,
+          ),
+        ),
+        items: _barangays.map((barangay) {
+          return DropdownMenuItem<int>(
+            value: barangay['id'] as int,
+            child: Text(barangay['name'] as String),
+          );
+        }).toList(),
+        onChanged: (int? value) {
+          setState(() {
+            _selectedBarangayId = value;
+          });
+        },
+      ),
+      SizedBox(height: spacing),
+
+      const Text(
+        'ID Numbers',
+        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
       ),
       SizedBox(height: spacing),
       _buildTextField(
