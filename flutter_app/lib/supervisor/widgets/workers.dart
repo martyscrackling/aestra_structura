@@ -21,6 +21,16 @@ class _WorkersState extends State<Workers> {
     _workersFuture = _fetchWorkers();
   }
 
+  @override
+  void didUpdateWidget(covariant Workers oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.projectId != widget.projectId) {
+      setState(() {
+        _workersFuture = _fetchWorkers();
+      });
+    }
+  }
+
   Future<List<Map<String, dynamic>>> _fetchWorkers() async {
     try {
       final response = await http.get(

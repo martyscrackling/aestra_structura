@@ -21,6 +21,16 @@ class _PhasesWidgetState extends State<PhasesWidget> {
     _phasesFuture = _fetchPhases();
   }
 
+  @override
+  void didUpdateWidget(covariant PhasesWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.projectId != widget.projectId) {
+      setState(() {
+        _phasesFuture = _fetchPhases();
+      });
+    }
+  }
+
   Future<List<Map<String, dynamic>>> _fetchPhases() async {
     try {
       final response = await http.get(

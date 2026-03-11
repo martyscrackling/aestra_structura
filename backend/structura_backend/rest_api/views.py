@@ -574,8 +574,16 @@ class ProjectViewSet(viewsets.ModelViewSet):
         # In production, use authentication tokens
         user_id = self.request.query_params.get('user_id')
         client_id = self.request.query_params.get('client_id')
+        supervisor_id = self.request.query_params.get('supervisor_id')
         print(f"🔍 ProjectViewSet get_queryset called")
         print(f"🔍 Received user_id: {user_id}")
+
+        if supervisor_id:
+            queryset = models.Project.objects.filter(
+                supervisor_id=supervisor_id
+            ).order_by('-created_at')
+            print(f"✅ Filtered projects by supervisor_id count: {queryset.count()}")
+            return queryset
         
         if client_id:
             queryset = models.Project.objects.filter(client_id=client_id).order_by('-created_at')

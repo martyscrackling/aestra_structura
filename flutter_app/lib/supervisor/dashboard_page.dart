@@ -4,7 +4,6 @@ import 'widgets/dashboard_header.dart';
 import 'widgets/active_project.dart';
 import 'widgets/tasks.dart';
 import 'widgets/workers.dart';
-import 'widgets/calendar_panel.dart';
 import 'widgets/phases.dart';
 import 'workers_management.dart';
 import 'attendance_page.dart';
@@ -78,6 +77,23 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
     print('📌 Dashboard: _currentProjectId is now $_currentProjectId');
   }
 
+  Widget _buildScrollableActiveProjects({required double height}) {
+    return SizedBox(
+      height: height,
+      child: Scrollbar(
+        thumbVisibility: true,
+        child: SingleChildScrollView(
+          primary: false,
+          physics: const ClampingScrollPhysics(),
+          child: ActiveProject(
+            key: _activeProjectKey,
+            onProjectLoaded: _setProjectId,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -93,19 +109,14 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
             children: [
               // Sidebar stays fixed on the left (only on desktop)
               if (isDesktop)
-                Sidebar(
-                  activePage: "Dashboard",
-                  keepVisible: true,
-                ),
+                Sidebar(activePage: "Dashboard", keepVisible: true),
 
               // Right area (header fixed, content scrollable)
               Expanded(
                 child: Column(
                   children: [
                     // Header fixed at top of right area
-                    DashboardHeader(
-                      onMenuPressed: () {},
-                    ),
+                    DashboardHeader(onMenuPressed: () {}),
 
                     // Scrollable content below header while sidebar stays put
                     Expanded(
@@ -271,7 +282,7 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ActiveProject(key: _activeProjectKey, onProjectLoaded: _setProjectId),
+          _buildScrollableActiveProjects(height: 380),
           const SizedBox(height: 16),
           Tasks(projectId: _currentProjectId),
           const SizedBox(height: 16),
@@ -292,9 +303,6 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
                 style: TextStyle(color: Colors.orange.shade900),
               ),
             ),
-          const SizedBox(height: 16),
-          // Calendar panel on mobile (compact version)
-          const CalendarPanel(),
           const SizedBox(height: 12),
         ],
       ),
@@ -308,7 +316,7 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ActiveProject(key: _activeProjectKey, onProjectLoaded: _setProjectId),
+          _buildScrollableActiveProjects(height: 450),
           const SizedBox(height: 18),
           Tasks(projectId: _currentProjectId),
           const SizedBox(height: 18),
@@ -317,20 +325,17 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
             const SizedBox(height: 18),
             Workers(projectId: _currentProjectId!),
           ],
-          const SizedBox(height: 18),
-          const CalendarPanel(),
           const SizedBox(height: 16),
         ],
       ),
     );
   }
 
-  // Desktop layout - Side by side with calendar panel
+  // Desktop layout - Side by side with tasks panel on the right
   Widget _buildDesktopLayout() {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Main content area (left/middle)
         Expanded(
           flex: 4,
           child: Padding(
@@ -338,11 +343,18 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ActiveProject(
-                  key: _activeProjectKey,
-                  onProjectLoaded: _setProjectId,
-                ),
-                const SizedBox(height: 20),
+                _buildScrollableActiveProjects(height: 640),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        ),
+        Expanded(
+          flex: 2,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
                 Tasks(projectId: _currentProjectId),
                 const SizedBox(height: 20),
                 if (_currentProjectId != null) ...[
@@ -350,18 +362,8 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
                   const SizedBox(height: 20),
                   Workers(projectId: _currentProjectId!),
                 ],
-                const SizedBox(height: 16),
               ],
             ),
-          ),
-        ),
-
-        // Right-side calendar panel
-        Expanded(
-          flex: 2,
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(children: [const CalendarPanel()]),
           ),
         ),
       ],
