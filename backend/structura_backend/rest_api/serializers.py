@@ -514,33 +514,9 @@ class ClientSerializer(serializers.ModelSerializer):
         plain_password = validated_data.get('password_hash', 'PASSWORD')
         try:
             with transaction.atomic():
-                # Auto-create (or reuse) a Client user account if user_id is not provided.
-                if 'user_id' not in validated_data or validated_data.get('user_id') is None:
-                    email = (validated_data.get('email') or '').strip().lower()
-                    existing_user = models.User.objects.filter(email=email).first()
-                    if existing_user is not None:
-                        if (existing_user.role or '').strip() != 'Client':
-                            raise serializers.ValidationError({
-                                'email': 'This email is already registered as a non-client user.'
-                            })
-                        validated_data['user_id'] = existing_user
-                    else:
-                        user = models.User.objects.create(
-                            email=validated_data['email'],
-                            password_hash=validated_data['password_hash'],
-                            first_name=validated_data.get('first_name'),
-                            middle_name=validated_data.get('middle_name'),
-                            last_name=validated_data.get('last_name'),
-                            birthdate=validated_data.get('birthdate'),
-                            phone=validated_data.get('phone_number'),
-                            region=validated_data.get('region'),
-                            province=validated_data.get('province'),
-                            city=validated_data.get('city'),
-                            barangay=validated_data.get('barangay'),
-                            role='Client',
-                            status='Active',
-                        )
-                        validated_data['user_id'] = user
+                # Client creation should write only to app_client.
+                # Ignore any incoming user_id to avoid creating/linking app_user rows.
+                validated_data['user_id'] = None
 
                 # Create client profile row.
                 client = models.Client(**validated_data)

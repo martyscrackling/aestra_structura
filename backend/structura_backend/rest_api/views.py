@@ -538,10 +538,16 @@ class ProjectViewSet(viewsets.ModelViewSet):
         if not image_file:
             return Response({'error': 'No image file provided.'}, status=400)
 
-        # Save to MEDIA_ROOT/project_images/project_<id>.jpg
+        # Save to MEDIA_ROOT/project_images/pj_<user_id>_<project_id>.<ext>
         media_root = getattr(settings, 'MEDIA_ROOT', 'media')
         os.makedirs(os.path.join(media_root, 'project_images'), exist_ok=True)
-        filename = f'project_{project.project_id}.jpg'
+        original_name = getattr(image_file, 'name', '') or ''
+        ext = os.path.splitext(original_name)[1].lower()
+        if not ext:
+            ext = '.jpg'
+
+        owner_user_id = getattr(project, 'user_id', None) or '0'
+        filename = f'pj_{owner_user_id}_{project.project_id}{ext}'
         file_path = os.path.join(media_root, 'project_images', filename)
         with open(file_path, 'wb+') as dest:
             for chunk in image_file.chunks():
