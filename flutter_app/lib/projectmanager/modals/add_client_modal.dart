@@ -143,7 +143,9 @@ class _AddClientModalState extends State<AddClientModal> {
         final cities = data.cast<Map<String, dynamic>>();
 
         final cityIndex = cities.indexWhere((c) => c['id'] == 825);
-        final cityId = cityIndex >= 0 ? (cities[cityIndex]['id'] as int?) : null;
+        final cityId = cityIndex >= 0
+            ? (cities[cityIndex]['id'] as int?)
+            : null;
 
         setState(() {
           _cities = cities;
@@ -322,10 +324,10 @@ class _AddClientModalState extends State<AddClientModal> {
           'birthdate': _birthdateController.text.trim().isEmpty
               ? null
               : _birthdateController.text.trim(),
-            'region': _selectedRegionId,
-            'province': _selectedProvinceId,
-            'city': _selectedCityId,
-            'barangay': _selectedBarangayId,
+          'region': _selectedRegionId,
+          'province': _selectedProvinceId,
+          'city': _selectedCityId,
+          'barangay': _selectedBarangayId,
         };
 
         debugPrint('Sending client data: $clientData');
@@ -657,7 +659,9 @@ class _AddClientModalState extends State<AddClientModal> {
                                         items: _regions.map((region) {
                                           return DropdownMenuItem<int>(
                                             value: region['id'] as int,
-                                            child: Text(region['name'] as String),
+                                            child: Text(
+                                              region['name'] as String,
+                                            ),
                                           );
                                         }).toList(),
                                         onChanged: (int? value) {
