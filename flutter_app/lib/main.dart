@@ -14,6 +14,7 @@ import 'projectmanager/reports_page.dart';
 import 'projectmanager/inventory_page.dart';
 import 'projectmanager/settings_page.dart';
 import 'supervisor/dashboard_page.dart' as supervisor;
+import 'supervisor/all_projects.dart' as supervisor;
 import 'supervisor/workers_management.dart' as supervisor;
 import 'supervisor/attendance_page.dart' as supervisor;
 import 'supervisor/daily_logs.dart' as supervisor;
@@ -149,6 +150,11 @@ class StructuraApp extends StatelessWidget {
               const supervisor.SupervisorDashboardPage(),
           name: 'supervisor',
           routes: [
+            GoRoute(
+              path: 'projects',
+              builder: (context, state) => const supervisor.AllProjectsPage(),
+              name: 'supervisor-projects',
+            ),
             GoRoute(
               path: 'workers',
               builder: (context, state) =>

@@ -16,6 +16,7 @@ class ProjectDetailsPage extends StatefulWidget {
   final double progress;
   final String? budget;
   final int projectId;
+  final bool useResponsiveLayout;
 
   const ProjectDetailsPage({
     super.key,
@@ -25,6 +26,7 @@ class ProjectDetailsPage extends StatefulWidget {
     required this.progress,
     this.budget,
     required this.projectId,
+    this.useResponsiveLayout = true,
   });
 
   @override
@@ -382,6 +384,10 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     final projectBannerImage =
       _asNonEmptyString(_projectInfo?['project_image']) ?? widget.projectImage;
     if (_isLoading) {
+      if (!widget.useResponsiveLayout) {
+        return const Center(child: CircularProgressIndicator());
+      }
+
       return const Scaffold(
         backgroundColor: Color(0xFFF4F6F9),
         body: Center(child: CircularProgressIndicator()),
@@ -389,6 +395,10 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     }
 
     if (_error != null) {
+      if (!widget.useResponsiveLayout) {
+        return Center(child: Text('Error: $_error'));
+      }
+
       return Scaffold(
         backgroundColor: const Color(0xFFF4F6F9),
         body: Center(child: Text('Error: $_error')),
@@ -398,12 +408,9 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 768;
 
-    return ResponsivePageLayout(
-      currentPage: 'Projects',
-      title: 'Project Details',
-      child: SingleChildScrollView(
-        padding: EdgeInsets.all(isMobile ? 16 : 24),
-        child: Column(
+    final detailsContent = SingleChildScrollView(
+      padding: EdgeInsets.all(isMobile ? 16 : 24),
+      child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (daysLeft != null && _showDaysLeftReminder)
@@ -866,8 +873,17 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
             ),
             SizedBox(height: isMobile ? 80 : 32), // Space for bottom nav
           ],
-        ),
       ),
+    );
+
+    if (!widget.useResponsiveLayout) {
+      return detailsContent;
+    }
+
+    return ResponsivePageLayout(
+      currentPage: 'Projects',
+      title: 'Project Details',
+      child: detailsContent,
     );
   }
 

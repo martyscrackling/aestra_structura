@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 import '../../services/auth_service.dart';
 import '../../services/app_config.dart';
+import '../project_infos.dart';
 
 class ActiveProject extends StatefulWidget {
   final Function(int)? onProjectLoaded;
@@ -641,6 +642,56 @@ class _ActiveProjectState extends State<ActiveProject> {
                                         ),
                                       ),
                                     ],
+                                  ),
+                                  const SizedBox(height: 14),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: OutlinedButton(
+                                      onPressed: () {
+                                        Navigator.of(context).push(
+                                          PageRouteBuilder(
+                                            pageBuilder: (
+                                              context,
+                                              animation,
+                                              secondaryAnimation,
+                                            ) => ProjectInfosPage(
+                                              projectTitle:
+                                                  projectName.toString(),
+                                              projectLocation: location,
+                                              projectImage:
+                                                  (project['project_image'] ?? '')
+                                                      .toString(),
+                                              progress: progress,
+                                              budget: project['budget']
+                                                  ?.toString(),
+                                              projectId: projectId,
+                                            ),
+                                            transitionDuration: Duration.zero,
+                                          ),
+                                        );
+                                      },
+                                      style: OutlinedButton.styleFrom(
+                                        side: BorderSide(
+                                          color: progress >= 1
+                                              ? const Color(0xFF22C55E)
+                                              : const Color(0xFFFF7A18),
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        'View more',
+                                        style: TextStyle(
+                                          color: progress >= 1
+                                              ? const Color(0xFF22C55E)
+                                              : const Color(0xFFFF7A18),
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ),

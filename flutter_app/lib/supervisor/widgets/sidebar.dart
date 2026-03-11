@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 // Import your pages
 import '../dashboard_page.dart';
+import '../all_projects.dart';
 import '../workers_management.dart';
 import '../attendance_page.dart';
 import '../daily_logs.dart';
@@ -34,6 +35,9 @@ class _SidebarState extends State<Sidebar> {
       case "Dashboard":
         context.go('/supervisor');
         break;
+      case "Projects":
+        context.go('/supervisor/projects');
+        break;
       case "Worker Management":
         context.go('/supervisor/workers');
         break;
@@ -61,6 +65,7 @@ class _SidebarState extends State<Sidebar> {
   Widget build(BuildContext context) {
     final menuItems = [
       {"label": "Dashboard", "icon": Icons.dashboard},
+      {"label": "Projects", "icon": Icons.folder_open},
       {"label": "Worker Management", "icon": Icons.people},
       {"label": "Attendance", "icon": Icons.check_circle},
       {"label": "Daily Logs", "icon": Icons.list_alt},
