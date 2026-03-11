@@ -379,6 +379,8 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         _asNonEmptyString(_projectInfo?['description']) ??
         _asNonEmptyString(_projectInfo?['project_description']) ??
         _asNonEmptyString(_projectInfo?['details']);
+    final projectBannerImage =
+      _asNonEmptyString(_projectInfo?['project_image']) ?? widget.projectImage;
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: Color(0xFFF4F6F9),
@@ -495,7 +497,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
             // Banner Image
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: _buildProjectImage(widget.projectImage),
+              child: _buildProjectImage(projectBannerImage),
             ),
 
             const SizedBox(height: 24),
@@ -942,25 +944,10 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         );
       }
 
-      // Network image (full URL)
-      if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      final resolvedUrl = _resolveMediaUrl(imagePath);
+      if (resolvedUrl != null) {
         return Image.network(
-          imagePath,
-          height: 220,
-          width: double.infinity,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            return _buildPlaceholder();
-          },
-        );
-      }
-
-      // Network image (relative /media/ URL)
-      if (imagePath.startsWith('/media/')) {
-        final url =
-            'https://martyscrackling.github.io/aestra_structura' + imagePath;
-        return Image.network(
-          url,
+          resolvedUrl,
           height: 220,
           width: double.infinity,
           fit: BoxFit.cover,

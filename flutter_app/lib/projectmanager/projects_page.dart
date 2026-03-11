@@ -847,6 +847,35 @@ class ProjectOverviewCard extends StatelessWidget {
 
   final ProjectOverviewData data;
 
+  String? _resolveMediaUrl(String imagePath) {
+    final value = imagePath.trim();
+    if (value.isEmpty || value == 'null') return null;
+
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return value;
+    }
+
+    final base = Uri.parse(AppConfig.apiBaseUrl);
+    final origin = Uri(
+      scheme: base.scheme,
+      host: base.host,
+      port: base.hasPort ? base.port : null,
+    );
+
+    if (value.startsWith('/')) {
+      return origin.resolve(value).toString();
+    }
+    if (value.startsWith('media/')) {
+      return origin.resolve('/$value').toString();
+    }
+    if (value.startsWith('project_images/')) {
+      return origin.resolve('/media/$value').toString();
+    }
+
+    // Default fallback for any stored relative media path.
+    return origin.resolve('/media/$value').toString();
+  }
+
   Widget _buildProjectImage(String imagePath) {
     try {
       print('🔍 Loading image: $imagePath');
@@ -871,29 +900,15 @@ class ProjectOverviewCard extends StatelessWidget {
         );
       }
 
-      // Check if it's a network URL (http, https, or starts with /media/)
-      if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      final mediaUrl = _resolveMediaUrl(imagePath);
+      if (mediaUrl != null) {
         return Image.network(
-          imagePath,
+          mediaUrl,
           height: 150,
           width: double.infinity,
           fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) {
-            print('⚠️ Network image failed to load: $imagePath');
-            return _buildPlaceholder();
-          },
-        );
-      } else if (imagePath.startsWith('/media/')) {
-        // Use deployed backend URL for media images
-        final url =
-            'https://martyscrackling.github.io/aestra_structura' + imagePath;
-        return Image.network(
-          url,
-          height: 150,
-          width: double.infinity,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            print('⚠️ Network image failed to load: $url');
+            print('⚠️ Network image failed to load: $mediaUrl');
             return _buildPlaceholder();
           },
         );

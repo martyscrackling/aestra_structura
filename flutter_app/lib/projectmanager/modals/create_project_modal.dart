@@ -334,54 +334,65 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
     }
   }
 
-  Future<String?> _saveImageToAssets(String projectId) async {
+  MediaType _guessImageMediaType(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.png')) {
+      return MediaType('image', 'png');
+    }
+    if (lower.endsWith('.webp')) {
+      return MediaType('image', 'webp');
+    }
+    if (lower.endsWith('.gif')) {
+      return MediaType('image', 'gif');
+    }
+    return MediaType('image', 'jpeg');
+  }
+
+  Future<String?> _uploadProjectImage(String projectId, int userId) async {
     if (_selectedImage == null) {
       print('❌ No image selected');
       return null;
     }
+
     try {
+      // Always upload to backend. Saving into Flutter assets at runtime is not reliable.
+      final uri = AppConfig.apiUri(
+        'projects/$projectId/upload_image/?user_id=$userId',
+      );
+      final request = http.MultipartRequest('POST', uri);
+
       if (kIsWeb) {
-        // Upload image to backend as multipart
-        final uri = AppConfig.apiUri('projects/$projectId/upload_image/');
-        final request = http.MultipartRequest('POST', uri);
         request.files.add(
           http.MultipartFile.fromBytes(
             'image',
             await _selectedImage!.readAsBytes(),
             filename: _selectedImage!.name,
-            contentType: MediaType('image', 'jpeg'),
+            contentType: _guessImageMediaType(_selectedImage!.name),
           ),
         );
-        final response = await request.send();
-        if (response.statusCode == 200) {
-          final respStr = await response.stream.bytesToString();
-          final respData = jsonDecode(respStr);
-          print('✓ Image uploaded: ${respData['url']}');
-          return respData['url']; // Use returned URL
-        } else {
-          print('❌ Image upload failed: ${response.statusCode}');
-          return null;
-        }
       } else {
-        // Mobile/Desktop: Save locally as before
-        final projectDir = Directory('assets/images/project_images');
-        print('📁 Creating directory: ${projectDir.path}');
-        if (!projectDir.existsSync()) {
-          projectDir.createSync(recursive: true);
-        }
-        final fileName = 'project_$projectId.jpg';
-        final filePath = 'assets/images/project_images/$fileName';
-        final fullPath = projectDir.path + Platform.pathSeparator + fileName;
-        final sourceFile = File(_selectedImage!.path);
-        print('📸 Source: ${sourceFile.path}');
-        print('📍 Destination: $fullPath');
-        await sourceFile.copy(fullPath);
-        print('✓ Image saved successfully!');
-        return filePath;
+        request.files.add(
+          await http.MultipartFile.fromPath('image', _selectedImage!.path),
+        );
       }
+
+      final response = await request.send().timeout(const Duration(seconds: 30));
+      if (response.statusCode == 200) {
+        final respStr = await response.stream.bytesToString();
+        final respData = jsonDecode(respStr);
+        final url = respData['url'] as String?;
+        print('✓ Image uploaded: $url');
+        return url;
+      }
+
+      final errorBody = await response.stream.bytesToString();
+      final message =
+          'Image upload failed (${response.statusCode}). $errorBody';
+      print('❌ $message');
+      throw Exception(message);
     } catch (e) {
-      print('❌ Error saving/uploading image: $e');
-      return null;
+      print('❌ Error uploading image: $e');
+      rethrow;
     }
   }
 
@@ -462,29 +473,32 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
         final projectId = responseData['project_id'];
         print('✅ Project created with ID: $projectId');
 
-        // Step 3: Save image if selected
-        String? imagePath;
+        // Step 3: Upload image if selected
+        String? uploadedImageUrl;
+        bool imageUploadFailed = false;
         if (_selectedImage != null) {
-          print('🚀 Step 2: Saving image file...');
-          imagePath = await _saveImageToAssets(projectId.toString());
-
-          if (imagePath != null) {
-            print('✅ Image saved to: $imagePath');
-
-            // Step 4: Update project with image path
-            print('🚀 Step 3: Updating project with image path...');
-            final updatePayload = {'project_image': imagePath};
-
-            final updateResponse = await http
-                .patch(
-                  AppConfig.apiUri('projects/$projectId/'),
-                  headers: {'Content-Type': 'application/json'},
-                  body: jsonEncode(updatePayload),
-                )
-                .timeout(const Duration(seconds: 30));
-
-            print('✓ Update response status: ${updateResponse.statusCode}');
-            print('✓ Update response body: ${updateResponse.body}');
+          print('🚀 Step 2: Uploading image...');
+          try {
+            uploadedImageUrl = await _uploadProjectImage(
+              projectId.toString(),
+              userId,
+            );
+            if (uploadedImageUrl != null) {
+              print('✅ Image uploaded to: $uploadedImageUrl');
+            }
+          } catch (e) {
+            imageUploadFailed = true;
+            print('⚠️ Project created, but image upload failed.');
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Project created, but image failed: $e',
+                  ),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            }
           }
         }
 
@@ -546,8 +560,10 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
                         ),
                       ),
                     const SizedBox(height: 16),
-                    const Text(
-                      'New Project Added',
+                    Text(
+                      imageUploadFailed
+                          ? 'Project Added (No Image)'
+                          : 'New Project Added',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
@@ -556,7 +572,9 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '${_nameController.text} has been successfully created.',
+                      imageUploadFailed
+                          ? '${_nameController.text} was created, but the image was not uploaded.'
+                          : '${_nameController.text} has been successfully created.',
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         fontSize: 14,

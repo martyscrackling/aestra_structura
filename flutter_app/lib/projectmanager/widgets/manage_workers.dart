@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import '../project_details_page.dart';
 import '../../services/app_config.dart';
 import '../../services/subscription_helper.dart';
+import '../../services/auth_service.dart';
 
 class Worker {
   final int workerId;
@@ -63,28 +64,91 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
 
   Future<void> _fetchFieldWorkers() async {
     try {
-      print('🔍 Fetching field workers for project ${widget.phase.projectId}');
-      final response = await http.get(
-        AppConfig.apiUri('field-workers/?project_id=${widget.phase.projectId}'),
-      );
+      final currentUser = AuthService().currentUser;
+      final currentUserType = (currentUser?['type'] ?? '').toString();
+      final isRealUser =
+          currentUserType.toLowerCase() == 'user' ||
+          (currentUserType.isEmpty &&
+              currentUser?['supervisor_id'] == null &&
+              currentUser?['client_id'] == null);
 
-      print('✅ Response status: ${response.statusCode}');
-      print('✅ Response body: ${response.body}');
+      final dynamic rawUserId = currentUser?['user_id'];
+      final int? parsedUserId = (isRealUser && rawUserId != null)
+          ? (rawUserId is int ? rawUserId : int.tryParse(rawUserId.toString()))
+          : null;
+      final int projectId = widget.phase.projectId;
+
+      final List<String> endpoints = [
+        if (parsedUserId != null && parsedUserId > 0)
+          'field-workers/?user_id=$parsedUserId&project_id=$projectId',
+        if (parsedUserId != null && parsedUserId > 0)
+          'field-workers/?user_id=$parsedUserId',
+        'field-workers/?project_id=$projectId',
+        'field-workers/',
+      ];
+
+      http.Response? response;
+      List<dynamic> data = const [];
+      final headers = <String, String>{
+        if (parsedUserId != null && parsedUserId > 0)
+          'X-User-Id': parsedUserId.toString(),
+      };
+
+      for (final endpoint in endpoints) {
+        print('🔍 Fetching field workers from: $endpoint');
+        final candidate = await http.get(
+          AppConfig.apiUri(endpoint),
+          headers: headers,
+        );
+        print('✅ Response status: ${candidate.statusCode}');
+        print('✅ Response body: ${candidate.body}');
+
+        if (candidate.statusCode != 200) {
+          response = candidate;
+          continue;
+        }
+
+        final decoded = jsonDecode(candidate.body);
+        final parsed = decoded is List
+            ? decoded
+            : (decoded is Map<String, dynamic> && decoded['results'] is List
+                  ? decoded['results'] as List<dynamic>
+                  : <dynamic>[]);
+
+        response = candidate;
+        data = parsed;
+        if (data.isNotEmpty) {
+          break;
+        }
+      }
+
+      if (response == null) {
+        setState(() {
+          _error = 'Failed to load field workers';
+          _isLoading = false;
+        });
+        return;
+      }
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
         print('📊 Field workers fetched: ${data.length}');
 
         setState(() {
           _availableWorkers = data
-              .map(
-                (json) => Worker(
-                  workerId: json['fieldworker_id'],
+              .map((json) {
+                final rawId = json['fieldworker_id'] ?? json['id'];
+                final workerId = rawId is int
+                    ? rawId
+                    : int.tryParse(rawId?.toString() ?? '') ?? 0;
+
+                return Worker(
+                  workerId: workerId,
                   name: '${json['first_name']} ${json['last_name']}',
                   role: json['role'] ?? 'Field Worker',
                   status: 'active',
-                ),
-              )
+                );
+              })
+              .where((worker) => worker.workerId > 0)
               .toList();
           _filteredWorkers = _availableWorkers;
           _isLoading = false;
