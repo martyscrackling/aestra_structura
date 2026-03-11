@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../services/app_config.dart';
+import '../../services/subscription_helper.dart';
 
 class PhaseModal extends StatefulWidget {
   final String projectTitle;
@@ -216,6 +217,13 @@ class _PhaseModalState extends State<PhaseModal> {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(phaseData),
       );
+
+      if (!mounted) return;
+
+      // Check for subscription expiry first
+      if (SubscriptionHelper.handleResponse(context, response)) {
+        return;
+      }
 
       if (response.statusCode == 201) {
         if (mounted) {

@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../../services/app_config.dart';
 import '../../services/auth_service.dart';
+import '../../services/subscription_helper.dart';
 
 class AddClientModal extends StatefulWidget {
   const AddClientModal({super.key});
@@ -345,6 +346,14 @@ class _AddClientModalState extends State<AddClientModal> {
         debugPrint('Response body: ${response.body}');
 
         if (!mounted) return;
+
+        // Check for subscription expiry first
+        if (SubscriptionHelper.handleResponse(context, response)) {
+          setState(() {
+            _isLoading = false;
+          });
+          return;
+        }
 
         if (response.statusCode == 201 || response.statusCode == 200) {
           int? clientId;

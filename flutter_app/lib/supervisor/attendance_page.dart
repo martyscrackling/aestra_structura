@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'dart:async';
 import '../services/auth_service.dart';
 import '../services/app_config.dart';
+import '../services/subscription_helper.dart';
 import 'widgets/sidebar.dart';
 import 'widgets/supervisor_user_badge.dart';
 
@@ -108,18 +109,32 @@ class _AttendancePageState extends State<AttendancePage> {
         if (data.isNotEmpty) {
           // Update existing
           final attendanceId = data[0]['attendance_id'];
-          await http.put(
+          final updateResponse = await http.put(
             AppConfig.apiUri('attendance/$attendanceId/'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode(attendanceData),
           );
+          
+          if (!mounted) return;
+          
+          // Check for subscription expiry
+          if (SubscriptionHelper.handleResponse(context, updateResponse)) {
+            return;
+          }
         } else {
           // Create new
-          await http.post(
+          final createResponse = await http.post(
             AppConfig.apiUri('attendance/'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode(attendanceData),
           );
+          
+          if (!mounted) return;
+          
+          // Check for subscription expiry
+          if (SubscriptionHelper.handleResponse(context, createResponse)) {
+            return;
+          }
         }
       }
 

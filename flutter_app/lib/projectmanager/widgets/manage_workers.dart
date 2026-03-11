@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../project_details_page.dart';
 import '../../services/app_config.dart';
+import '../../services/subscription_helper.dart';
 
 class Worker {
   final int workerId;
@@ -140,6 +141,13 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
         ),
       );
 
+      if (!mounted) return;
+
+      // Check for subscription expiry on delete
+      if (SubscriptionHelper.handleResponse(context, deleteResponse)) {
+        return;
+      }
+
       // Create assignments payload
       final assignments = _selectedWorkerIds.map((workerId) {
         return {'subtask': widget.subtask.subtaskId, 'field_worker': workerId};
@@ -152,6 +160,13 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(assignments),
       );
+
+      if (!mounted) return;
+
+      // Check for subscription expiry on post
+      if (SubscriptionHelper.handleResponse(context, response)) {
+        return;
+      }
 
       print('✅ Assignment response: ${response.statusCode}');
       print('✅ Assignment body: ${response.body}');

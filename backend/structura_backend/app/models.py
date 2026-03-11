@@ -1,5 +1,7 @@
 from django.db import models
 from django.contrib.auth.hashers import make_password
+from django.utils import timezone
+from datetime import timedelta
 
 
 # Address Models (defined first so User can reference them)
@@ -53,6 +55,12 @@ class User(models.Model):
         ('Suspended', 'Suspended'),
     ]
 
+    SUBSCRIPTION_STATUS_CHOICES = [
+        ('trial', 'Trial Period'),
+        ('active', 'Active Subscription'),
+        ('expired', 'Expired'),
+    ]
+
     user_id = models.AutoField(primary_key=True)
     email = models.EmailField(max_length=100, unique=True)
     password_hash = models.CharField(max_length=255)
@@ -97,13 +105,126 @@ class User(models.Model):
         default='Active'
     )
 
+    # Trial and Subscription Management
+    trial_start_date = models.DateTimeField(null=True, blank=True)
+    trial_end_date = models.DateTimeField(null=True, blank=True)
+    subscription_status = models.CharField(
+        max_length=20,
+        choices=SUBSCRIPTION_STATUS_CHOICES,
+        default='trial'
+    )
+    subscription_start_date = models.DateTimeField(null=True, blank=True)
+    subscription_end_date = models.DateTimeField(null=True, blank=True)
+    subscription_years = models.IntegerField(default=0, help_text="Number of years paid for")
+    payment_date = models.DateTimeField(null=True, blank=True)
+    
+    # Email warning tracking
+    warning_7days_sent = models.BooleanField(default=False)
+    warning_3days_sent = models.BooleanField(default=False)
+    warning_1day_sent = models.BooleanField(default=False)
+
     def save(self, *args, **kwargs):
+        # Initialize trial for new ProjectManager users
+        if not self.pk and self.role == 'ProjectManager':
+            if not self.trial_start_date:
+                self.trial_start_date = timezone.now()
+                self.trial_end_date = timezone.now() + timedelta(days=14)
+                self.subscription_status = 'trial'
+        
         if self.password_hash and not self.password_hash.startswith('pbkdf2_'):
             self.password_hash = make_password(self.password_hash)
         super().save(*args, **kwargs)
 
+    def get_trial_days_remaining(self):
+        """Calculate days remaining in trial period"""
+        if self.trial_end_date and self.subscription_status == 'trial':
+            remaining = (self.trial_end_date - timezone.now()).days
+            return max(0, remaining)
+        return 0
+
+    def get_subscription_days_remaining(self):
+        """Calculate days remaining in subscription"""
+        if self.subscription_end_date and self.subscription_status == 'active':
+            remaining = (self.subscription_end_date - timezone.now()).days
+            return max(0, remaining)
+        return 0
+
+    def is_subscription_valid(self):
+        """Check if user has valid subscription or trial"""
+        if self.role == 'SuperAdmin':
+            return True
+        
+        if self.subscription_status == 'trial':
+            return self.trial_end_date and timezone.now() <= self.trial_end_date
+        elif self.subscription_status == 'active':
+            return self.subscription_end_date and timezone.now() <= self.subscription_end_date
+        return False
+
+    def can_edit(self):
+        """Check if user can create/edit content"""
+        return self.is_subscription_valid()
+
+    def get_trial_status_color(self):
+        """Get color indicator for trial status"""
+        days_remaining = self.get_trial_days_remaining()
+        if self.subscription_status != 'trial':
+            return 'gray'
+        if days_remaining > 7:
+            return 'green'
+        elif 3 <= days_remaining <= 7:
+            return 'yellow'
+        elif 0 < days_remaining < 3:
+            return 'red'
+        return 'gray'
+
     def __str__(self):
         return self.email
+
+
+# Subscription Warning Log Model
+class SubscriptionWarning(models.Model):
+    WARNING_TYPE_CHOICES = [
+        ('7_days', '7 Days Warning'),
+        ('3_days', '3 Days Warning'),
+        ('1_day', '1 Day Warning'),
+        ('expired', 'Expired Notification'),
+    ]
+
+    log_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='warning_logs')
+    warning_type = models.CharField(max_length=20, choices=WARNING_TYPE_CHOICES)
+    sent_at = models.DateTimeField(auto_now_add=True)
+    email_sent_successfully = models.BooleanField(default=False)
+    error_message = models.TextField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-sent_at']
+
+    def __str__(self):
+        return f"{self.user.email} - {self.warning_type} - {self.sent_at.strftime('%Y-%m-%d %H:%M')}"
+
+
+# Subscription Payment History Model
+class PaymentHistory(models.Model):
+    PAYMENT_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    ]
+
+    payment_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='payment_history')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    subscription_years = models.IntegerField(default=1)
+    payment_date = models.DateTimeField(auto_now_add=True)
+    payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='pending')
+    notes = models.TextField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-payment_date']
+
+    def __str__(self):
+        return f"{self.user.email} - {self.amount} - {self.payment_date.strftime('%Y-%m-%d')}"
 
 
 # Project Model

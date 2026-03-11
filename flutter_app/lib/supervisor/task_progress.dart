@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 
 import '../services/auth_service.dart';
 import '../services/app_config.dart';
+import '../services/subscription_helper.dart';
 import 'widgets/sidebar.dart';
 import 'widgets/supervisor_user_badge.dart';
 
@@ -361,6 +362,11 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
         if (!mounted) return;
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
+        // Check for subscription expiry first
+        if (SubscriptionHelper.handleResponse(context, response)) {
+          return;
+        }
+
         if (response.statusCode == 200) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -571,6 +577,11 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
 
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+                // Check for subscription expiry first
+                if (SubscriptionHelper.handleResponse(context, response)) {
+                  return;
+                }
 
                 if (response.statusCode == 200) {
                   setState(() {
