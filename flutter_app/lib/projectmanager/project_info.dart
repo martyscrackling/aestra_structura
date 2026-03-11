@@ -17,6 +17,7 @@ class ProjectDetailsPage extends StatefulWidget {
   final String? budget;
   final int projectId;
   final bool useResponsiveLayout;
+  final bool showSupervisorAssigned;
 
   const ProjectDetailsPage({
     super.key,
@@ -27,6 +28,7 @@ class ProjectDetailsPage extends StatefulWidget {
     this.budget,
     required this.projectId,
     this.useResponsiveLayout = true,
+    this.showSupervisorAssigned = true,
   });
 
   @override
@@ -134,6 +136,24 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     return int.tryParse(value.toString());
   }
 
+  Map<String, dynamic>? _firstRecordFromResponse(dynamic decoded) {
+    if (decoded is Map<String, dynamic>) {
+      if (decoded.containsKey('results') && decoded['results'] is List) {
+        final results = decoded['results'] as List<dynamic>;
+        if (results.isNotEmpty && results.first is Map) {
+          return Map<String, dynamic>.from(results.first as Map);
+        }
+      }
+      return decoded;
+    }
+
+    if (decoded is List && decoded.isNotEmpty && decoded.first is Map) {
+      return Map<String, dynamic>.from(decoded.first as Map);
+    }
+
+    return null;
+  }
+
   int? _calculateDaysLeft() {
     if (_projectInfo == null || _projectInfo!['end_date'] == null) return null;
     try {
@@ -189,17 +209,32 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
 
   Future<void> _fetchProjectDetails() async {
     try {
-      final userId = AuthService().currentUser?['user_id'];
+      final authUser = AuthService().currentUser;
+      final userId = authUser?['user_id'];
+      final authProjectId = authUser?['project_id'];
       final scopeSuffix = (userId != null) ? '&user_id=$userId' : '';
 
       // First fetch project details to get client_id and supervisor_id
-      final projectResponse = await http.get(
-        (userId != null)
-            ? AppConfig.apiUri('projects/${widget.projectId}/?user_id=$userId')
-            : AppConfig.apiUri('projects/${widget.projectId}/'),
-      );
+      final candidateProjectUrls = <String>[
+        if (userId != null) 'projects/${widget.projectId}/?user_id=$userId',
+        if (authProjectId != null)
+          'projects/${widget.projectId}/?project_id=$authProjectId',
+        'projects/${widget.projectId}/',
+      ];
 
-      if (projectResponse.statusCode != 200) {
+      http.Response? projectResponse;
+      for (final url in candidateProjectUrls) {
+        final response = await http.get(AppConfig.apiUri(url));
+        if (response.statusCode == 200) {
+          projectResponse = response;
+          break;
+        }
+        print(
+          'Project details request failed (${response.statusCode}) for URL: $url',
+        );
+      }
+
+      if (projectResponse == null) {
         setState(() {
           _error = 'Failed to load project details';
           _isLoading = false;
@@ -210,6 +245,12 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
       final projectData = jsonDecode(projectResponse.body);
       final clientId = _toInt(projectData['client']);
       final supervisorId = _toInt(projectData['supervisor']);
+
+      // Some APIs embed client details directly in project payload.
+      final embeddedClient = projectData['client'];
+      if (embeddedClient is Map<String, dynamic>) {
+        _clientInfo = Map<String, dynamic>.from(embeddedClient);
+      }
 
       setState(() {
         _projectInfo = projectData;
@@ -222,23 +263,35 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
       // Fetch client information
       if (clientId != null) {
         try {
-          final clientResponse = await http.get(
-            (userId != null)
-                ? AppConfig.apiUri('clients/$clientId/?user_id=$userId')
-                : AppConfig.apiUri(
-                    'clients/$clientId/?project_id=${widget.projectId}',
-                  ),
-          );
-          if (clientResponse.statusCode == 200) {
-            setState(() {
-              _clientInfo = jsonDecode(clientResponse.body);
-              print('✅ Client info fetched: ${_clientInfo?['email']}');
-            });
-          } else {
-            print(
-              '❌ Failed to fetch client: ${clientResponse.statusCode} ${clientResponse.body}',
-            );
-            // Fallback: if the project FK is set only on the Client side, fetch by project_id
+          final candidateClientUrls = <String>[
+            if (userId != null) 'clients/$clientId/?user_id=$userId',
+            'clients/$clientId/?project_id=${widget.projectId}',
+            'clients/$clientId/',
+          ];
+
+          bool fetched = false;
+          for (final url in candidateClientUrls) {
+            final clientResponse = await http.get(AppConfig.apiUri(url));
+            if (clientResponse.statusCode == 200) {
+              final decoded = jsonDecode(clientResponse.body);
+              final mapped = _firstRecordFromResponse(decoded);
+              if (mapped != null) {
+                setState(() {
+                  _clientInfo = mapped;
+                  print('✅ Client info fetched: ${_clientInfo?['email']}');
+                });
+                fetched = true;
+                break;
+              }
+            } else {
+              print(
+                '❌ Failed to fetch client: ${clientResponse.statusCode} ${clientResponse.body}',
+              );
+            }
+          }
+
+          if (!fetched) {
+            // Fallback: if FK is only set on the Client side, fetch by project_id.
             final listResponse = await http.get(
               AppConfig.apiUri(
                 'clients/?project_id=${widget.projectId}$scopeSuffix',
@@ -246,11 +299,10 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
             );
             if (listResponse.statusCode == 200) {
               final decoded = jsonDecode(listResponse.body);
-              if (decoded is List &&
-                  decoded.isNotEmpty &&
-                  decoded.first is Map) {
+              final mapped = _firstRecordFromResponse(decoded);
+              if (mapped != null) {
                 setState(() {
-                  _clientInfo = Map<String, dynamic>.from(decoded.first);
+                  _clientInfo = mapped;
                 });
               }
             }
@@ -268,9 +320,10 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           );
           if (listResponse.statusCode == 200) {
             final decoded = jsonDecode(listResponse.body);
-            if (decoded is List && decoded.isNotEmpty && decoded.first is Map) {
+            final mapped = _firstRecordFromResponse(decoded);
+            if (mapped != null) {
               setState(() {
-                _clientInfo = Map<String, dynamic>.from(decoded.first);
+                _clientInfo = mapped;
               });
             }
           }
@@ -348,9 +401,10 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
 
       // Fetch phases for accurate progress calculation
       try {
-        final phasesResponse = await http.get(
-          AppConfig.apiUri('phases/?project_id=${widget.projectId}'),
-        );
+        final phasesUrl = userId != null
+            ? 'phases/?project_id=${widget.projectId}&user_id=$userId'
+            : 'phases/?project_id=${widget.projectId}';
+        final phasesResponse = await http.get(AppConfig.apiUri(phasesUrl));
         if (phasesResponse.statusCode == 200) {
           setState(() {
             _phases = jsonDecode(phasesResponse.body) as List<dynamic>;
@@ -708,28 +762,30 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                       ),
                       child: const Center(child: Text('No client assigned')),
                     ),
-                  const SizedBox(height: 12),
-                  if (_supervisorInfo != null)
-                    _infoCard(
-                      title: "Supervisor-in charge:",
-                      name:
-                          '${_supervisorInfo!['first_name']} ${_supervisorInfo!['last_name']}',
-                      email: _supervisorInfo!['email'] ?? 'N/A',
-                      phone: _supervisorInfo!['phone_number'] ?? 'N/A',
-                      photoUrl: _resolveMediaUrl(_supervisorInfo!['photo']),
-                      isMobile: true,
-                    )
-                  else
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade300),
+                  if (widget.showSupervisorAssigned) ...[
+                    const SizedBox(height: 12),
+                    if (_supervisorInfo != null)
+                      _infoCard(
+                        title: "Supervisor-in charge:",
+                        name:
+                            '${_supervisorInfo!['first_name']} ${_supervisorInfo!['last_name']}',
+                        email: _supervisorInfo!['email'] ?? 'N/A',
+                        phone: _supervisorInfo!['phone_number'] ?? 'N/A',
+                        photoUrl: _resolveMediaUrl(_supervisorInfo!['photo']),
+                        isMobile: true,
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: const Center(
+                          child: Text('No supervisor assigned'),
+                        ),
                       ),
-                      child: const Center(
-                        child: Text('No supervisor assigned'),
-                      ),
-                    ),
+                  ],
                 ],
               )
             else
@@ -758,30 +814,31 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                         child: const Center(child: Text('No client assigned')),
                       ),
                     ),
-                  if (_supervisorInfo != null)
-                    _infoCard(
-                      title: "Supervisor-in charge:",
-                      name:
-                          '${_supervisorInfo!['first_name']} ${_supervisorInfo!['last_name']}',
-                      email: _supervisorInfo!['email'] ?? 'N/A',
-                      phone: _supervisorInfo!['phone_number'] ?? 'N/A',
-                      photoUrl: _resolveMediaUrl(_supervisorInfo!['photo']),
-                      isMobile: false,
-                    )
-                  else
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        margin: const EdgeInsets.only(right: 12),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.shade300),
-                        ),
-                        child: const Center(
-                          child: Text('No supervisor assigned'),
+                  if (widget.showSupervisorAssigned)
+                    if (_supervisorInfo != null)
+                      _infoCard(
+                        title: "Supervisor-in charge:",
+                        name:
+                            '${_supervisorInfo!['first_name']} ${_supervisorInfo!['last_name']}',
+                        email: _supervisorInfo!['email'] ?? 'N/A',
+                        phone: _supervisorInfo!['phone_number'] ?? 'N/A',
+                        photoUrl: _resolveMediaUrl(_supervisorInfo!['photo']),
+                        isMobile: false,
+                      )
+                    else
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          margin: const EdgeInsets.only(right: 12),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: const Center(
+                            child: Text('No supervisor assigned'),
+                          ),
                         ),
                       ),
-                    ),
                 ],
               ),
 

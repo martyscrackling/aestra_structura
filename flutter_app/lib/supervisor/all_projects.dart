@@ -21,21 +21,21 @@ class _AllProjectsPageState extends State<AllProjectsPage> {
 	Widget _buildMobileLayout() {
 		return SingleChildScrollView(
 			padding: const EdgeInsets.all(12),
-			child: ActiveProject(key: _activeProjectKey),
+			child: ActiveProject(key: _activeProjectKey, enableSelection: false),
 		);
 	}
 
 	Widget _buildTabletLayout() {
 		return SingleChildScrollView(
 			padding: const EdgeInsets.all(20),
-			child: ActiveProject(key: _activeProjectKey),
+			child: ActiveProject(key: _activeProjectKey, enableSelection: false),
 		);
 	}
 
 	Widget _buildDesktopLayout() {
 		return SingleChildScrollView(
 			padding: const EdgeInsets.all(24),
-			child: ActiveProject(key: _activeProjectKey),
+			child: ActiveProject(key: _activeProjectKey, enableSelection: false),
 		);
 	}
 
@@ -56,7 +56,10 @@ class _AllProjectsPageState extends State<AllProjectsPage> {
 							Expanded(
 								child: Column(
 									children: [
-										DashboardHeader(onMenuPressed: () {}),
+										DashboardHeader(
+											onMenuPressed: () {},
+											title: 'Projects',
+										),
 										Expanded(
 											child: isMobile
 													? _buildMobileLayout()

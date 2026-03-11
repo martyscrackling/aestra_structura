@@ -9,7 +9,13 @@ import '../../services/auth_service.dart';
 
 class DashboardHeader extends StatefulWidget {
   final VoidCallback? onMenuPressed;
-  const DashboardHeader({super.key, this.onMenuPressed});
+  final String title;
+
+  const DashboardHeader({
+    super.key,
+    this.onMenuPressed,
+    this.title = 'Dashboard',
+  });
 
   @override
   State<DashboardHeader> createState() => _DashboardHeaderState();
@@ -138,9 +144,9 @@ class _DashboardHeaderState extends State<DashboardHeader> {
       child: Row(
         children: [
           // Left side - Dashboard title
-          const Text(
-            "Dashboard",
-            style: TextStyle(
+          Text(
+            widget.title,
+            style: const TextStyle(
               color: Color(0xFF0C1935),
               fontSize: 20,
               fontWeight: FontWeight.w700,

@@ -9,8 +9,13 @@ import '../project_infos.dart';
 
 class ActiveProject extends StatefulWidget {
   final Function(int)? onProjectLoaded;
+  final bool enableSelection;
 
-  const ActiveProject({super.key, this.onProjectLoaded});
+  const ActiveProject({
+    super.key,
+    this.onProjectLoaded,
+    this.enableSelection = true,
+  });
 
   @override
   State<ActiveProject> createState() => _ActiveProjectState();
@@ -154,8 +159,10 @@ class _ActiveProjectState extends State<ActiveProject> {
   Future<void> _fetchSupervisorProjects() async {
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
+      final userId = authService.currentUser?['user_id'];
       final supervisorId = authService.currentUser?['supervisor_id'];
       final fallbackProjectId = authService.currentUser?['project_id'];
+      final scopeSuffix = userId != null ? '&user_id=$userId' : '';
 
       print('Fetching projects for supervisor_id: $supervisorId');
 
@@ -171,18 +178,21 @@ class _ActiveProjectState extends State<ActiveProject> {
       late final http.Response projectResponse;
       if (supervisorId != null) {
         projectResponse = await http.get(
-          AppConfig.apiUri('projects/?supervisor_id=$supervisorId'),
+          AppConfig.apiUri('projects/?supervisor_id=$supervisorId$scopeSuffix'),
         );
       } else {
-        projectResponse = await http.get(
-          AppConfig.apiUri('projects/$fallbackProjectId/'),
-        );
+        final projectUrl = userId != null
+            ? 'projects/$fallbackProjectId/?user_id=$userId'
+            : 'projects/$fallbackProjectId/';
+        projectResponse = await http.get(AppConfig.apiUri(projectUrl));
       }
 
       print('Projects API response status: ${projectResponse.statusCode}');
 
       if (projectResponse.statusCode != 200) {
-        print('Failed to fetch projects: ${projectResponse.statusCode}');
+        print(
+          'Failed to fetch projects: ${projectResponse.statusCode} ${projectResponse.body}',
+        );
         setState(() {
           _isLoading = false;
           _projects = [];
@@ -216,8 +226,11 @@ class _ActiveProjectState extends State<ActiveProject> {
             : int.parse(projectIdRaw.toString());
 
         try {
+          final phasesUrl = userId != null
+              ? 'phases/?project_id=$projectId&user_id=$userId'
+              : 'phases/?project_id=$projectId';
           final phasesResponse = await http.get(
-            AppConfig.apiUri('phases/?project_id=$projectId'),
+            AppConfig.apiUri(phasesUrl),
           );
           if (phasesResponse.statusCode == 200) {
             phasesByProjectId[projectId] =
@@ -498,12 +511,15 @@ class _ActiveProjectState extends State<ActiveProject> {
                   );
                   final endDate = _formatDate(project['end_date']?.toString());
                   final label = _statusLabel(project);
-                  final bool isSelected = _selectedProjectId == projectId;
+                    final bool isSelected =
+                      widget.enableSelection && _selectedProjectId == projectId;
 
                   return SizedBox(
                     width: cardWidth,
                     child: GestureDetector(
-                      onTap: () => _selectProject(projectId),
+                      onTap: widget.enableSelection
+                          ? () => _selectProject(projectId)
+                          : null,
                       child: Container(
                         decoration: BoxDecoration(
                           color: Colors.white,
@@ -618,8 +634,9 @@ class _ActiveProjectState extends State<ActiveProject> {
                                   ),
                                   const SizedBox(height: 8),
                                   Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment: widget.enableSelection
+                                        ? MainAxisAlignment.spaceBetween
+                                        : MainAxisAlignment.start,
                                     children: [
                                       Text(
                                         '$progressPercentage%',
@@ -629,18 +646,19 @@ class _ActiveProjectState extends State<ActiveProject> {
                                           color: Color(0xFF0C1935),
                                         ),
                                       ),
-                                      Text(
-                                        isSelected
-                                            ? 'Selected'
-                                            : 'Tap to select',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: isSelected
-                                              ? const Color(0xFFFF7A18)
-                                              : const Color(0xFF9CA3AF),
+                                      if (widget.enableSelection)
+                                        Text(
+                                          isSelected
+                                              ? 'Selected'
+                                              : 'Tap to select',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: isSelected
+                                                ? const Color(0xFFFF7A18)
+                                                : const Color(0xFF9CA3AF),
+                                          ),
                                         ),
-                                      ),
                                     ],
                                   ),
                                   const SizedBox(height: 14),
