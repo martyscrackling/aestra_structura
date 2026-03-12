@@ -1,5 +1,9 @@
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../services/inventory_service.dart';
+import '../../services/auth_service.dart';
 
 class AddInventoryItemModal extends StatefulWidget {
   const AddInventoryItemModal({super.key});
@@ -12,29 +16,113 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _categoryController = TextEditingController();
-  final _quantityController = TextEditingController();
+  final _quantityController = TextEditingController(text: '1');
   final _serialNumberController = TextEditingController();
   final _locationController = TextEditingController();
   final _notesController = TextEditingController();
 
-  String _selectedStatus = 'Available';
-  String? _imagePath;
+  Uint8List? _selectedImageBytes;
+  String? _selectedImageName;
+  bool _isLoading = false;
 
-  final List<String> _statusOptions = [
-    'Available',
-    'Maintenance',
-    'Checked Out',
-    'Damaged',
-    'Out of Stock',
-  ];
+  List<Map<String, dynamic>> _projects = [];
+  int? _selectedProjectId;
+  bool _isLoadingProjects = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProjects();
+  }
+
+  Future<void> _loadProjects() async {
+    try {
+      final userId = AuthService().currentUser?['user_id'];
+      if (userId == null) return;
+      final projects = await InventoryService.getProjectsForPM(userId: userId);
+      if (mounted) {
+        setState(() {
+          _projects = projects;
+          _isLoadingProjects = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingProjects = false);
+    }
+  }
 
   Future<void> _pickImage() async {
-    final ImagePicker picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
-      setState(() {
-        _imagePath = image.path;
-      });
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 80,
+      );
+      if (image != null) {
+        final bytes = await image.readAsBytes();
+        setState(() {
+          _selectedImageBytes = bytes;
+          _selectedImageName = image.name;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error picking image: $e');
+    }
+  }
+
+  Future<void> _submitForm() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final userId = AuthService().currentUser?['user_id'];
+      if (userId == null) {
+        throw Exception('User not logged in');
+      }
+
+      // Step 1: Create the item
+      final result = await InventoryService.addInventoryItem(
+        userId: userId,
+        name: _nameController.text.trim(),
+        category: _categoryController.text.trim(),
+        serialNumber: _serialNumberController.text.trim().isNotEmpty
+            ? _serialNumberController.text.trim()
+            : null,
+        quantity: int.tryParse(_quantityController.text.trim()) ?? 1,
+        location: _locationController.text.trim().isNotEmpty
+            ? _locationController.text.trim()
+            : null,
+        notes: _notesController.text.trim().isNotEmpty
+            ? _notesController.text.trim()
+            : null,
+        projectId: _selectedProjectId,
+      );
+
+      // Step 2: Upload photo if selected
+      if (_selectedImageBytes != null && result['item_id'] != null) {
+        try {
+          await InventoryService.uploadItemPhoto(
+            itemId: result['item_id'],
+            userId: userId,
+            bytes: _selectedImageBytes!,
+            filename: _selectedImageName ?? 'item_photo.jpg',
+          );
+        } catch (e) {
+          debugPrint('Photo upload failed: $e');
+        }
+      }
+
+      if (mounted) {
+        Navigator.of(context).pop(true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -55,424 +143,6 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
     final screenHeight = MediaQuery.of(context).size.height;
     final isMobile = screenWidth < 600;
 
-    // Reusable form fields column
-    Widget formFields = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Item Name
-        TextFormField(
-          controller: _nameController,
-          decoration: InputDecoration(
-            labelText: 'Item Name',
-            labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
-            filled: true,
-            fillColor: const Color(0xFFF9FAFB),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: Colors.grey[300]!),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: Colors.grey[300]!),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFF0C1935), width: 2),
-            ),
-          ),
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Please enter item name';
-            }
-            return null;
-          },
-        ),
-        const SizedBox(height: 16),
-
-        // Category and Status Row
-        isMobile
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextFormField(
-                    controller: _categoryController,
-                    decoration: InputDecoration(
-                      labelText: 'Category',
-                      labelStyle: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                      ),
-                      filled: true,
-                      fillColor: const Color(0xFFF9FAFB),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey[300]!),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey[300]!),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(
-                          color: Color(0xFF0C1935),
-                          width: 2,
-                        ),
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Required';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Status',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF6B7280),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  DropdownButtonFormField<String>(
-                    value: _selectedStatus,
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: const Color(0xFFF9FAFB),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey[300]!),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey[300]!),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(
-                          color: Color(0xFF0C1935),
-                          width: 2,
-                        ),
-                      ),
-                    ),
-                    items: _statusOptions.map((String status) {
-                      return DropdownMenuItem<String>(
-                        value: status,
-                        child: Text(status),
-                      );
-                    }).toList(),
-                    onChanged: (String? newValue) {
-                      if (newValue != null) {
-                        setState(() {
-                          _selectedStatus = newValue;
-                        });
-                      }
-                    },
-                  ),
-                ],
-              )
-            : Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        TextFormField(
-                          controller: _categoryController,
-                          decoration: InputDecoration(
-                            labelText: 'Category',
-                            labelStyle: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[600],
-                            ),
-                            filled: true,
-                            fillColor: const Color(0xFFF9FAFB),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.grey[300]!),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.grey[300]!),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(
-                                color: Color(0xFF0C1935),
-                                width: 2,
-                              ),
-                            ),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Required';
-                            }
-                            return null;
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Status',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF6B7280),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        DropdownButtonFormField<String>(
-                          value: _selectedStatus,
-                          decoration: InputDecoration(
-                            filled: true,
-                            fillColor: const Color(0xFFF9FAFB),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.grey[300]!),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.grey[300]!),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(
-                                color: Color(0xFF0C1935),
-                                width: 2,
-                              ),
-                            ),
-                          ),
-                          items: _statusOptions.map((String status) {
-                            return DropdownMenuItem<String>(
-                              value: status,
-                              child: Text(status),
-                            );
-                          }).toList(),
-                          onChanged: (String? newValue) {
-                            if (newValue != null) {
-                              setState(() {
-                                _selectedStatus = newValue;
-                              });
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-        const SizedBox(height: 16),
-
-        // Quantity and Serial Number Row
-        isMobile
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextFormField(
-                    controller: _quantityController,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: 'Quantity',
-                      labelStyle: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                      ),
-                      filled: true,
-                      fillColor: const Color(0xFFF9FAFB),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey[300]!),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey[300]!),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(
-                          color: Color(0xFF0C1935),
-                          width: 2,
-                        ),
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Required';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _serialNumberController,
-                    decoration: InputDecoration(
-                      labelText: 'Serial Number (Optional)',
-                      labelStyle: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                      ),
-                      filled: true,
-                      fillColor: const Color(0xFFF9FAFB),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey[300]!),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey[300]!),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(
-                          color: Color(0xFF0C1935),
-                          width: 2,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              )
-            : Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        TextFormField(
-                          controller: _quantityController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: 'Quantity',
-                            labelStyle: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[600],
-                            ),
-                            filled: true,
-                            fillColor: const Color(0xFFF9FAFB),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.grey[300]!),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.grey[300]!),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(
-                                color: Color(0xFF0C1935),
-                                width: 2,
-                              ),
-                            ),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Required';
-                            }
-                            return null;
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        TextFormField(
-                          controller: _serialNumberController,
-                          decoration: InputDecoration(
-                            labelText: 'Serial Number (Optional)',
-                            labelStyle: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[600],
-                            ),
-                            filled: true,
-                            fillColor: const Color(0xFFF9FAFB),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.grey[300]!),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.grey[300]!),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(
-                                color: Color(0xFF0C1935),
-                                width: 2,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-        const SizedBox(height: 16),
-
-        // Location
-        TextFormField(
-          controller: _locationController,
-          decoration: InputDecoration(
-            labelText: 'Storage Location',
-            labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
-            filled: true,
-            fillColor: const Color(0xFFF9FAFB),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: Colors.grey[300]!),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: Colors.grey[300]!),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFF0C1935), width: 2),
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-
-        // Notes
-        TextFormField(
-          controller: _notesController,
-          maxLines: 3,
-          decoration: InputDecoration(
-            labelText: 'Notes (Optional)',
-            labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
-            filled: true,
-            fillColor: const Color(0xFFF9FAFB),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: Colors.grey[300]!),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: Colors.grey[300]!),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFF0C1935), width: 2),
-            ),
-          ),
-        ),
-      ],
-    );
-
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: EdgeInsets.symmetric(
@@ -482,7 +152,7 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
       child: Container(
         width: isMobile ? double.infinity : 700,
         constraints: BoxConstraints(
-          maxHeight: isMobile ? screenHeight * 0.9 : 650,
+          maxHeight: isMobile ? screenHeight * 0.9 : 620,
         ),
         decoration: BoxDecoration(
           color: Colors.white,
@@ -491,7 +161,7 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header
+            // ── Header ──
             Container(
               padding: EdgeInsets.all(isMobile ? 16 : 20),
               decoration: const BoxDecoration(
@@ -509,7 +179,9 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
                   ),
                   const Spacer(),
                   IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: _isLoading
+                        ? null
+                        : () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.close),
                     color: Colors.grey[600],
                     padding: EdgeInsets.zero,
@@ -519,7 +191,7 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
               ),
             ),
 
-            // Form Content
+            // ── Body ──
             Expanded(
               child: isMobile
                   ? SingleChildScrollView(
@@ -528,21 +200,29 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
                         children: [
                           // Image on top for mobile
                           GestureDetector(
-                            onTap: _pickImage,
+                            onTap: _isLoading ? null : _pickImage,
                             child: Container(
                               width: 120,
                               height: 120,
                               decoration: BoxDecoration(
                                 color: Colors.grey[200],
                                 borderRadius: BorderRadius.circular(12),
+                                image: _selectedImageBytes != null
+                                    ? DecorationImage(
+                                        image: MemoryImage(
+                                          _selectedImageBytes!,
+                                        ),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : null,
                               ),
-                              child: _imagePath == null
+                              child: _selectedImageBytes == null
                                   ? Column(
                                       mainAxisAlignment:
                                           MainAxisAlignment.center,
                                       children: [
                                         Icon(
-                                          Icons.image_outlined,
+                                          Icons.add_photo_alternate,
                                           size: 40,
                                           color: Colors.grey[400],
                                         ),
@@ -556,26 +236,21 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
                                         ),
                                       ],
                                     )
-                                  : ClipRRect(
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: Image.network(
-                                        _imagePath!,
-                                        fit: BoxFit.cover,
-                                        width: 120,
-                                        height: 120,
-                                        errorBuilder:
-                                            (context, error, stackTrace) =>
-                                                Icon(
-                                                  Icons.image_outlined,
-                                                  size: 40,
-                                                  color: Colors.grey[400],
-                                                ),
-                                      ),
-                                    ),
+                                  : null,
                             ),
                           ),
                           const SizedBox(height: 20),
-                          Form(key: _formKey, child: formFields),
+                          // Info note
+                          _buildInfoNote(),
+                          const SizedBox(height: 16),
+                          // Form for mobile
+                          Form(
+                            key: _formKey,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: _buildFormFields(),
+                            ),
+                          ),
                         ],
                       ),
                     )
@@ -584,26 +259,34 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
                       children: [
                         // Left side - Image (Desktop)
                         Container(
-                          width: 240,
+                          width: 280,
                           padding: const EdgeInsets.all(24),
                           child: Column(
                             children: [
                               GestureDetector(
-                                onTap: _pickImage,
+                                onTap: _isLoading ? null : _pickImage,
                                 child: Container(
-                                  width: 192,
-                                  height: 280,
+                                  width: 200,
+                                  height: 200,
                                   decoration: BoxDecoration(
                                     color: Colors.grey[200],
                                     borderRadius: BorderRadius.circular(12),
+                                    image: _selectedImageBytes != null
+                                        ? DecorationImage(
+                                            image: MemoryImage(
+                                              _selectedImageBytes!,
+                                            ),
+                                            fit: BoxFit.cover,
+                                          )
+                                        : null,
                                   ),
-                                  child: _imagePath == null
+                                  child: _selectedImageBytes == null
                                       ? Column(
                                           mainAxisAlignment:
                                               MainAxisAlignment.center,
                                           children: [
                                             Icon(
-                                              Icons.image_outlined,
+                                              Icons.add_photo_alternate,
                                               size: 60,
                                               color: Colors.grey[400],
                                             ),
@@ -617,26 +300,32 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
                                             ),
                                           ],
                                         )
-                                      : ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          child: Image.network(
-                                            _imagePath!,
-                                            fit: BoxFit.cover,
-                                            width: 192,
-                                            height: 280,
-                                            errorBuilder:
-                                                (context, error, stackTrace) =>
-                                                    Icon(
-                                                      Icons.image_outlined,
-                                                      size: 60,
-                                                      color: Colors.grey[400],
-                                                    ),
-                                          ),
-                                        ),
+                                      : null,
                                 ),
                               ),
+                              if (_selectedImageBytes != null) ...[
+                                const SizedBox(height: 12),
+                                TextButton.icon(
+                                  onPressed: _isLoading
+                                      ? null
+                                      : () => setState(() {
+                                          _selectedImageBytes = null;
+                                          _selectedImageName = null;
+                                        }),
+                                  icon: const Icon(
+                                    Icons.close,
+                                    size: 16,
+                                    color: Colors.red,
+                                  ),
+                                  label: const Text(
+                                    'Remove photo',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.red,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -648,14 +337,24 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
                         Expanded(
                           child: SingleChildScrollView(
                             padding: const EdgeInsets.all(24),
-                            child: Form(key: _formKey, child: formFields),
+                            child: Form(
+                              key: _formKey,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildInfoNote(),
+                                  const SizedBox(height: 16),
+                                  ..._buildFormFields(),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                       ],
                     ),
             ),
 
-            // Footer Buttons
+            // ── Footer Buttons ──
             Container(
               padding: EdgeInsets.all(isMobile ? 16 : 20),
               decoration: const BoxDecoration(
@@ -667,20 +366,7 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed: () {
-                              if (_formKey.currentState!.validate()) {
-                                Navigator.of(context).pop({
-                                  'name': _nameController.text,
-                                  'category': _categoryController.text,
-                                  'status': _selectedStatus,
-                                  'quantity': _quantityController.text,
-                                  'serialNumber': _serialNumberController.text,
-                                  'location': _locationController.text,
-                                  'notes': _notesController.text,
-                                  'photo': _imagePath,
-                                });
-                              }
-                            },
+                            onPressed: _isLoading ? null : _submitForm,
                             style: ElevatedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               backgroundColor: const Color(0xFFFF7A18),
@@ -688,21 +374,34 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                             ),
-                            child: const Text(
-                              'Add Item',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                              ),
-                            ),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                : const Text(
+                                    'Add Item',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
                           ),
                         ),
                         const SizedBox(height: 12),
                         SizedBox(
                           width: double.infinity,
                           child: OutlinedButton(
-                            onPressed: () => Navigator.of(context).pop(),
+                            onPressed: _isLoading
+                                ? null
+                                : () => Navigator.of(context).pop(),
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               side: const BorderSide(color: Color(0xFFE5E7EB)),
@@ -726,7 +425,9 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
                       children: [
                         Expanded(
                           child: OutlinedButton(
-                            onPressed: () => Navigator.of(context).pop(),
+                            onPressed: _isLoading
+                                ? null
+                                : () => Navigator.of(context).pop(),
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               side: const BorderSide(color: Color(0xFFE5E7EB)),
@@ -747,20 +448,7 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: ElevatedButton(
-                            onPressed: () {
-                              if (_formKey.currentState!.validate()) {
-                                Navigator.of(context).pop({
-                                  'name': _nameController.text,
-                                  'category': _categoryController.text,
-                                  'status': _selectedStatus,
-                                  'quantity': _quantityController.text,
-                                  'serialNumber': _serialNumberController.text,
-                                  'location': _locationController.text,
-                                  'notes': _notesController.text,
-                                  'photo': _imagePath,
-                                });
-                              }
-                            },
+                            onPressed: _isLoading ? null : _submitForm,
                             style: ElevatedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               backgroundColor: const Color(0xFFFF7A18),
@@ -768,14 +456,25 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                             ),
-                            child: const Text(
-                              'Add Item',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                              ),
-                            ),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                : const Text(
+                                    'Add Item',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
                           ),
                         ),
                       ],
@@ -785,5 +484,184 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
         ),
       ),
     );
+  }
+
+  Widget _buildInfoNote() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, size: 16, color: Colors.blue.shade700),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'New items will be added with "Available" status',
+              style: TextStyle(fontSize: 12, color: Colors.blue.shade900),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String hintText,
+    TextInputType keyboardType = TextInputType.text,
+    String? Function(String?)? validator,
+    int maxLines = 1,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextFormField(
+          controller: controller,
+          keyboardType: keyboardType,
+          maxLines: maxLines,
+          enabled: !_isLoading,
+          decoration: InputDecoration(
+            labelText: hintText,
+            labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            filled: true,
+            fillColor: const Color(0xFFF9FAFB),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFF0C1935), width: 2),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
+            ),
+          ),
+          validator: validator,
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _buildFormFields() {
+    return [
+      // Project dropdown
+      const Text(
+        'Assign to Project *',
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFF374151),
+        ),
+      ),
+      const SizedBox(height: 6),
+      _isLoadingProjects
+          ? const SizedBox(
+              height: 48,
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            )
+          : DropdownButtonFormField<int>(
+              value: _selectedProjectId,
+              isExpanded: true,
+              decoration: InputDecoration(
+                hintText: 'Select a project',
+                hintStyle: TextStyle(fontSize: 14, color: Colors.grey[400]),
+                filled: true,
+                fillColor: const Color(0xFFF9FAFB),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: Colors.grey[300]!),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: Colors.grey[300]!),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
+              ),
+              items: _projects.map((p) {
+                final id = p['project_id'] as int;
+                final name = p['project_name'] ?? 'Unnamed';
+                return DropdownMenuItem<int>(
+                  value: id,
+                  child: Text(name, style: const TextStyle(fontSize: 14)),
+                );
+              }).toList(),
+              onChanged: _isLoading
+                  ? null
+                  : (v) => setState(() => _selectedProjectId = v),
+              validator: (value) {
+                if (value == null) return 'Please select a project';
+                return null;
+              },
+            ),
+      const SizedBox(height: 12),
+      _buildTextField(
+        controller: _nameController,
+        hintText: 'Item Name *',
+        validator: (value) {
+          if (value == null || value.isEmpty) return 'Please enter item name';
+          return null;
+        },
+      ),
+      const SizedBox(height: 12),
+      Row(
+        children: [
+          Expanded(
+            flex: 2,
+            child: _buildTextField(
+              controller: _categoryController,
+              hintText: 'Category *',
+              validator: (value) {
+                if (value == null || value.isEmpty) return 'Required';
+                return null;
+              },
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildTextField(
+              controller: _quantityController,
+              hintText: 'Quantity',
+              keyboardType: TextInputType.number,
+              validator: (value) {
+                if (value != null && value.isNotEmpty) {
+                  final qty = int.tryParse(value);
+                  if (qty == null || qty < 1) return 'Invalid';
+                }
+                return null;
+              },
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 12),
+      _buildTextField(
+        controller: _serialNumberController,
+        hintText: 'Serial Number (Optional)',
+      ),
+      const SizedBox(height: 12),
+      _buildTextField(
+        controller: _locationController,
+        hintText: 'Location (Optional)',
+      ),
+      const SizedBox(height: 12),
+      _buildTextField(
+        controller: _notesController,
+        hintText: 'Notes (Optional)',
+        maxLines: 3,
+      ),
+    ];
   }
 }

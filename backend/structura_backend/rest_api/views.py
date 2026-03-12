@@ -89,7 +89,9 @@ from .serializers import (
     PhaseSerializer,
     SubtaskSerializer,
     SubtaskFieldWorkerSerializer,
-    AttendanceSerializer
+    AttendanceSerializer,
+    InventoryItemSerializer,
+    InventoryUsageSerializer,
 )
 
 class ListUser(generics.ListCreateAPIView):
@@ -827,6 +829,24 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         pm_user_id = _get_request_pm_user_id(self.request)
         project_id = self.request.query_params.get('project_id')
+        supervisor_id = self.request.query_params.get('supervisor_id')
+
+        # Supervisor accessing field workers: return workers from their projects
+        if supervisor_id:
+            try:
+                sv = models.Supervisors.objects.get(supervisor_id=int(supervisor_id))
+            except (models.Supervisors.DoesNotExist, ValueError, TypeError):
+                return models.FieldWorker.objects.none()
+            sv_project_ids = (
+                models.Project.objects
+                .filter(supervisor_id=sv.supervisor_id)
+                .values_list('project_id', flat=True)
+            )
+            queryset = models.FieldWorker.objects.filter(project_id__in=sv_project_ids)
+            if project_id:
+                queryset = queryset.filter(project_id=project_id)
+            return queryset.distinct()
+
         if pm_user_id is None:
             if project_id:
                 return models.FieldWorker.objects.filter(project_id=project_id)
@@ -1237,3 +1257,177 @@ def pm_dashboard_summary(request):
         },
         status=status.HTTP_200_OK,
     )
+
+
+# ── Inventory ViewSets ───────────────────────────────────────────────────────
+
+class InventoryItemViewSet(viewsets.ModelViewSet):
+    serializer_class = InventoryItemSerializer
+
+    def get_queryset(self):
+        pm_user_id = _get_request_pm_user_id(self.request)
+        supervisor_id = self.request.query_params.get('supervisor_id')
+
+        # Supervisor accessing inventory: show items assigned to projects
+        # the supervisor is assigned to.
+        if supervisor_id:
+            try:
+                sv = models.Supervisors.objects.get(supervisor_id=int(supervisor_id))
+            except (models.Supervisors.DoesNotExist, ValueError, TypeError):
+                return models.InventoryItem.objects.none()
+            # Find project IDs the supervisor is assigned to
+            project_ids = list(
+                models.Project.objects
+                .filter(supervisor_id=sv.supervisor_id)
+                .values_list('project_id', flat=True)
+            )
+            return models.InventoryItem.objects.filter(project_id__in=project_ids)
+
+        # PM accessing inventory
+        if pm_user_id is not None:
+            return models.InventoryItem.objects.filter(created_by_id=pm_user_id)
+
+        return models.InventoryItem.objects.none()
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx['request'] = self.request
+        return ctx
+
+    def perform_create(self, serializer):
+        pm_user_id = _get_request_pm_user_id(self.request)
+        pm_user = _get_pm_user_or_none(pm_user_id)
+        if pm_user is None:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError('A valid user_id (ProjectManager) is required.')
+        # Always default to Available
+        save_kwargs = {'created_by': pm_user, 'status': 'Available'}
+        # Assign project if provided
+        project_id = self.request.data.get('project_id') or self.request.data.get('project')
+        if project_id:
+            try:
+                project = models.Project.objects.get(project_id=int(project_id))
+                save_kwargs['project'] = project
+            except (models.Project.DoesNotExist, ValueError, TypeError):
+                pass
+        serializer.save(**save_kwargs)
+
+    @action(
+        detail=True,
+        methods=['post'],
+        url_path='upload_photo',
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def upload_photo(self, request, pk=None):
+        """Upload/replace an inventory item photo."""
+        item = self.get_object()
+        image_file = request.FILES.get('image')
+        if not image_file:
+            return Response({'error': 'No image file provided.'}, status=400)
+
+        media_root = getattr(settings, 'MEDIA_ROOT', 'media')
+        os.makedirs(os.path.join(media_root, 'inventory_images'), exist_ok=True)
+        original_name = getattr(image_file, 'name', '') or ''
+        ext = os.path.splitext(original_name)[1].lower() or '.jpg'
+        filename = f'inv_{item.created_by_id}_{item.item_id}{ext}'
+        file_path = os.path.join(media_root, 'inventory_images', filename)
+        with open(file_path, 'wb+') as dest:
+            for chunk in image_file.chunks():
+                dest.write(chunk)
+
+        rel_path = f'inventory_images/{filename}'
+        item.photo = rel_path
+        item.save()
+
+        url = request.build_absolute_uri(settings.MEDIA_URL + rel_path)
+        return Response({'url': url})
+
+    @action(detail=True, methods=['post'], url_path='checkout')
+    def checkout(self, request, pk=None):
+        """Checkout this item to a supervisor, optionally assigning to a field worker."""
+        item = self.get_object()
+        supervisor_id = request.data.get('supervisor_id')
+        if not supervisor_id:
+            return Response({'error': 'supervisor_id is required.'}, status=400)
+        try:
+            supervisor = models.Supervisors.objects.get(supervisor_id=int(supervisor_id))
+        except (models.Supervisors.DoesNotExist, ValueError, TypeError):
+            return Response({'error': 'Supervisor not found.'}, status=404)
+
+        # Optional: field worker assignment
+        field_worker = None
+        field_worker_id = request.data.get('field_worker_id')
+        if field_worker_id:
+            try:
+                field_worker = models.FieldWorker.objects.get(fieldworker_id=int(field_worker_id))
+            except (models.FieldWorker.DoesNotExist, ValueError, TypeError):
+                return Response({'error': 'Field worker not found.'}, status=404)
+
+        # Use the item's assigned project
+        project = item.project
+
+        # Optional: expected return date
+        expected_return_date = request.data.get('expected_return_date')
+
+        # Create usage record
+        usage = models.InventoryUsage.objects.create(
+            inventory_item=item,
+            checked_out_by=supervisor,
+            field_worker=field_worker,
+            project=project,
+            expected_return_date=expected_return_date,
+            notes=request.data.get('notes', ''),
+        )
+        item.status = 'Checked Out'
+        item.save()
+
+        assigned_to = f'{field_worker.first_name} {field_worker.last_name}' if field_worker else f'{supervisor.first_name} {supervisor.last_name}'
+        return Response({
+            'message': f'{item.name} checked out to {assigned_to}',
+            'usage_id': usage.usage_id,
+            'item': InventoryItemSerializer(item, context={'request': request}).data,
+        })
+
+    @action(detail=True, methods=['post'], url_path='return_item')
+    def return_item(self, request, pk=None):
+        """Return this item (called by supervisor or PM)."""
+        item = self.get_object()
+        # Find the active usage for this item
+        active_usage = item.usages.filter(status='Checked Out').order_by('-checkout_date').first()
+        if not active_usage:
+            return Response({'error': 'No active checkout found for this item.'}, status=400)
+
+        active_usage.status = 'Returned'
+        active_usage.actual_return_date = timezone.now()
+        active_usage.save()
+
+        item.status = 'Returned'
+        item.save()
+
+        return Response({
+            'message': f'{item.name} has been returned.',
+            'item': InventoryItemSerializer(item, context={'request': request}).data,
+        })
+
+
+class InventoryUsageViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = InventoryUsageSerializer
+
+    def get_queryset(self):
+        qs = models.InventoryUsage.objects.select_related(
+            'inventory_item', 'checked_out_by'
+        )
+        pm_user_id = _get_request_pm_user_id(self.request)
+        supervisor_id = self.request.query_params.get('supervisor_id')
+        usage_status = self.request.query_params.get('status')
+
+        if supervisor_id:
+            qs = qs.filter(checked_out_by_id=int(supervisor_id))
+        elif pm_user_id is not None:
+            qs = qs.filter(inventory_item__created_by_id=pm_user_id)
+        else:
+            return models.InventoryUsage.objects.none()
+
+        if usage_status:
+            qs = qs.filter(status=usage_status)
+        return qs

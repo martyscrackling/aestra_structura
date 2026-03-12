@@ -507,3 +507,59 @@ class Attendance(models.Model):
 
     def __str__(self):
         return f"{self.field_worker.first_name} {self.field_worker.last_name} - {self.attendance_date}"
+
+
+# Inventory Item Model
+class InventoryItem(models.Model):
+    STATUS_CHOICES = [
+        ('Available', 'Available'),
+        ('Checked Out', 'Checked Out'),
+        ('Returned', 'Returned'),
+        ('Maintenance', 'Maintenance'),
+    ]
+
+    item_id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=200)
+    category = models.CharField(max_length=100)
+    serial_number = models.CharField(max_length=100, null=True, blank=True)
+    quantity = models.PositiveIntegerField(default=1)
+    location = models.CharField(max_length=200, null=True, blank=True)
+    notes = models.TextField(null=True, blank=True)
+    photo = models.FileField(upload_to='inventory_images/', null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Available')
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='inventory_items')
+    project = models.ForeignKey('Project', on_delete=models.SET_NULL, null=True, blank=True, related_name='inventory_items', db_column='project_id')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.name} ({self.status})"
+
+
+# Inventory Usage Model (tracks checkout/return by supervisors)
+class InventoryUsage(models.Model):
+    USAGE_STATUS_CHOICES = [
+        ('Checked Out', 'Checked Out'),
+        ('Returned', 'Returned'),
+    ]
+
+    usage_id = models.AutoField(primary_key=True)
+    inventory_item = models.ForeignKey(InventoryItem, on_delete=models.CASCADE, related_name='usages', db_column='item_id')
+    checked_out_by = models.ForeignKey(Supervisors, on_delete=models.CASCADE, related_name='inventory_usages', db_column='supervisor_id')
+    field_worker = models.ForeignKey(FieldWorker, on_delete=models.SET_NULL, null=True, blank=True, related_name='inventory_usages')
+    checkout_date = models.DateTimeField(auto_now_add=True)
+    expected_return_date = models.DateField(null=True, blank=True)
+    actual_return_date = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=USAGE_STATUS_CHOICES, default='Checked Out')
+    purpose = models.TextField(null=True, blank=True)
+    notes = models.TextField(null=True, blank=True)
+    project = models.ForeignKey('Project', on_delete=models.SET_NULL, null=True, blank=True, related_name='inventory_usages', db_column='project_id')
+
+    class Meta:
+        ordering = ['-checkout_date']
+
+    def __str__(self):
+        return f"{self.inventory_item.name} → {self.checked_out_by.first_name} ({self.status})"

@@ -36,14 +36,28 @@ class ToolDetailsModal extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 20),
-            if (tool.photoAsset != null)
+            if (tool.photoUrl != null && tool.photoUrl!.isNotEmpty)
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: Image.asset(
-                  tool.photoAsset!,
+                child: Image.network(
+                  tool.photoUrl!,
                   height: 200,
                   width: double.infinity,
                   fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    height: 200,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Center(
+                      child: Icon(
+                        Icons.construction,
+                        size: 80,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ),
                 ),
               )
             else
@@ -60,6 +74,20 @@ class ToolDetailsModal extends StatelessWidget {
             const SizedBox(height: 24),
             _buildInfoRow('Category', tool.category),
             const SizedBox(height: 12),
+            if (tool.serialNumber != null && tool.serialNumber!.isNotEmpty) ...[
+              _buildInfoRow('Serial Number', tool.serialNumber!),
+              const SizedBox(height: 12),
+            ],
+            _buildInfoRow('Quantity', tool.quantity.toString()),
+            const SizedBox(height: 12),
+            if (tool.location != null && tool.location!.isNotEmpty) ...[
+              _buildInfoRow('Location', tool.location!),
+              const SizedBox(height: 12),
+            ],
+            if (tool.notes != null && tool.notes!.isNotEmpty) ...[
+              _buildInfoRow('Notes', tool.notes!),
+              const SizedBox(height: 12),
+            ],
             Row(
               children: [
                 const Text(
@@ -118,11 +146,14 @@ class ToolDetailsModal extends StatelessWidget {
   }
 
   Widget _statusChip(String status) {
-    final color = status.toLowerCase() == 'available'
+    final lower = status.toLowerCase();
+    final color = lower == 'available'
         ? Colors.green
-        : (status.toLowerCase() == 'maintenance'
-              ? Colors.orange
-              : Colors.redAccent);
+        : lower == 'maintenance'
+        ? Colors.orange
+        : lower == 'returned'
+        ? Colors.blue
+        : Colors.redAccent;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
