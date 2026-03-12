@@ -73,15 +73,18 @@ class DashboardHeader extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Notification bell
-              const _NotificationMenu(),
-              SizedBox(width: spacing),
-              // User profile
-              const _ProfileMenu(),
-            ],
+          Flexible(
+            flex: 0,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Notification bell
+                const _NotificationMenu(),
+                SizedBox(width: spacing),
+                // User profile
+                const _ProfileMenu(),
+              ],
+            ),
           ),
         ],
       ),

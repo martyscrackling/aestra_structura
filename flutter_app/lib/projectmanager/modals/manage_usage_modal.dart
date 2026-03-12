@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../inventory_page.dart';
+import '../../services/inventory_service.dart';
+import '../../services/auth_service.dart';
 
 class ManageUsageModal extends StatefulWidget {
   const ManageUsageModal({super.key, required this.activeUsage});
@@ -20,6 +22,7 @@ class _ManageUsageModalState extends State<ManageUsageModal> {
   late String _usageStatus;
   DateTime? _checkoutDate;
   DateTime? _expectedReturnDate;
+  bool _isLoading = false;
 
   final List<String> _statusOptions = [
     'In Use',
@@ -78,6 +81,29 @@ class _ManageUsageModalState extends State<ManageUsageModal> {
     setState(() {
       _currentUsers.removeAt(index);
     });
+  }
+
+  Future<void> _returnTool() async {
+    setState(() => _isLoading = true);
+    try {
+      final userId = AuthService().currentUser?['user_id'];
+      if (userId == null) return;
+      await InventoryService.returnItem(
+        itemId: int.parse(widget.activeUsage.tool.id),
+        userId: userId,
+      );
+      if (mounted) {
+        Navigator.of(context).pop({'action': 'return'});
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to return tool: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -146,12 +172,23 @@ class _ManageUsageModalState extends State<ManageUsageModal> {
                                 color: Colors.grey[100],
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: widget.activeUsage.tool.photoAsset != null
+                              child:
+                                  widget.activeUsage.tool.photoUrl != null &&
+                                      widget
+                                          .activeUsage
+                                          .tool
+                                          .photoUrl!
+                                          .isNotEmpty
                                   ? ClipRRect(
                                       borderRadius: BorderRadius.circular(8),
-                                      child: Image.asset(
-                                        widget.activeUsage.tool.photoAsset!,
+                                      child: Image.network(
+                                        widget.activeUsage.tool.photoUrl!,
                                         fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) => Icon(
+                                          Icons.construction,
+                                          size: isMobile ? 24 : 30,
+                                          color: Colors.grey,
+                                        ),
                                       ),
                                     )
                                   : Icon(
@@ -577,12 +614,17 @@ class _ManageUsageModalState extends State<ManageUsageModal> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         OutlinedButton.icon(
-                          onPressed: () {
-                            // Return tool action
-                            Navigator.of(context).pop({'action': 'return'});
-                          },
+                          onPressed: _isLoading ? null : _returnTool,
                           icon: const Icon(Icons.assignment_return, size: 18),
-                          label: const Text('Return Tool'),
+                          label: _isLoading
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text('Return Tool'),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: Colors.green,
                             side: const BorderSide(color: Colors.green),
@@ -650,12 +692,17 @@ class _ManageUsageModalState extends State<ManageUsageModal> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         OutlinedButton.icon(
-                          onPressed: () {
-                            // Return tool action
-                            Navigator.of(context).pop({'action': 'return'});
-                          },
+                          onPressed: _isLoading ? null : _returnTool,
                           icon: const Icon(Icons.assignment_return),
-                          label: const Text('Return Tool'),
+                          label: _isLoading
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text('Return Tool'),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: Colors.green,
                             side: const BorderSide(color: Colors.green),

@@ -667,3 +667,98 @@ class AttendanceSerializer(serializers.ModelSerializer):
     
     def get_field_worker_name(self, obj):
         return f"{obj.field_worker.first_name} {obj.field_worker.last_name}"
+
+
+class InventoryUsageSerializer(serializers.ModelSerializer):
+    supervisor_name = serializers.SerializerMethodField()
+    field_worker_name = serializers.SerializerMethodField()
+    project_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = models.InventoryUsage
+        fields = [
+            'usage_id',
+            'inventory_item',
+            'checked_out_by',
+            'supervisor_name',
+            'field_worker',
+            'field_worker_name',
+            'project',
+            'project_name',
+            'checkout_date',
+            'expected_return_date',
+            'actual_return_date',
+            'status',
+            'purpose',
+            'notes',
+        ]
+        extra_kwargs = {
+            'usage_id': {'read_only': True},
+            'checkout_date': {'read_only': True},
+            'actual_return_date': {'read_only': True},
+        }
+
+    def get_supervisor_name(self, obj):
+        sv = obj.checked_out_by
+        return f"{sv.first_name} {sv.last_name}".strip() if sv else ''
+
+    def get_field_worker_name(self, obj):
+        fw = obj.field_worker
+        return f"{fw.first_name} {fw.last_name}".strip() if fw else ''
+
+    def get_project_name(self, obj):
+        return obj.project.project_name if obj.project else ''
+
+
+class InventoryItemSerializer(serializers.ModelSerializer):
+    created_by_name = serializers.SerializerMethodField()
+    active_usages = serializers.SerializerMethodField()
+    photo_url = serializers.SerializerMethodField()
+    project_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = models.InventoryItem
+        fields = [
+            'item_id',
+            'name',
+            'category',
+            'serial_number',
+            'quantity',
+            'location',
+            'notes',
+            'photo',
+            'photo_url',
+            'status',
+            'created_by',
+            'created_by_name',
+            'project',
+            'project_name',
+            'active_usages',
+            'created_at',
+            'updated_at',
+        ]
+        extra_kwargs = {
+            'item_id': {'read_only': True},
+            'created_at': {'read_only': True},
+            'updated_at': {'read_only': True},
+            'photo': {'read_only': True},
+        }
+
+    def get_created_by_name(self, obj):
+        u = obj.created_by
+        return f"{u.first_name} {u.last_name}".strip() if u else ''
+
+    def get_active_usages(self, obj):
+        active = obj.usages.filter(status='Checked Out')
+        return InventoryUsageSerializer(active, many=True).data
+
+    def get_project_name(self, obj):
+        return obj.project.project_name if obj.project else ''
+
+    def get_photo_url(self, obj):
+        if obj.photo and hasattr(obj.photo, 'url'):
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.photo.url)
+            return obj.photo.url
+        return None

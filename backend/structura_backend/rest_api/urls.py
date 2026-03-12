@@ -21,6 +21,8 @@ from .views import (
     SubtaskViewSet,
     SubtaskFieldWorkerViewSet,
     AttendanceViewSet,
+    InventoryItemViewSet,
+    InventoryUsageViewSet,
     pm_dashboard_summary,
     debug_projects,
     debug_all_data
@@ -39,6 +41,8 @@ router.register(r'phases', PhaseViewSet, basename='phase')
 router.register(r'subtasks', SubtaskViewSet, basename='subtask')
 router.register(r'subtask-assignments', SubtaskFieldWorkerViewSet, basename='subtask-assignment')
 router.register(r'attendance', AttendanceViewSet, basename='attendance')
+router.register(r'inventory-items', InventoryItemViewSet, basename='inventory-item')
+router.register(r'inventory-usage', InventoryUsageViewSet, basename='inventory-usage')
 
 urlpatterns = [
     path('', include(router.urls)),
