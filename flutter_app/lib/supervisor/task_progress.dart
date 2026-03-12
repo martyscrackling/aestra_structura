@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 import '../services/auth_service.dart';
 import '../services/app_config.dart';
@@ -38,6 +39,13 @@ class Phase {
   List<Subtask> subtasks;
 }
 
+class ProjectProgressPoint {
+  ProjectProgressPoint({required this.projectName, required this.progress});
+
+  final String projectName;
+  final int progress;
+}
+
 class TaskProgressPage extends StatefulWidget {
   final bool initialSidebarVisible;
 
@@ -55,6 +63,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
   bool _isLoadingPhases = true;
   String? _phasesError;
   Map<String, dynamic>? _projectInfo;
+  List<ProjectProgressPoint> _projectProgressPoints = [];
 
   @override
   void initState() {
@@ -96,21 +105,27 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
     final authService = Provider.of<AuthService>(context, listen: false);
     final projectId = authService.currentUser?['project_id'];
 
-    if (projectId == null) {
-      setState(() {
-        _phases = [];
-        _phasesError = 'No project assigned to this supervisor yet.';
-        _isLoadingPhases = false;
-      });
-      return;
-    }
-
     setState(() {
       _isLoadingPhases = true;
       _phasesError = null;
     });
 
     try {
+      final projectProgressPoints = await _loadSupervisorProjectProgress(
+        authService,
+      );
+
+      if (projectId == null) {
+        if (!mounted) return;
+        setState(() {
+          _phases = [];
+          _projectProgressPoints = projectProgressPoints;
+          _phasesError = 'No project assigned to this supervisor yet.';
+          _isLoadingPhases = false;
+        });
+        return;
+      }
+
       // Fetch project details
       final projectResponse = await http.get(
         AppConfig.apiUri('projects/$projectId/'),
@@ -167,6 +182,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
         if (!mounted) return;
         setState(() {
           _phases = phases;
+          _projectProgressPoints = projectProgressPoints;
           _isLoadingPhases = false;
         });
       } else {
@@ -174,6 +190,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
         setState(() {
           _phasesError =
               'Failed to load phases (status ${response.statusCode}).';
+          _projectProgressPoints = projectProgressPoints;
           _isLoadingPhases = false;
         });
       }
@@ -181,9 +198,118 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
       if (!mounted) return;
       setState(() {
         _phasesError = 'Failed to connect to the server.';
+        _projectProgressPoints = [];
         _isLoadingPhases = false;
       });
     }
+  }
+
+  Future<List<ProjectProgressPoint>> _loadSupervisorProjectProgress(
+    AuthService authService,
+  ) async {
+    final userId = authService.currentUser?['user_id'];
+    final supervisorId = authService.currentUser?['supervisor_id'];
+    final fallbackProjectId = authService.currentUser?['project_id'];
+    final scopeSuffix = userId != null ? '&user_id=$userId' : '';
+
+    if (supervisorId == null && fallbackProjectId == null) {
+      return [];
+    }
+
+    late final http.Response projectsResponse;
+    if (supervisorId != null) {
+      projectsResponse = await http.get(
+        AppConfig.apiUri('projects/?supervisor_id=$supervisorId$scopeSuffix'),
+      );
+    } else {
+      final projectUrl = userId != null
+          ? 'projects/$fallbackProjectId/?user_id=$userId'
+          : 'projects/$fallbackProjectId/';
+      projectsResponse = await http.get(AppConfig.apiUri(projectUrl));
+    }
+
+    if (projectsResponse.statusCode != 200) {
+      return [];
+    }
+
+    final decoded = jsonDecode(projectsResponse.body);
+    final projects = _parseProjectsPayload(decoded);
+
+    final List<ProjectProgressPoint> progressPoints = [];
+    for (final project in projects) {
+      final projectIdRaw = project['project_id'];
+      if (projectIdRaw == null) continue;
+
+      final int projectId = projectIdRaw is int
+          ? projectIdRaw
+          : int.tryParse(projectIdRaw.toString()) ?? -1;
+      if (projectId <= 0) continue;
+
+      final projectName =
+          (project['project_name'] as String?)?.trim().isNotEmpty == true
+          ? project['project_name'] as String
+          : 'Project $projectId';
+
+      final phasesUrl = userId != null
+          ? 'phases/?project_id=$projectId&user_id=$userId'
+          : 'phases/?project_id=$projectId';
+
+      try {
+        final phasesResponse = await http.get(AppConfig.apiUri(phasesUrl));
+        if (phasesResponse.statusCode != 200) {
+          progressPoints.add(
+            ProjectProgressPoint(projectName: projectName, progress: 0),
+          );
+          continue;
+        }
+
+        final List<dynamic> phasesPayload =
+            jsonDecode(phasesResponse.body) as List<dynamic>;
+        final progress = _calculateProjectProgress(phasesPayload);
+        progressPoints.add(
+          ProjectProgressPoint(projectName: projectName, progress: progress),
+        );
+      } catch (_) {
+        progressPoints.add(
+          ProjectProgressPoint(projectName: projectName, progress: 0),
+        );
+      }
+    }
+
+    return progressPoints;
+  }
+
+  List<Map<String, dynamic>> _parseProjectsPayload(dynamic payload) {
+    if (payload is List) {
+      return payload
+          .whereType<Map<String, dynamic>>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+    if (payload is Map<String, dynamic>) {
+      return [Map<String, dynamic>.from(payload)];
+    }
+    return [];
+  }
+
+  int _calculateProjectProgress(List<dynamic> phasesPayload) {
+    int totalSubtasks = 0;
+    int completedSubtasks = 0;
+
+    for (final phase in phasesPayload) {
+      final phaseMap = phase as Map<String, dynamic>;
+      final subtasks = (phaseMap['subtasks'] as List<dynamic>?) ?? const [];
+      totalSubtasks += subtasks.length;
+      for (final subtask in subtasks) {
+        final subtaskMap = subtask as Map<String, dynamic>;
+        if (subtaskMap['status'] == 'completed') {
+          completedSubtasks++;
+        }
+      }
+    }
+
+    if (totalSubtasks == 0) return 0;
+    return ((completedSubtasks / totalSubtasks) * 100).round();
   }
 
   String _mapBackendStatus(String? backendStatus) {
@@ -747,8 +873,10 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: padding,
         children: [
+          _buildProjectProgressChart(isMobile),
+          const SizedBox(height: 12),
           SizedBox(
-            height: 200,
+            height: 100,
             child: Center(
               child: Text(
                 _phasesError!,
@@ -773,295 +901,198 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
       );
     }
 
-    if (_phases.isEmpty) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: padding,
-        children: const [
-          SizedBox(
-            height: 200,
-            child: Center(
-              child: Text(
-                'No phases found for this project yet.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: Colors.black54),
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: padding,
       children: [
         const SizedBox(height: 4),
-        for (var pIndex = 0; pIndex < _phases.length; pIndex++) ...[
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: ExpansionTile(
-              tilePadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 8,
-              ),
-              title: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          _phases[pIndex].title,
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 6),
-                        LinearProgressIndicator(
-                          value: (_phaseProgress(pIndex) / 100),
-                          color: primary,
-                          backgroundColor: Colors.grey.shade200,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    width: 60,
-                    child: Text(
-                      '${_phaseProgress(pIndex)}%',
-                      textAlign: TextAlign.right,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                ],
-              ),
+        _buildProjectProgressChart(isMobile),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  Widget _buildProjectProgressChart(bool isMobile) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: EdgeInsets.all(isMobile ? 12 : 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  child: Column(
-                    children: [
-                      for (
-                        var sIndex = 0;
-                        sIndex < _phases[pIndex].subtasks.length;
-                        sIndex++
-                      ) ...[
-                        Card(
-                          color: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        _phases[pIndex].subtasks[sIndex].title,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color:
-                                            _phases[pIndex]
-                                                    .subtasks[sIndex]
-                                                    .status ==
-                                                'Completed'
-                                            ? const Color(
-                                                0xFF757575,
-                                              ).withOpacity(0.12)
-                                            : _phases[pIndex]
-                                                      .subtasks[sIndex]
-                                                      .status ==
-                                                  'In Progress'
-                                            ? primary.withOpacity(0.12)
-                                            : Colors.grey[200],
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Text(
-                                        _phases[pIndex].subtasks[sIndex].status,
-                                        style: TextStyle(
-                                          color:
-                                              _phases[pIndex]
-                                                      .subtasks[sIndex]
-                                                      .status ==
-                                                  'Completed'
-                                              ? const Color(0xFF757575)
-                                              : _phases[pIndex]
-                                                        .subtasks[sIndex]
-                                                        .status ==
-                                                    'In Progress'
-                                              ? primary
-                                              : Colors.grey[600],
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[50],
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: Colors.grey[200]!,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.person_outline,
-                                        size: 16,
-                                        color: Colors.grey[600],
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          _phases[pIndex]
-                                                  .subtasks[sIndex]
-                                                  .assignedWorkers
-                                                  .isEmpty
-                                              ? 'No workers assigned'
-                                              : 'Workers: ${_phases[pIndex].subtasks[sIndex].assignedWorkers.join(', ')}',
-                                          style: TextStyle(
-                                            color: Colors.grey[700],
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    OutlinedButton.icon(
-                                      icon: Icon(
-                                        Icons.photo_camera,
-                                        color: primary,
-                                        size: 16,
-                                      ),
-                                      label: const Text(
-                                        'Photos',
-                                        style: TextStyle(fontSize: 12),
-                                      ),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: primary,
-                                        side: BorderSide(color: primary),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 8,
-                                        ),
-                                      ),
-                                      onPressed: () =>
-                                          _pickPhotosForSubtask(pIndex, sIndex),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    OutlinedButton.icon(
-                                      icon: const Icon(Icons.edit, size: 16),
-                                      label: const Text(
-                                        'Update',
-                                        style: TextStyle(fontSize: 12),
-                                      ),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: Colors.grey[700],
-                                        side: BorderSide(
-                                          color: Colors.grey[400]!,
-                                        ),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 8,
-                                        ),
-                                      ),
-                                      onPressed: () =>
-                                          _openSubtaskDialog(pIndex, sIndex),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    ElevatedButton.icon(
-                                      icon: const Icon(Icons.send, size: 16),
-                                      label: const Text(
-                                        'Submit',
-                                        style: TextStyle(fontSize: 12),
-                                      ),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: primary,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 8,
-                                        ),
-                                      ),
-                                      onPressed: () =>
-                                          _submitSubtaskUpdate(pIndex, sIndex),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                if (_phases[pIndex]
-                                    .subtasks[sIndex]
-                                    .photos
-                                    .isNotEmpty)
-                                  SizedBox(
-                                    height: 90,
-                                    child: ListView.separated(
-                                      scrollDirection: Axis.horizontal,
-                                      itemCount: _phases[pIndex]
-                                          .subtasks[sIndex]
-                                          .photos
-                                          .length,
-                                      separatorBuilder: (_, __) =>
-                                          const SizedBox(width: 8),
-                                      itemBuilder: (context, photoIndex) {
-                                        final xfile = _phases[pIndex]
-                                            .subtasks[sIndex]
-                                            .photos[photoIndex];
-                                        return _buildPhotoThumb(
-                                          pIndex,
-                                          sIndex,
-                                          photoIndex,
-                                          xfile,
-                                        );
-                                      },
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                      // Add Subtask removed — managed by Project Manager
-                      const SizedBox.shrink(),
-                    ],
+                Icon(Icons.show_chart, color: primary, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Progress By Project',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: isMobile ? 15 : 16,
+                    ),
                   ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 12),
-        ],
-        const SizedBox(height: 24),
-      ],
+            const SizedBox(height: 6),
+            Text(
+              'Overall completion per project assigned to this supervisor',
+              style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+            ),
+            const SizedBox(height: 16),
+            if (_projectProgressPoints.isEmpty)
+              Container(
+                height: 180,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.grey[200]!),
+                ),
+                child: Text(
+                  'No project progress data yet.',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                ),
+              )
+            else
+              SizedBox(
+                height: 220,
+                child: LineChart(
+                  LineChartData(
+                    minY: 0,
+                    maxY: 100,
+                    gridData: FlGridData(
+                      show: true,
+                      drawVerticalLine: false,
+                      horizontalInterval: 20,
+                      getDrawingHorizontalLine: (_) =>
+                          FlLine(color: Colors.grey[300], strokeWidth: 1),
+                    ),
+                    borderData: FlBorderData(
+                      show: true,
+                      border: Border(
+                        left: BorderSide(color: Colors.grey[300]!, width: 1),
+                        bottom: BorderSide(color: Colors.grey[300]!, width: 1),
+                        right: BorderSide.none,
+                        top: BorderSide.none,
+                      ),
+                    ),
+                    titlesData: FlTitlesData(
+                      topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 34,
+                          interval: 20,
+                          getTitlesWidget: (value, axisMeta) {
+                            return Text(
+                              '${value.toInt()}%',
+                              style: TextStyle(
+                                color: Colors.grey[700],
+                                fontSize: 10,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          interval: 1,
+                          reservedSize: 38,
+                          getTitlesWidget: (value, axisMeta) {
+                            final index = value.toInt();
+                            if (index < 0 ||
+                                index >= _projectProgressPoints.length) {
+                              return const SizedBox.shrink();
+                            }
+
+                            final rawTitle =
+                                _projectProgressPoints[index].projectName;
+                            final shortTitle = rawTitle.length > 10
+                                ? '${rawTitle.substring(0, 10)}...'
+                                : rawTitle;
+
+                            return SideTitleWidget(
+                              meta: axisMeta,
+                              angle: -0.45,
+                              child: Text(
+                                shortTitle,
+                                style: TextStyle(
+                                  color: Colors.grey[700],
+                                  fontSize: 10,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    lineTouchData: LineTouchData(
+                      enabled: true,
+                      touchTooltipData: LineTouchTooltipData(
+                        getTooltipItems: (spots) => spots
+                            .map((spot) {
+                              final index = spot.x.toInt();
+                              if (index < 0 ||
+                                  index >= _projectProgressPoints.length) {
+                                return null;
+                              }
+                              final item = _projectProgressPoints[index];
+                              return LineTooltipItem(
+                                '${item.projectName}\n${item.progress}%',
+                                const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
+                                ),
+                              );
+                            })
+                            .whereType<LineTooltipItem>()
+                            .toList(),
+                      ),
+                    ),
+                    lineBarsData: [
+                      LineChartBarData(
+                        spots: List.generate(
+                          _projectProgressPoints.length,
+                          (index) => FlSpot(
+                            index.toDouble(),
+                            _projectProgressPoints[index].progress.toDouble(),
+                          ),
+                        ),
+                        color: primary,
+                        barWidth: 3,
+                        isCurved: true,
+                        dotData: FlDotData(
+                          show: true,
+                          getDotPainter: (spot, percent, bar, index) =>
+                              FlDotCirclePainter(
+                                radius: 3,
+                                color: Colors.white,
+                                strokeWidth: 2,
+                                strokeColor: primary,
+                              ),
+                        ),
+                        belowBarData: BarAreaData(
+                          show: true,
+                          color: primary.withOpacity(0.12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1138,6 +1169,13 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                           ),
                           if (!isMobile) const SizedBox(width: 12),
                           if (!isMobile) ...[
+                            _miniKPI(
+                              'Projects',
+                              '${_projectProgressPoints.length}',
+                              Icons.apartment,
+                              const Color(0xFF9C27B0),
+                            ),
+                            const SizedBox(width: 12),
                             if (_projectInfo != null) ...[
                               _miniKPI(
                                 'Duration',

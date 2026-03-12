@@ -6,6 +6,7 @@ import 'widgets/sidebar.dart';
 import 'widgets/dashboard_header.dart';
 import '../services/app_config.dart';
 import '../services/auth_service.dart';
+import 'task_update.dart';
 
 class ProjectInfosPage extends StatefulWidget {
   final String projectTitle;
@@ -984,13 +985,43 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
                 const SizedBox(height: 20),
                 const Divider(),
                 const SizedBox(height: 24),
-                const Text(
-                  'Tasks to Do',
-                  style: TextStyle(
-                    fontSize: 23,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Tasks to Do',
+                      style: TextStyle(
+                        fontSize: 23,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFFF6F00),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => TaskProgressPage(
+                              initialSidebarVisible: false,
+                              projectId: widget.projectId,
+                            ),
+                          ),
+                        );
+                      },
+                      child: const Text('Manage'),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 _buildTasksToDoSection(),

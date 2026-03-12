@@ -10,11 +10,15 @@ import '../project_infos.dart';
 class ActiveProject extends StatefulWidget {
   final Function(int)? onProjectLoaded;
   final bool enableSelection;
+  final bool scrollOnlyCards;
+  final double? cardsViewportHeight;
 
   const ActiveProject({
     super.key,
     this.onProjectLoaded,
     this.enableSelection = true,
+    this.scrollOnlyCards = false,
+    this.cardsViewportHeight,
   });
 
   @override
@@ -229,9 +233,7 @@ class _ActiveProjectState extends State<ActiveProject> {
           final phasesUrl = userId != null
               ? 'phases/?project_id=$projectId&user_id=$userId'
               : 'phases/?project_id=$projectId';
-          final phasesResponse = await http.get(
-            AppConfig.apiUri(phasesUrl),
-          );
+          final phasesResponse = await http.get(AppConfig.apiUri(phasesUrl));
           if (phasesResponse.statusCode == 200) {
             phasesByProjectId[projectId] =
                 jsonDecode(phasesResponse.body) as List<dynamic>;
@@ -443,28 +445,8 @@ class _ActiveProjectState extends State<ActiveProject> {
 
     final visibleProjects = _visibleProjects;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _ProjectsHeader(
-          searchController: _searchController,
-          sortOrder: _sortOrder,
-          onSortOrderChanged: (value) {
-            setState(() {
-              _sortOrder = value;
-            });
-          },
-          projectTypeFilter: _projectTypeFilter,
-          onProjectTypeFilterChanged: (value) {
-            setState(() {
-              _projectTypeFilter = value;
-            });
-          },
-          projectTypes: _projectTypes,
-        ),
-        const SizedBox(height: 18),
-        if (visibleProjects.isEmpty)
-          const Padding(
+    final projectsContent = visibleProjects.isEmpty
+        ? const Padding(
             padding: EdgeInsets.symmetric(vertical: 32),
             child: Center(
               child: Text(
@@ -477,8 +459,7 @@ class _ActiveProjectState extends State<ActiveProject> {
               ),
             ),
           )
-        else
-          LayoutBuilder(
+        : LayoutBuilder(
             builder: (context, constraints) {
               final columnCount = constraints.maxWidth >= 1200
                   ? 3
@@ -511,7 +492,7 @@ class _ActiveProjectState extends State<ActiveProject> {
                   );
                   final endDate = _formatDate(project['end_date']?.toString());
                   final label = _statusLabel(project);
-                    final bool isSelected =
+                  final bool isSelected =
                       widget.enableSelection && _selectedProjectId == projectId;
 
                   return SizedBox(
@@ -668,22 +649,24 @@ class _ActiveProjectState extends State<ActiveProject> {
                                       onPressed: () {
                                         Navigator.of(context).push(
                                           PageRouteBuilder(
-                                            pageBuilder: (
-                                              context,
-                                              animation,
-                                              secondaryAnimation,
-                                            ) => ProjectInfosPage(
-                                              projectTitle:
-                                                  projectName.toString(),
-                                              projectLocation: location,
-                                              projectImage:
-                                                  (project['project_image'] ?? '')
+                                            pageBuilder:
+                                                (
+                                                  context,
+                                                  animation,
+                                                  secondaryAnimation,
+                                                ) => ProjectInfosPage(
+                                                  projectTitle: projectName
                                                       .toString(),
-                                              progress: progress,
-                                              budget: project['budget']
-                                                  ?.toString(),
-                                              projectId: projectId,
-                                            ),
+                                                  projectLocation: location,
+                                                  projectImage:
+                                                      (project['project_image'] ??
+                                                              '')
+                                                          .toString(),
+                                                  progress: progress,
+                                                  budget: project['budget']
+                                                      ?.toString(),
+                                                  projectId: projectId,
+                                                ),
                                             transitionDuration: Duration.zero,
                                           ),
                                         );
@@ -722,7 +705,45 @@ class _ActiveProjectState extends State<ActiveProject> {
                 }).toList(),
               );
             },
-          ),
+          );
+
+    final shouldScrollCards =
+        widget.scrollOnlyCards && (widget.cardsViewportHeight ?? 0) > 0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _ProjectsHeader(
+          searchController: _searchController,
+          sortOrder: _sortOrder,
+          onSortOrderChanged: (value) {
+            setState(() {
+              _sortOrder = value;
+            });
+          },
+          projectTypeFilter: _projectTypeFilter,
+          onProjectTypeFilterChanged: (value) {
+            setState(() {
+              _projectTypeFilter = value;
+            });
+          },
+          projectTypes: _projectTypes,
+        ),
+        const SizedBox(height: 18),
+        if (shouldScrollCards)
+          SizedBox(
+            height: widget.cardsViewportHeight!,
+            child: Scrollbar(
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                primary: false,
+                physics: const ClampingScrollPhysics(),
+                child: projectsContent,
+              ),
+            ),
+          )
+        else
+          projectsContent,
         SizedBox(height: isMobile ? 8 : 12),
       ],
     );

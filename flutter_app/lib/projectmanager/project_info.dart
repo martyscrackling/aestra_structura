@@ -436,7 +436,8 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         _asNonEmptyString(_projectInfo?['project_description']) ??
         _asNonEmptyString(_projectInfo?['details']);
     final projectBannerImage =
-      _asNonEmptyString(_projectInfo?['project_image']) ?? widget.projectImage;
+        _asNonEmptyString(_projectInfo?['project_image']) ??
+        widget.projectImage;
     if (_isLoading) {
       if (!widget.useResponsiveLayout) {
         return const Center(child: CircularProgressIndicator());
@@ -465,292 +466,307 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     final detailsContent = SingleChildScrollView(
       padding: EdgeInsets.all(isMobile ? 16 : 24),
       child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (daysLeft != null && _showDaysLeftReminder)
-              Container(
-                width: double.infinity,
-                margin: const EdgeInsets.only(bottom: 16),
-                padding: const EdgeInsets.symmetric(
-                  vertical: 14,
-                  horizontal: 18,
-                ),
-                decoration: BoxDecoration(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (daysLeft != null && _showDaysLeftReminder)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 18),
+              decoration: BoxDecoration(
+                color: daysLeft <= 3
+                    ? const Color(0xFFFFE0B2)
+                    : const Color(0xFFE3F2FD),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
                   color: daysLeft <= 3
-                      ? const Color(0xFFFFE0B2)
-                      : const Color(0xFFE3F2FD),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
+                      ? const Color(0xFFFF9800)
+                      : const Color(0xFF2196F3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.hourglass_bottom,
                     color: daysLeft <= 3
                         ? const Color(0xFFFF9800)
                         : const Color(0xFF2196F3),
                   ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.hourglass_bottom,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      daysLeft == 0
+                          ? 'Today is the expected end date for this project'
+                          : daysLeft == 1
+                          ? '1 day left before the expected end date.'
+                          : '$daysLeft days left before the expected end date.',
+                      style: TextStyle(
+                        color: daysLeft <= 3
+                            ? const Color(0xFFFF9800)
+                            : const Color(0xFF0C1935),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Dismiss reminder',
+                    onPressed: () {
+                      setState(() {
+                        _showDaysLeftReminder = false;
+                      });
+                    },
+                    icon: Icon(
+                      Icons.close,
+                      size: 18,
                       color: daysLeft <= 3
                           ? const Color(0xFFFF9800)
                           : const Color(0xFF2196F3),
                     ),
-                    const SizedBox(width: 12),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 36,
+                      minHeight: 36,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          // Back button
+          Row(
+            children: [
+              IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.arrow_back),
+                color: const Color(0xFF0C1935),
+                tooltip: 'Back to Projects',
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Back to Projects',
+                style: TextStyle(
+                  fontSize: isMobile ? 14 : 16,
+                  color: const Color(0xFF6B7280),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Banner Image
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: _buildProjectImage(projectBannerImage),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Project Title + Edit icon
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(
+                  widget.projectTitle,
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+              ),
+              const Icon(Icons.edit, size: 20),
+            ],
+          ),
+
+          const SizedBox(height: 6),
+
+          // Location
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(top: 1),
+                child: Icon(
+                  Icons.location_on_outlined,
+                  size: 18,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  widget.projectLocation,
+                  style: const TextStyle(fontSize: 15, color: Colors.grey),
+                ),
+              ),
+            ],
+          ),
+
+          if (projectDescription != null) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.only(left: 24),
+              child: Text(
+                projectDescription,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 14, color: Color(0xFF6B7280)),
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 25),
+
+          // Progress bar number
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              "${(_calculateProjectProgress() * 100).round()}%",
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.red[400],
+              ),
+            ),
+          ),
+
+          // Progress bar
+          LinearProgressIndicator(
+            value: _calculateProjectProgress(),
+            minHeight: 8,
+            borderRadius: BorderRadius.circular(20),
+            backgroundColor: Colors.grey[300],
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.red.shade400),
+          ),
+
+          const SizedBox(height: 30),
+
+          // Project Details Cards
+          if (isMobile)
+            Column(
+              children: [
+                Row(
+                  children: [
                     Expanded(
-                      child: Text(
-                        daysLeft == 0
-                            ? 'Today is the expected end date for this project'
-                            : daysLeft == 1
-                            ? '1 day left before the expected end date.'
-                            : '$daysLeft days left before the expected end date.',
-                        style: TextStyle(
-                          color: daysLeft <= 3
-                              ? const Color(0xFFFF9800)
-                              : const Color(0xFF0C1935),
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15,
-                        ),
+                      child: _projectDetailCard(
+                        icon: Icons.calendar_today,
+                        title: 'Duration',
+                        value: _projectInfo != null
+                            ? '${_projectInfo!['duration_days'] ?? 'N/A'} days'
+                            : 'Loading...',
+                        color: const Color(0xFF2196F3),
                       ),
                     ),
-                    IconButton(
-                      tooltip: 'Dismiss reminder',
-                      onPressed: () {
-                        setState(() {
-                          _showDaysLeftReminder = false;
-                        });
-                      },
-                      icon: Icon(
-                        Icons.close,
-                        size: 18,
-                        color: daysLeft <= 3
-                            ? const Color(0xFFFF9800)
-                            : const Color(0xFF2196F3),
-                      ),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                        minWidth: 36,
-                        minHeight: 36,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _projectDetailCard(
+                        icon: Icons.hourglass_bottom,
+                        title: 'Days Left',
+                        value: _calculateDaysLeft() != null
+                            ? '${_calculateDaysLeft()} days'
+                            : 'N/A',
+                        color: const Color(0xFFFF9800),
                       ),
                     ),
                   ],
                 ),
-              ),
-            // Back button
-            Row(
-              children: [
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.arrow_back),
-                  color: const Color(0xFF0C1935),
-                  tooltip: 'Back to Projects',
+                const SizedBox(height: 12),
+                _projectDetailCard(
+                  icon: Icons.event,
+                  title: 'Start Date',
+                  value: _projectInfo?['start_date'] ?? 'N/A',
+                  color: const Color(0xFF4CAF50),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  'Back to Projects',
-                  style: TextStyle(
-                    fontSize: isMobile ? 14 : 16,
-                    color: const Color(0xFF6B7280),
-                  ),
+                const SizedBox(height: 12),
+                _projectDetailCard(
+                  icon: Icons.event_available,
+                  title: 'Expected Date to End',
+                  value: _projectInfo?['end_date'] ?? 'N/A',
+                  color: const Color(0xFFF44336),
                 ),
               ],
-            ),
-            const SizedBox(height: 16),
-
-            // Banner Image
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: _buildProjectImage(projectBannerImage),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Project Title + Edit icon
+            )
+          else
             Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(
-                  child: Text(
-                    widget.projectTitle,
-                    style: const TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
+                  child: _projectDetailCard(
+                    icon: Icons.calendar_today,
+                    title: 'Duration',
+                    value: _projectInfo != null
+                        ? '${_projectInfo!['duration_days'] ?? 'N/A'} days'
+                        : 'Loading...',
+                    color: const Color(0xFF2196F3),
                   ),
                 ),
-                const Icon(Icons.edit, size: 20),
-              ],
-            ),
-
-            const SizedBox(height: 6),
-
-            // Location
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.only(top: 1),
-                  child: Icon(
-                    Icons.location_on_outlined,
-                    size: 18,
-                    color: Colors.grey,
-                  ),
-                ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    widget.projectLocation,
-                    style: const TextStyle(fontSize: 15, color: Colors.grey),
+                  child: _projectDetailCard(
+                    icon: Icons.hourglass_bottom,
+                    title: 'Days Left',
+                    value: _calculateDaysLeft() != null
+                        ? '${_calculateDaysLeft()} days'
+                        : 'N/A',
+                    color: const Color(0xFFFF9800),
                   ),
                 ),
-              ],
-            ),
-
-            if (projectDescription != null) ...[
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.only(left: 24),
-                child: Text(
-                  projectDescription,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Color(0xFF6B7280),
-                  ),
-                ),
-              ),
-            ],
-
-            const SizedBox(height: 25),
-
-            // Progress bar number
-            Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                "${(_calculateProjectProgress() * 100).round()}%",
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.red[400],
-                ),
-              ),
-            ),
-
-            // Progress bar
-            LinearProgressIndicator(
-              value: _calculateProjectProgress(),
-              minHeight: 8,
-              borderRadius: BorderRadius.circular(20),
-              backgroundColor: Colors.grey[300],
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.red.shade400),
-            ),
-
-            const SizedBox(height: 30),
-
-            // Project Details Cards
-            if (isMobile)
-              Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _projectDetailCard(
-                          icon: Icons.calendar_today,
-                          title: 'Duration',
-                          value: _projectInfo != null
-                              ? '${_projectInfo!['duration_days'] ?? 'N/A'} days'
-                              : 'Loading...',
-                          color: const Color(0xFF2196F3),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _projectDetailCard(
-                          icon: Icons.hourglass_bottom,
-                          title: 'Days Left',
-                          value: _calculateDaysLeft() != null
-                              ? '${_calculateDaysLeft()} days'
-                              : 'N/A',
-                          color: const Color(0xFFFF9800),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  _projectDetailCard(
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _projectDetailCard(
                     icon: Icons.event,
                     title: 'Start Date',
                     value: _projectInfo?['start_date'] ?? 'N/A',
                     color: const Color(0xFF4CAF50),
                   ),
-                  const SizedBox(height: 12),
-                  _projectDetailCard(
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _projectDetailCard(
                     icon: Icons.event_available,
                     title: 'Expected Date to End',
                     value: _projectInfo?['end_date'] ?? 'N/A',
                     color: const Color(0xFFF44336),
                   ),
-                ],
-              )
-            else
-              Row(
-                children: [
-                  Expanded(
-                    child: _projectDetailCard(
-                      icon: Icons.calendar_today,
-                      title: 'Duration',
-                      value: _projectInfo != null
-                          ? '${_projectInfo!['duration_days'] ?? 'N/A'} days'
-                          : 'Loading...',
-                      color: const Color(0xFF2196F3),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _projectDetailCard(
-                      icon: Icons.hourglass_bottom,
-                      title: 'Days Left',
-                      value: _calculateDaysLeft() != null
-                          ? '${_calculateDaysLeft()} days'
-                          : 'N/A',
-                      color: const Color(0xFFFF9800),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _projectDetailCard(
-                      icon: Icons.event,
-                      title: 'Start Date',
-                      value: _projectInfo?['start_date'] ?? 'N/A',
-                      color: const Color(0xFF4CAF50),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _projectDetailCard(
-                      icon: Icons.event_available,
-                      title: 'Expected Date to End',
-                      value: _projectInfo?['end_date'] ?? 'N/A',
-                      color: const Color(0xFFF44336),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
+            ),
 
-            const SizedBox(height: 24),
+          const SizedBox(height: 24),
 
-            // Client & Supervisor Cards
-            if (isMobile)
-              Column(
-                children: [
-                  if (_clientInfo != null)
+          // Client & Supervisor Cards
+          if (isMobile)
+            Column(
+              children: [
+                if (_clientInfo != null)
+                  _infoCard(
+                    title: "Client:",
+                    name:
+                        '${_clientInfo!['first_name']} ${_clientInfo!['last_name']}',
+                    email: _clientInfo!['email'] ?? 'N/A',
+                    phone: _clientInfo!['phone_number'] ?? 'N/A',
+                    photoUrl: _resolveMediaUrl(_clientInfo!['photo']),
+                    isMobile: true,
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: const Center(child: Text('No client assigned')),
+                  ),
+                if (widget.showSupervisorAssigned) ...[
+                  const SizedBox(height: 12),
+                  if (_supervisorInfo != null)
                     _infoCard(
-                      title: "Client:",
+                      title: "Supervisor-in charge:",
                       name:
-                          '${_clientInfo!['first_name']} ${_clientInfo!['last_name']}',
-                      email: _clientInfo!['email'] ?? 'N/A',
-                      phone: _clientInfo!['phone_number'] ?? 'N/A',
-                      photoUrl: _resolveMediaUrl(_clientInfo!['photo']),
+                          '${_supervisorInfo!['first_name']} ${_supervisorInfo!['last_name']}',
+                      email: _supervisorInfo!['email'] ?? 'N/A',
+                      phone: _supervisorInfo!['phone_number'] ?? 'N/A',
+                      photoUrl: _resolveMediaUrl(_supervisorInfo!['photo']),
                       isMobile: true,
                     )
                   else
@@ -760,46 +776,48 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: Colors.grey.shade300),
                       ),
+                      child: const Center(
+                        child: Text('No supervisor assigned'),
+                      ),
+                    ),
+                ],
+              ],
+            )
+          else
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                if (_clientInfo != null)
+                  _infoCard(
+                    title: "Client:",
+                    name:
+                        '${_clientInfo!['first_name']} ${_clientInfo!['last_name']}',
+                    email: _clientInfo!['email'] ?? 'N/A',
+                    phone: _clientInfo!['phone_number'] ?? 'N/A',
+                    photoUrl: _resolveMediaUrl(_clientInfo!['photo']),
+                    isMobile: false,
+                  )
+                else
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      margin: const EdgeInsets.only(right: 12),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
                       child: const Center(child: Text('No client assigned')),
                     ),
-                  if (widget.showSupervisorAssigned) ...[
-                    const SizedBox(height: 12),
-                    if (_supervisorInfo != null)
-                      _infoCard(
-                        title: "Supervisor-in charge:",
-                        name:
-                            '${_supervisorInfo!['first_name']} ${_supervisorInfo!['last_name']}',
-                        email: _supervisorInfo!['email'] ?? 'N/A',
-                        phone: _supervisorInfo!['phone_number'] ?? 'N/A',
-                        photoUrl: _resolveMediaUrl(_supervisorInfo!['photo']),
-                        isMobile: true,
-                      )
-                    else
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.shade300),
-                        ),
-                        child: const Center(
-                          child: Text('No supervisor assigned'),
-                        ),
-                      ),
-                  ],
-                ],
-              )
-            else
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  if (_clientInfo != null)
+                  ),
+                if (widget.showSupervisorAssigned)
+                  if (_supervisorInfo != null)
                     _infoCard(
-                      title: "Client:",
+                      title: "Supervisor-in charge:",
                       name:
-                          '${_clientInfo!['first_name']} ${_clientInfo!['last_name']}',
-                      email: _clientInfo!['email'] ?? 'N/A',
-                      phone: _clientInfo!['phone_number'] ?? 'N/A',
-                      photoUrl: _resolveMediaUrl(_clientInfo!['photo']),
+                          '${_supervisorInfo!['first_name']} ${_supervisorInfo!['last_name']}',
+                      email: _supervisorInfo!['email'] ?? 'N/A',
+                      phone: _supervisorInfo!['phone_number'] ?? 'N/A',
+                      photoUrl: _resolveMediaUrl(_supervisorInfo!['photo']),
                       isMobile: false,
                     )
                   else
@@ -811,125 +829,102 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: Colors.grey.shade300),
                         ),
-                        child: const Center(child: Text('No client assigned')),
-                      ),
-                    ),
-                  if (widget.showSupervisorAssigned)
-                    if (_supervisorInfo != null)
-                      _infoCard(
-                        title: "Supervisor-in charge:",
-                        name:
-                            '${_supervisorInfo!['first_name']} ${_supervisorInfo!['last_name']}',
-                        email: _supervisorInfo!['email'] ?? 'N/A',
-                        phone: _supervisorInfo!['phone_number'] ?? 'N/A',
-                        photoUrl: _resolveMediaUrl(_supervisorInfo!['photo']),
-                        isMobile: false,
-                      )
-                    else
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          margin: const EdgeInsets.only(right: 12),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.grey.shade300),
-                          ),
-                          child: const Center(
-                            child: Text('No supervisor assigned'),
-                          ),
+                        child: const Center(
+                          child: Text('No supervisor assigned'),
                         ),
                       ),
-                ],
-              ),
+                    ),
+              ],
+            ),
 
-            const SizedBox(height: 12),
+          const SizedBox(height: 12),
 
-            // Manage Workforce Button
-            Align(
-              alignment: Alignment.centerRight,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orangeAccent,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 22,
-                    vertical: 14,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+          // Manage Workforce Button
+          Align(
+            alignment: Alignment.centerRight,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orangeAccent,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 22,
+                  vertical: 14,
                 ),
-                onPressed: () {},
-                child: const Text(
-                  "Manage Workforce",
-                  style: TextStyle(color: Colors.white),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
                 ),
               ),
-            ),
-
-            const SizedBox(height: 20),
-            const Divider(),
-
-            const SizedBox(height: 24),
-
-            // Project Plan Title
-            const Text(
-              "Project Plan",
-              style: TextStyle(
-                fontSize: 23,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
+              onPressed: () {},
+              child: const Text(
+                "Manage Workforce",
+                style: TextStyle(color: Colors.white),
               ),
             ),
+          ),
 
-            const SizedBox(height: 16),
+          const SizedBox(height: 20),
+          const Divider(),
 
-            // No plans message
-            Center(
-              child: Column(
-                children: [
-                  Text(
-                    "",
-                    style: TextStyle(fontSize: 15, color: Colors.grey.shade700),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              task_details.ProjectTaskDetailsPage(
-                                projectTitle: widget.projectTitle,
-                                projectLocation: widget.projectLocation,
-                                projectImage: widget.projectImage,
-                                progress: widget.progress,
-                                budget: widget.budget,
-                                projectId: widget.projectId,
-                                projectStartDate: _projectInfo?['start_date'],
-                              ),
-                        ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 26,
-                        vertical: 14,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: const Text(
-                      "View Project Plan",
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ),
-                ],
-              ),
+          const SizedBox(height: 24),
+
+          // Project Plan Title
+          const Text(
+            "Project Plan",
+            style: TextStyle(
+              fontSize: 23,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
             ),
-            SizedBox(height: isMobile ? 80 : 32), // Space for bottom nav
-          ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // No plans message
+          Center(
+            child: Column(
+              children: [
+                Text(
+                  "",
+                  style: TextStyle(fontSize: 15, color: Colors.grey.shade700),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            task_details.ProjectTaskDetailsPage(
+                              projectTitle: widget.projectTitle,
+                              projectLocation: widget.projectLocation,
+                              projectImage: widget.projectImage,
+                              progress: widget.progress,
+                              budget: widget.budget,
+                              projectId: widget.projectId,
+                              projectStartDate: _projectInfo?['start_date'],
+                            ),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 26,
+                      vertical: 14,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text(
+                    "View Project Plan",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: isMobile ? 80 : 32), // Space for bottom nav
+        ],
       ),
     );
 
