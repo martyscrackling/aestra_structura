@@ -840,26 +840,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           const SizedBox(height: 12),
 
           // Manage Workforce Button
-          Align(
-            alignment: Alignment.centerRight,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orangeAccent,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 22,
-                  vertical: 14,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              onPressed: () {},
-              child: const Text(
-                "Manage Workforce",
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-          ),
+          
 
           const SizedBox(height: 20),
           const Divider(),

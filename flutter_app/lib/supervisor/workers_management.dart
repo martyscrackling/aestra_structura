@@ -30,6 +30,7 @@ class WorkerManagementPage extends StatefulWidget {
 
 class _WorkerManagementPageState extends State<WorkerManagementPage> {
   late Future<List<Map<String, dynamic>>> _workersFuture;
+  Map<int, String> _projectNamesById = {};
 
   @override
   void initState() {
@@ -41,16 +42,17 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
       final projectId = authService.currentUser?['project_id'];
+      final supervisorId = authService.currentUser?['supervisor_id'];
+      final userId = authService.currentUser?['user_id'];
+
+      await _fetchProjects(supervisorId: supervisorId, userId: userId);
 
       print('=== Fetching Field Workers ===');
-      print('Supervisor project_id: $projectId');
+      print('Scope: all projects | filter: active workers');
 
-      if (projectId == null) {
-        print('❌ No project assigned to supervisor');
-        return [];
-      }
-
-      final url = AppConfig.apiUri('field-workers/?project_id=$projectId');
+      final url = supervisorId != null
+          ? AppConfig.apiUri('field-workers/?supervisor_id=$supervisorId')
+          : AppConfig.apiUri('field-workers/');
       print('📡 API URL: $url');
 
       final response = await http.get(url);
@@ -59,9 +61,33 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
       print('📦 Response body: ${response.body}');
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        print('✅ Found ${data.length} field workers');
-        return data.cast<Map<String, dynamic>>();
+        final decoded = jsonDecode(response.body);
+        final workers = _extractWorkers(decoded);
+        final activeWorkers = workers.where(_isWorkerActive).toList();
+        print('✅ Found ${workers.length} workers (${activeWorkers.length} active)');
+
+        // Some backends restrict supervisors to project-scoped data even when no
+        // query param is provided. Fallback prevents empty table in that case.
+        if (activeWorkers.isEmpty && projectId != null) {
+          final fallbackUrl = AppConfig.apiUri(
+            'field-workers/?project_id=$projectId',
+          );
+          print('↩️ Fallback API URL: $fallbackUrl');
+          final fallbackResponse = await http.get(fallbackUrl);
+          print('↩️ Fallback status: ${fallbackResponse.statusCode}');
+
+          if (fallbackResponse.statusCode == 200) {
+            final fallbackDecoded = jsonDecode(fallbackResponse.body);
+            final fallbackWorkers = _extractWorkers(fallbackDecoded);
+            final fallbackActive = fallbackWorkers.where(_isWorkerActive).toList();
+            print(
+              '✅ Fallback workers: ${fallbackWorkers.length} (${fallbackActive.length} active)',
+            );
+            return fallbackActive;
+          }
+        }
+
+        return activeWorkers;
       } else {
         print('❌ Failed to fetch field workers: ${response.statusCode}');
         return [];
@@ -70,6 +96,102 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
       print('❌ Error fetching field workers: $e');
       return [];
     }
+  }
+
+  Future<void> _fetchProjects({dynamic supervisorId, dynamic userId}) async {
+    try {
+      final Uri url;
+      if (supervisorId != null) {
+        url = AppConfig.apiUri('projects/?supervisor_id=$supervisorId');
+      } else if (userId != null) {
+        url = AppConfig.apiUri('projects/?user_id=$userId');
+      } else {
+        url = AppConfig.apiUri('projects/');
+      }
+
+      final response = await http.get(url);
+      print('Projects API response status: ${response.statusCode}');
+
+      if (response.statusCode != 200) return;
+
+      final decoded = jsonDecode(response.body);
+      final projects = _extractWorkers(decoded);
+      final mapped = <int, String>{};
+
+      for (final project in projects) {
+        final id = _toInt(project['project_id']);
+        final name = (project['project_name'] ?? '').toString().trim();
+        if (id != null && name.isNotEmpty) {
+          mapped[id] = name;
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _projectNamesById = mapped;
+      });
+      print('Projects fetched successfully: ${mapped.length}');
+    } catch (e) {
+      print('Failed to fetch projects: $e');
+    }
+  }
+
+  int? _toInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  List<Map<String, dynamic>> _extractWorkers(dynamic decoded) {
+    if (decoded is List) {
+      return decoded.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    }
+
+    if (decoded is Map<String, dynamic>) {
+      final results = decoded['results'];
+      if (results is List) {
+        return results.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+      }
+    }
+
+    return [];
+  }
+
+  bool _isWorkerActive(Map<String, dynamic> worker) {
+    final status = (worker['status'] ?? '').toString().trim().toLowerCase();
+    final isActiveFlag = worker['is_active'];
+
+    if (isActiveFlag is bool) {
+      return isActiveFlag;
+    }
+
+    if (isActiveFlag is num) {
+      return isActiveFlag != 0;
+    }
+
+    if (isActiveFlag is String) {
+      final normalized = isActiveFlag.trim().toLowerCase();
+      if (normalized == 'true' || normalized == '1' || normalized == 'yes') {
+        return true;
+      }
+      if (normalized == 'false' || normalized == '0' || normalized == 'no') {
+        return false;
+      }
+    }
+
+    if (status.isNotEmpty) {
+      const inactiveValues = {
+        'inactive',
+        'disabled',
+        'terminated',
+        'archived',
+      };
+      return !inactiveValues.contains(status);
+    }
+
+    // Backward compatibility: if API does not expose status yet, treat as active.
+    return true;
   }
 
   void _navigateToPage(String page) {
@@ -110,6 +232,7 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
   }
 
   String searchQuery = '';
+  String selectedProject = 'All Projects';
   String selectedRole = 'All';
   String sortBy = 'Name A-Z';
 
@@ -122,16 +245,46 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
   ];
   final List<String> sortOptions = ['Name A-Z', 'Name Z-A', 'Recently Hired'];
 
+  List<String> _getProjectFilterOptions(
+    List<Map<String, dynamic>> allWorkers,
+  ) {
+    final projects = <String>{'All Projects'};
+    for (final worker in allWorkers) {
+      final name = _getProjectName(worker);
+      if (name.trim().isNotEmpty) {
+        projects.add(name);
+      }
+    }
+
+    final sorted = projects.toList()
+      ..sort((a, b) {
+        if (a == 'All Projects') return -1;
+        if (b == 'All Projects') return 1;
+        return a.compareTo(b);
+      });
+    return sorted;
+  }
+
   List<Map<String, dynamic>> _filterAndSortWorkers(
     List<Map<String, dynamic>> allWorkers,
   ) {
     final filtered = allWorkers.where((worker) {
       final fullName = '${worker['first_name']} ${worker['last_name']}'
           .toLowerCase();
-      final matchesSearch = fullName.contains(searchQuery.toLowerCase());
+      final role = (worker['role'] ?? '').toString().toLowerCase();
+      final projectName = _getProjectName(worker).toLowerCase();
+      final query = searchQuery.toLowerCase();
+      final matchesSearch =
+          fullName.contains(query) ||
+          role.contains(query) ||
+          projectName.contains(query);
       final matchesRole =
           selectedRole == 'All' || worker['role'] == selectedRole;
-      return matchesSearch && matchesRole;
+        final workerProjectName = _getProjectName(worker);
+        final matchesProject =
+          selectedProject == 'All Projects' ||
+          workerProjectName == selectedProject;
+        return matchesSearch && matchesRole && matchesProject;
     }).toList();
 
     if (sortBy == 'Name A-Z') {
@@ -167,6 +320,64 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
     return '$firstName $lastName'.trim();
   }
 
+  String _getWorkerInitial(Map<String, dynamic> worker) {
+    final name = _getWorkerName(worker);
+    if (name.isEmpty) return '?';
+    return name[0].toUpperCase();
+  }
+
+  String? _resolveWorkerPhotoUrl(Map<String, dynamic> worker) {
+    final photo = worker['photo'];
+    if (photo == null) return null;
+
+    final raw = photo.toString().trim();
+    if (raw.isEmpty) return null;
+
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      return raw;
+    }
+
+    final api = Uri.parse(AppConfig.apiBaseUrl);
+    final hostBase = '${api.scheme}://${api.authority}';
+
+    if (raw.startsWith('/')) {
+      return '$hostBase$raw';
+    }
+
+    if (raw.startsWith('media/')) {
+      return '$hostBase/$raw';
+    }
+
+    if (raw.startsWith('fieldworker_images/')) {
+      return '$hostBase/media/$raw';
+    }
+
+    return '$hostBase/media/$raw';
+  }
+
+  Widget _buildWorkerAvatar(
+    Map<String, dynamic> worker, {
+    required double radius,
+    required Color roleColor,
+    required double fontSize,
+  }) {
+    final photoUrl = _resolveWorkerPhotoUrl(worker);
+
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: roleColor.withOpacity(0.12),
+      foregroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+      child: Text(
+        _getWorkerInitial(worker),
+        style: TextStyle(
+          color: roleColor,
+          fontSize: fontSize,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
   String _formatDate(String? dateString) {
     if (dateString == null || dateString.isEmpty) return 'N/A';
     try {
@@ -180,6 +391,33 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
   String _formatPayrate(dynamic payrate) {
     if (payrate == null) return 'Not set';
     return '₱${payrate}/day';
+  }
+
+  String _getProjectName(Map<String, dynamic> worker) {
+    final directProjectName = worker['project_name'];
+    if (directProjectName != null && directProjectName.toString().trim().isNotEmpty) {
+      return directProjectName.toString();
+    }
+
+    final directProjectId = _toInt(worker['project_id']);
+    if (directProjectId != null && _projectNamesById.containsKey(directProjectId)) {
+      return _projectNamesById[directProjectId]!;
+    }
+
+    final project = worker['project'];
+    if (project is Map<String, dynamic>) {
+      final nestedId = _toInt(project['project_id'] ?? project['id']);
+      if (nestedId != null && _projectNamesById.containsKey(nestedId)) {
+        return _projectNamesById[nestedId]!;
+      }
+
+      final nestedName = project['name'] ?? project['project_name'];
+      if (nestedName != null && nestedName.toString().trim().isNotEmpty) {
+        return nestedName.toString();
+      }
+    }
+
+    return 'Unassigned';
   }
 
   Color _roleColor(String role) {
@@ -209,6 +447,7 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
       builder: (context) {
         final roleColor = _roleColor(worker["role"]);
         final workerName = _getWorkerName(worker);
+        final workerPhotoUrl = _resolveWorkerPhotoUrl(worker);
         final phoneNumber = worker['phone_number'] ?? 'N/A';
         final birthdate = _formatDate(worker['birthdate']);
         final payrate = _formatPayrate(worker['payrate']);
@@ -276,11 +515,27 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                               color: roleColor.withOpacity(0.12),
                               borderRadius: BorderRadius.circular(20),
                             ),
-                            child: Icon(
-                              Icons.person,
-                              size: 56,
-                              color: roleColor,
-                            ),
+                            child: workerPhotoUrl == null
+                                ? Icon(
+                                    Icons.person,
+                                    size: 56,
+                                    color: roleColor,
+                                  )
+                                : ClipRRect(
+                                    borderRadius: BorderRadius.circular(20),
+                                    child: Image.network(
+                                      workerPhotoUrl,
+                                      fit: BoxFit.cover,
+                                      errorBuilder:
+                                          (context, error, stackTrace) {
+                                            return Icon(
+                                              Icons.person,
+                                              size: 56,
+                                              color: roleColor,
+                                            );
+                                          },
+                                    ),
+                                  ),
                           ),
                           const SizedBox(height: 14),
                           Text(
@@ -662,6 +917,9 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                           }
 
                           final allWorkers = snapshot.data ?? [];
+                          final projectOptions = _getProjectFilterOptions(
+                            allWorkers,
+                          );
                           final filteredWorkers = _filterAndSortWorkers(
                             allWorkers,
                           );
@@ -726,6 +984,62 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                                                     ),
                                                     onChanged: (v) => setState(
                                                       () => searchQuery = v,
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 4),
+                                                // Project filter dropdown (compact)
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 6,
+                                                        vertical: 4,
+                                                      ),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.grey[50],
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          8,
+                                                        ),
+                                                  ),
+                                                  child: DropdownButton<String>(
+                                                    value: projectOptions
+                                                            .contains(
+                                                              selectedProject,
+                                                            )
+                                                        ? selectedProject
+                                                        : 'All Projects',
+                                                    underline:
+                                                        const SizedBox(),
+                                                    isDense: true,
+                                                    icon: const Icon(
+                                                      Icons.apartment,
+                                                      size: 16,
+                                                    ),
+                                                    style: const TextStyle(
+                                                      fontSize: 11,
+                                                      color: Colors.black87,
+                                                    ),
+                                                    items: projectOptions
+                                                        .map(
+                                                          (
+                                                            project,
+                                                          ) => DropdownMenuItem(
+                                                            value: project,
+                                                            child: Text(
+                                                              project,
+                                                              style:
+                                                                  const TextStyle(
+                                                                    fontSize:
+                                                                        11,
+                                                                  ),
+                                                            ),
+                                                          ),
+                                                        )
+                                                        .toList(),
+                                                    onChanged: (v) => setState(
+                                                      () => selectedProject =
+                                                          v ?? 'All Projects',
                                                     ),
                                                   ),
                                                 ),
@@ -839,7 +1153,7 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                                                   child: TextField(
                                                     decoration: InputDecoration(
                                                       hintText:
-                                                          'Search workers by name, phone or role',
+                                                          'Search workers by name, role or project',
                                                       prefixIcon: const Icon(
                                                         Icons.search,
                                                       ),
@@ -861,6 +1175,50 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                                                     ),
                                                     onChanged: (v) => setState(
                                                       () => searchQuery = v,
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 12),
+                                                // Project filter dropdown on tablet/desktop
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 12,
+                                                        vertical: 8,
+                                                      ),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.grey[50],
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          8,
+                                                        ),
+                                                  ),
+                                                  child: DropdownButton<String>(
+                                                    value: projectOptions
+                                                            .contains(
+                                                              selectedProject,
+                                                            )
+                                                        ? selectedProject
+                                                        : 'All Projects',
+                                                    underline:
+                                                        const SizedBox(),
+                                                    hint: const Text(
+                                                      'Filter by project',
+                                                    ),
+                                                    items: projectOptions
+                                                        .map(
+                                                          (project) =>
+                                                              DropdownMenuItem(
+                                                                value: project,
+                                                                child: Text(
+                                                                  project,
+                                                                ),
+                                                              ),
+                                                        )
+                                                        .toList(),
+                                                    onChanged: (v) => setState(
+                                                      () => selectedProject =
+                                                          v ?? 'All Projects',
                                                     ),
                                                   ),
                                                 ),
@@ -1143,19 +1501,11 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                   // Top row: Avatar + Name + Status
                   Row(
                     children: [
-                      CircleAvatar(
+                      _buildWorkerAvatar(
+                        worker,
                         radius: 24,
-                        backgroundColor: roleColor.withOpacity(0.12),
-                        child: Text(
-                          _getWorkerName(worker).isNotEmpty
-                              ? _getWorkerName(worker)[0].toUpperCase()
-                              : '?',
-                          style: TextStyle(
-                            color: roleColor,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                        roleColor: roleColor,
+                        fontSize: 16,
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -1306,8 +1656,7 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
               children: [
                 _buildHeaderCell('Name', flex: 3),
                 _buildHeaderCell('Role', flex: 2),
-                if (!isTablet) _buildHeaderCell('Phone', flex: 2),
-                _buildHeaderCell('Date Hired', flex: 2),
+                _buildHeaderCell('Project', flex: isTablet ? 3 : 4),
                 _buildHeaderCell('Status', flex: 2),
                 _buildHeaderCell('Actions', flex: 1),
               ],
@@ -1338,19 +1687,11 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                         flex: 3,
                         child: Row(
                           children: [
-                            CircleAvatar(
+                            _buildWorkerAvatar(
+                              worker,
                               radius: isTablet ? 16 : 20,
-                              backgroundColor: roleColor.withOpacity(0.12),
-                              child: Text(
-                                _getWorkerName(worker).isNotEmpty
-                                    ? _getWorkerName(worker)[0].toUpperCase()
-                                    : '?',
-                                style: TextStyle(
-                                  color: roleColor,
-                                  fontSize: isTablet ? 12 : 14,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
+                              roleColor: roleColor,
+                              fontSize: isTablet ? 12 : 14,
                             ),
                             SizedBox(width: isTablet ? 8 : 12),
                             Expanded(
@@ -1402,32 +1743,20 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                           ),
                         ),
                       ),
-                      // Phone column (hide on tablet)
-                      if (!isTablet)
-                        Expanded(
-                          flex: 2,
-                          child: Text(
-                            worker['phone_number'] ?? 'N/A',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      // Date Hired column
+                      // Project column
                       Expanded(
-                        flex: 2,
+                        flex: isTablet ? 3 : 4,
                         child: Row(
                           children: [
                             Icon(
-                              Icons.calendar_today,
+                              Icons.apartment,
                               size: isTablet ? 12 : 14,
                               color: Colors.grey[500],
                             ),
                             SizedBox(width: isTablet ? 4 : 6),
                             Expanded(
                               child: Text(
-                                _formatDate(worker['created_at']),
+                                _getProjectName(worker),
                                 style: TextStyle(
                                   color: Colors.grey[700],
                                   fontSize: isTablet ? 11 : 13,

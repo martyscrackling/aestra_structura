@@ -31,6 +31,7 @@ class _ActiveProjectState extends State<ActiveProject> {
   int? _selectedProjectId;
   bool _isLoading = true;
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _cardsScrollController = ScrollController();
   String _searchQuery = '';
   _ProjectSortOrder _sortOrder = _ProjectSortOrder.oldestToNewest;
   String? _projectTypeFilter;
@@ -51,6 +52,7 @@ class _ActiveProjectState extends State<ActiveProject> {
   @override
   void dispose() {
     _searchController.dispose();
+    _cardsScrollController.dispose();
     super.dispose();
   }
 
@@ -734,8 +736,10 @@ class _ActiveProjectState extends State<ActiveProject> {
           SizedBox(
             height: widget.cardsViewportHeight!,
             child: Scrollbar(
+              controller: _cardsScrollController,
               thumbVisibility: true,
               child: SingleChildScrollView(
+                controller: _cardsScrollController,
                 primary: false,
                 physics: const ClampingScrollPhysics(),
                 child: projectsContent,

@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'widgets/sidebar.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+import 'dart:convert';
 import '../services/auth_service.dart';
+import '../services/app_config.dart';
 import 'widgets/supervisor_user_badge.dart';
 
 class AttendanceReport {
@@ -52,6 +56,26 @@ class AttendanceReport {
   double get computedSalary => grossPay - totalDeductions;
 }
 
+class ReportHistoryEntry {
+  ReportHistoryEntry({
+    required this.start,
+    required this.end,
+    required this.totalAmount,
+    required this.workersCount,
+  });
+
+  final DateTime start;
+  final DateTime end;
+  final double totalAmount;
+  final int workersCount;
+}
+
+class _WorkerTotals {
+  int totalDaysPresent = 0;
+  double totalHours = 0;
+  double overtimeHours = 0;
+}
+
 class ReportsPage extends StatefulWidget {
   final bool initialSidebarVisible;
 
@@ -65,10 +89,17 @@ class _ReportsPageState extends State<ReportsPage> {
   final Color neutral = const Color(0xFFF4F6F9);
   final Color accent = const Color(0xFFFF6F00);
   final DateFormat _dateFmt = DateFormat('yyyy-MM-dd');
+  final DateFormat _prettyDateFmt = DateFormat('MMM d, yyyy');
+
+  bool _isLoading = false;
+  bool _isLoadingHistory = false;
+  String? _loadError;
 
   @override
   void initState() {
     super.initState();
+    _refreshReports();
+    _loadReportsHistory();
   }
 
   void _navigateToPage(String page) {
@@ -108,39 +139,8 @@ class _ReportsPageState extends State<ReportsPage> {
     Duration(days: DateTime.sunday - DateTime.now().weekday),
   );
 
-  // sample data (UI/layout only - no backend)
-  List<AttendanceReport> _rows = [
-    AttendanceReport(
-      name: 'John Doe',
-      role: 'Foreman',
-      totalDaysPresent: 6,
-      totalHours: 48,
-      overtimeHours: 4,
-      cashAdvance: 50.0,
-      deduction: 0.0,
-      hourlyRate: 8.0,
-    ),
-    AttendanceReport(
-      name: 'Jane Smith',
-      role: 'Carpenter',
-      totalDaysPresent: 5,
-      totalHours: 40,
-      overtimeHours: 2,
-      cashAdvance: 0.0,
-      deduction: 10.0,
-      hourlyRate: 7.5,
-    ),
-    AttendanceReport(
-      name: 'Carlos Reyes',
-      role: 'Laborer',
-      totalDaysPresent: 6,
-      totalHours: 52,
-      overtimeHours: 6,
-      cashAdvance: 20.0,
-      deduction: 5.0,
-      hourlyRate: 6.0,
-    ),
-  ];
+  List<AttendanceReport> _rows = [];
+  List<ReportHistoryEntry> _history = [];
 
   final _money = NumberFormat.currency(
     locale: 'en_PH',
@@ -148,14 +148,268 @@ class _ReportsPageState extends State<ReportsPage> {
     decimalDigits: 2,
   );
 
-  // Submit the current report to PM (demo)
-  void _submitToPM() {
-    setState(() {
-      _rows = List<AttendanceReport>.from(_rows);
+  Future<void> _submitToPM() async {
+    await _refreshReports();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Report data synced from server')),
+    );
+  }
+
+  int? _toInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '');
+  }
+
+  double _toDouble(dynamic value) {
+    if (value is double) return value;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  String _dateString(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  DateTime? _combineDateAndTime(DateTime date, String? rawTime) {
+    if (rawTime == null || rawTime.trim().isEmpty) return null;
+    final normalized = rawTime.split('.').first;
+    final pieces = normalized.split(':');
+    if (pieces.length < 2) return null;
+    final hour = int.tryParse(pieces[0]);
+    final minute = int.tryParse(pieces[1]);
+    final second = pieces.length > 2 ? int.tryParse(pieces[2]) ?? 0 : 0;
+    if (hour == null || minute == null) return null;
+    return DateTime(date.year, date.month, date.day, hour, minute, second);
+  }
+
+  bool _isPresent(Map<String, dynamic> record) {
+    final checkIn = (record['check_in_time'] ?? '').toString();
+    if (checkIn.isNotEmpty) return true;
+    final status = (record['status'] ?? '').toString();
+    return status == 'on_site' || status == 'on_break';
+  }
+
+  double _workedHoursForRecord(Map<String, dynamic> record, DateTime date) {
+    final inTime = _combineDateAndTime(
+      date,
+      (record['check_in_time'] ?? '').toString(),
+    );
+    final outTime = _combineDateAndTime(
+      date,
+      (record['check_out_time'] ?? '').toString(),
+    );
+    if (inTime == null || outTime == null || !outTime.isAfter(inTime)) return 0;
+
+    var minutes = outTime.difference(inTime).inMinutes;
+
+    final breakIn = _combineDateAndTime(
+      date,
+      (record['break_in_time'] ?? '').toString(),
+    );
+    final breakOut = _combineDateAndTime(
+      date,
+      (record['break_out_time'] ?? '').toString(),
+    );
+    if (breakIn != null && breakOut != null && breakOut.isAfter(breakIn)) {
+      minutes -= breakOut.difference(breakIn).inMinutes;
+    }
+
+    if (minutes < 0) return 0;
+    return minutes / 60.0;
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchWorkers(int projectId) async {
+    final workersResponse = await http.get(
+      AppConfig.apiUri('field-workers/?project_id=$projectId'),
+    );
+    if (workersResponse.statusCode != 200) {
+      throw Exception('Failed to load workers (${workersResponse.statusCode})');
+    }
+    final workersData = jsonDecode(workersResponse.body) as List<dynamic>;
+    return workersData.whereType<Map<String, dynamic>>().toList();
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchAttendanceForDate(
+    int projectId,
+    DateTime date,
+  ) async {
+    final response = await http.get(
+      AppConfig.apiUri(
+        'attendance/?project_id=$projectId&attendance_date=${_dateString(date)}',
+      ),
+    );
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to load attendance for ${_dateString(date)} (${response.statusCode})',
+      );
+    }
+    final data = jsonDecode(response.body) as List<dynamic>;
+    return data.whereType<Map<String, dynamic>>().toList();
+  }
+
+  Future<List<AttendanceReport>> _buildReportsForRange({
+    required int projectId,
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    final workers = await _fetchWorkers(projectId);
+    final workersById = <int, Map<String, dynamic>>{};
+    for (final worker in workers) {
+      final workerId = _toInt(worker['fieldworker_id']);
+      if (workerId != null) {
+        workersById[workerId] = worker;
+      }
+    }
+
+    final totalsByWorker = <int, _WorkerTotals>{};
+    final countedPresencePerDay = <String>{};
+
+    for (
+      DateTime date = DateTime(start.year, start.month, start.day);
+      !date.isAfter(end);
+      date = date.add(const Duration(days: 1))
+    ) {
+      final attendance = await _fetchAttendanceForDate(projectId, date);
+      for (final record in attendance) {
+        final workerId = _toInt(record['field_worker']);
+        if (workerId == null || !workersById.containsKey(workerId)) continue;
+
+        final totals = totalsByWorker.putIfAbsent(workerId, _WorkerTotals.new);
+        final dayKey = '$workerId:${_dateString(date)}';
+        if (_isPresent(record) && !countedPresencePerDay.contains(dayKey)) {
+          totals.totalDaysPresent += 1;
+          countedPresencePerDay.add(dayKey);
+        }
+
+        final workedHours = _workedHoursForRecord(record, date);
+        totals.totalHours += workedHours;
+        totals.overtimeHours += workedHours > 8 ? workedHours - 8 : 0;
+      }
+    }
+
+    final reports = <AttendanceReport>[];
+    workersById.forEach((workerId, worker) {
+      final totals = totalsByWorker[workerId] ?? _WorkerTotals();
+      final firstName = (worker['first_name'] ?? '').toString().trim();
+      final lastName = (worker['last_name'] ?? '').toString().trim();
+      final fullName = ('$firstName $lastName').trim();
+      final dailyRate = _toDouble(worker['payrate']);
+      final double hourlyRate = dailyRate > 0 ? dailyRate / 8.0 : 0.0;
+
+      reports.add(
+        AttendanceReport(
+          name: fullName.isEmpty ? 'Worker #$workerId' : fullName,
+          role: (worker['role'] ?? 'Worker').toString(),
+          totalDaysPresent: totals.totalDaysPresent,
+          totalHours: totals.totalHours,
+          overtimeHours: totals.overtimeHours,
+          cashAdvance: _toDouble(
+            worker['cash_advance'] ?? worker['cashAdvance'] ?? 0,
+          ),
+          deduction: _toDouble(
+            worker['deduction'] ?? worker['other_deduction'] ?? 0,
+          ),
+          hourlyRate: hourlyRate,
+        ),
+      );
     });
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Submitted to PM (demo)')));
+
+    reports.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return reports;
+  }
+
+  Future<void> _refreshReports() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
+
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final projectId = _toInt(authService.currentUser?['project_id']);
+      if (projectId == null) {
+        throw Exception('No project assigned to your account.');
+      }
+
+      final reports = await _buildReportsForRange(
+        projectId: projectId,
+        start: _weekStart,
+        end: _weekEnd,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _rows = reports;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _rows = [];
+        _loadError = e.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadReportsHistory() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoadingHistory = true;
+    });
+
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final projectId = _toInt(authService.currentUser?['project_id']);
+      if (projectId == null) {
+        if (!mounted) return;
+        setState(() {
+          _history = [];
+        });
+        return;
+      }
+
+      final history = <ReportHistoryEntry>[];
+      for (var i = 1; i <= 4; i++) {
+        final end = _weekStart.subtract(Duration(days: 7 * (i - 1) + 1));
+        final start = end.subtract(const Duration(days: 6));
+        final rows = await _buildReportsForRange(
+          projectId: projectId,
+          start: start,
+          end: end,
+        );
+        final totalAmount = rows.fold<double>(0, (sum, r) => sum + r.computedSalary);
+        history.add(
+          ReportHistoryEntry(
+            start: start,
+            end: end,
+            totalAmount: totalAmount,
+            workersCount: rows.where((r) => r.totalHours > 0).length,
+          ),
+        );
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _history = history;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _history = [];
+      });
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingHistory = false;
+      });
+    }
   }
 
   // Show reports history dialog
@@ -188,40 +442,40 @@ class _ReportsPageState extends State<ReportsPage> {
               ),
               const SizedBox(height: 20),
 
-              // Sample history records
+              // Historical records based on API data
               Flexible(
                 child: SingleChildScrollView(
                   child: Column(
-                    children: [
-                      _historyItem(
-                        'Week of Dec 4-10, 2025',
-                        'Submitted on Dec 10, 2025',
-                        '₱12,450.00',
-                        'Approved',
-                        const Color(0xFF757575),
-                      ),
-                      _historyItem(
-                        'Week of Nov 27 - Dec 3, 2025',
-                        'Submitted on Dec 3, 2025',
-                        '₱11,890.00',
-                        'Approved',
-                        const Color(0xFF757575),
-                      ),
-                      _historyItem(
-                        'Week of Nov 20-26, 2025',
-                        'Submitted on Nov 26, 2025',
-                        '₱13,200.00',
-                        'Approved',
-                        const Color(0xFF757575),
-                      ),
-                      _historyItem(
-                        'Week of Nov 13-19, 2025',
-                        'Submitted on Nov 19, 2025',
-                        '₱10,750.00',
-                        'Pending',
-                        const Color(0xFFFF8F00),
-                      ),
-                    ],
+                    children: _isLoadingHistory
+                        ? const [
+                            Padding(
+                              padding: EdgeInsets.symmetric(vertical: 24),
+                              child: Center(child: CircularProgressIndicator()),
+                            ),
+                          ]
+                        : _history.isEmpty
+                        ? [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 24),
+                              child: Text(
+                                'No historical report data found.',
+                                style: TextStyle(color: Colors.grey[700]),
+                              ),
+                            ),
+                          ]
+                        : _history
+                              .map(
+                                (entry) => _historyItem(
+                                  'Week of ${_prettyDateFmt.format(entry.start)} - ${_prettyDateFmt.format(entry.end)}',
+                                  'Workers with attendance: ${entry.workersCount}',
+                                  _money.format(entry.totalAmount),
+                                  entry.totalAmount > 0 ? 'Available' : 'No payout',
+                                  entry.totalAmount > 0
+                                      ? const Color(0xFF757575)
+                                      : const Color(0xFFFF8F00),
+                                ),
+                              )
+                              .toList(),
                   ),
                 ),
               ),
@@ -357,6 +611,8 @@ class _ReportsPageState extends State<ReportsPage> {
         _weekStart = d;
         _weekEnd = _weekStart.add(const Duration(days: 6));
       });
+      await _refreshReports();
+      await _loadReportsHistory();
     }
   }
 
@@ -371,6 +627,8 @@ class _ReportsPageState extends State<ReportsPage> {
       setState(() {
         _weekEnd = d;
       });
+      await _refreshReports();
+      await _loadReportsHistory();
     }
   }
 
@@ -873,10 +1131,30 @@ class _ReportsPageState extends State<ReportsPage> {
                                 children: [
                                   // Mobile compact list
                                   Expanded(
-                                    child: _rows.isEmpty
+                                    child: _isLoading
+                                        ? const Center(
+                                            child: CircularProgressIndicator(),
+                                          )
+                                        : _loadError != null
+                                        ? Center(
+                                            child: Padding(
+                                              padding: const EdgeInsets.symmetric(
+                                                horizontal: 16,
+                                              ),
+                                              child: Text(
+                                                _loadError!,
+                                                style: TextStyle(
+                                                  color: Colors.red[700],
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                                textAlign: TextAlign.center,
+                                              ),
+                                            ),
+                                          )
+                                        : _rows.isEmpty
                                         ? Center(
                                             child: Text(
-                                              'No data for selected week',
+                                              'No attendance data for selected week',
                                               style: TextStyle(
                                                 color: Colors.grey[700],
                                               ),
@@ -1304,10 +1582,31 @@ class _ReportsPageState extends State<ReportsPage> {
 
                                     // Table Body
                                     Expanded(
-                                      child: _rows.isEmpty
+                                      child: _isLoading
+                                          ? const Center(
+                                              child: CircularProgressIndicator(),
+                                            )
+                                          : _loadError != null
+                                          ? Center(
+                                              child: Padding(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 16,
+                                                    ),
+                                                child: Text(
+                                                  _loadError!,
+                                                  style: TextStyle(
+                                                    color: Colors.red[700],
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                              ),
+                                            )
+                                          : _rows.isEmpty
                                           ? Center(
                                               child: Text(
-                                                'No data for selected week',
+                                                'No attendance data for selected week',
                                                 style: TextStyle(
                                                   color: Colors.grey[700],
                                                 ),
