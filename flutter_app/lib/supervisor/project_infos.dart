@@ -6,6 +6,7 @@ import 'widgets/sidebar.dart';
 import 'widgets/dashboard_header.dart';
 import '../services/app_config.dart';
 import '../services/auth_service.dart';
+import '../services/app_time_service.dart';
 import 'task_update.dart';
 
 class ProjectInfosPage extends StatefulWidget {
@@ -41,7 +42,19 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
   @override
   void initState() {
     super.initState();
+    AppTimeService.overrideNotifier.addListener(_onTestTimeChanged);
     _fetchProjectDetails();
+  }
+
+  @override
+  void dispose() {
+    AppTimeService.overrideNotifier.removeListener(_onTestTimeChanged);
+    super.dispose();
+  }
+
+  void _onTestTimeChanged() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   String? _asNonEmptyString(dynamic value) {
@@ -111,7 +124,7 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
       final endDateStr = _projectInfo!['end_date'] as String;
       if (endDateStr.isEmpty) return null;
       final endDate = DateTime.parse(endDateStr);
-      final now = DateTime.now();
+      final now = AppTimeService.now();
       final today = DateTime(now.year, now.month, now.day);
       final diff = endDate.difference(today).inDays;
       return diff >= 0 ? diff : 0;

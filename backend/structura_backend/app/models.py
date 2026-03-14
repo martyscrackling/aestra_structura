@@ -347,6 +347,28 @@ class FieldWorker(models.Model):
     pagibig_id = models.CharField(max_length=20, null=True, blank=True)
     payrate = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
+    # Cash advance controls used by payroll summary/reporting.
+    cash_advance_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    deduction_per_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    # Weekly salary and deduction snapshot values.
+    weekly_salary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
+    sss_weekly_min = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    philhealth_weekly_min = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    pagibig_weekly_min = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
+    sss_weekly_topup = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    philhealth_weekly_topup = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    pagibig_weekly_topup = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    sss_weekly_total = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    philhealth_weekly_total = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    pagibig_weekly_total = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
+    total_weekly_deduction = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    net_weekly_pay = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
     photo = models.FileField(upload_to='fieldworker_images/', null=True, blank=True)
     
     created_at = models.DateTimeField(auto_now_add=True)

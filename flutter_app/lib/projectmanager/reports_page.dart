@@ -42,12 +42,8 @@ class _ReportsPageState extends State<ReportsPage> {
   final Color accent = const Color(0xFFFF7A18);
   final DateFormat _dateFmt = DateFormat('yyyy-MM-dd');
 
-  DateTime _weekStart = DateTime.now().subtract(
-    Duration(days: DateTime.now().weekday - 1),
-  );
-  DateTime _weekEnd = DateTime.now().add(
-    Duration(days: DateTime.sunday - DateTime.now().weekday),
-  );
+  DateTime _weekStart = DateTime.now();
+  DateTime _weekEnd = DateTime.now();
 
   // sample data (UI/layout only - no backend)
   List<AttendanceReport> _rows = [
@@ -106,7 +102,7 @@ class _ReportsPageState extends State<ReportsPage> {
   double get _totalOvertime => _rows.fold(0.0, (t, r) => t + r.overtimeHours);
   double get _totalHours => _rows.fold(0.0, (t, r) => t + r.totalHours);
 
-  Future<void> _pickStartDate() async {
+  Future<void> _pickReportDate() async {
     final d = await showDatePicker(
       context: context,
       initialDate: _weekStart,
@@ -116,20 +112,6 @@ class _ReportsPageState extends State<ReportsPage> {
     if (d != null) {
       setState(() {
         _weekStart = d;
-        _weekEnd = _weekStart.add(const Duration(days: 6));
-      });
-    }
-  }
-
-  Future<void> _pickEndDate() async {
-    final d = await showDatePicker(
-      context: context,
-      initialDate: _weekEnd,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
-    );
-    if (d != null) {
-      setState(() {
         _weekEnd = d;
       });
     }
@@ -337,7 +319,7 @@ class _ReportsPageState extends State<ReportsPage> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Summary for ${_dateFmt.format(_weekStart)} — ${_dateFmt.format(_weekEnd)}',
+                        _dateFmt.format(_weekStart),
                         style: TextStyle(color: Colors.grey[700], fontSize: 12),
                       ),
                       const SizedBox(height: 12),
@@ -387,7 +369,7 @@ class _ReportsPageState extends State<ReportsPage> {
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              'Summary for ${_dateFmt.format(_weekStart)} — ${_dateFmt.format(_weekEnd)}',
+                              _dateFmt.format(_weekStart),
                               style: TextStyle(color: Colors.grey[700]),
                             ),
                           ],
@@ -418,7 +400,7 @@ class _ReportsPageState extends State<ReportsPage> {
 
                 const SizedBox(height: 16),
 
-                // Date range selector
+                // Date selector
                 Card(
                   elevation: 1,
                   shape: RoundedRectangleBorder(
@@ -433,25 +415,13 @@ class _ReportsPageState extends State<ReportsPage> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         TextButton.icon(
-                          onPressed: _pickStartDate,
+                          onPressed: _pickReportDate,
                           icon: Icon(
                             Icons.calendar_today,
                             size: isMobile ? 16 : 18,
                           ),
                           label: Text(
                             _dateFmt.format(_weekStart),
-                            style: TextStyle(fontSize: isMobile ? 12 : 14),
-                          ),
-                        ),
-                        const Text('—'),
-                        TextButton.icon(
-                          onPressed: _pickEndDate,
-                          icon: Icon(
-                            Icons.calendar_today,
-                            size: isMobile ? 16 : 18,
-                          ),
-                          label: Text(
-                            _dateFmt.format(_weekEnd),
                             style: TextStyle(fontSize: isMobile ? 12 : 14),
                           ),
                         ),

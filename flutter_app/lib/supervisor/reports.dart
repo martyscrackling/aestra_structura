@@ -4,13 +4,16 @@ import 'widgets/sidebar.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'dart:async';
 import 'dart:convert';
 import '../services/auth_service.dart';
 import '../services/app_config.dart';
+import '../services/app_time_service.dart';
 import 'widgets/supervisor_user_badge.dart';
 
 class AttendanceReport {
   AttendanceReport({
+    required this.fieldWorkerId,
     required this.name,
     required this.role,
     required this.totalDaysPresent,
@@ -19,8 +22,12 @@ class AttendanceReport {
     required this.cashAdvance,
     required this.deduction,
     required this.hourlyRate,
+    required this.sssDeduction,
+    required this.philhealthDeduction,
+    required this.pagibigDeduction,
   });
 
+  final int fieldWorkerId;
   final String name;
   final String role;
   final int totalDaysPresent;
@@ -29,29 +36,23 @@ class AttendanceReport {
   final double cashAdvance;
   final double deduction;
   final double hourlyRate;
+  final double sssDeduction;
+  final double philhealthDeduction;
+  final double pagibigDeduction;
+
+  double get regularHours {
+    final regular = totalHours - overtimeHours;
+    return regular < 0 ? 0 : regular;
+  }
 
   double get grossPay =>
-      totalHours * hourlyRate + overtimeHours * hourlyRate * 1.5;
-
-  // Weekly deductions (monthly rates divided by 4.33 weeks)
-  // SSS: 14% monthly = 3.23% weekly
-  double get sssDeduction => grossPay * 0.0323;
-
-  // PhilHealth: 5% monthly = 1.15% weekly
-  double get philhealthDeduction => grossPay * 0.0115;
-
-  // Pagibig: 1-2% monthly = 0.23-0.46% weekly (using 2% as default)
-  // Maximum basis: ₱5,000/month = ₱1,154.73/week
-  double get pagibigDeduction {
-    final weeklyBasis = grossPay > 1154.73 ? 1154.73 : grossPay;
-    return weeklyBasis * 0.0046; // 2% monthly = 0.46% weekly
-  }
+      regularHours * hourlyRate + overtimeHours * hourlyRate * 1.5;
 
   double get totalGovernmentDeductions =>
       sssDeduction + philhealthDeduction + pagibigDeduction;
 
   double get totalDeductions =>
-      cashAdvance + deduction + totalGovernmentDeductions;
+      deduction + totalGovernmentDeductions;
 
   double get computedSalary => grossPay - totalDeductions;
 }
@@ -90,16 +91,36 @@ class _ReportsPageState extends State<ReportsPage> {
   final Color accent = const Color(0xFFFF6F00);
   final DateFormat _dateFmt = DateFormat('yyyy-MM-dd');
   final DateFormat _prettyDateFmt = DateFormat('MMM d, yyyy');
+  final DateFormat _liveDateTimeFmt = DateFormat('yyyy-MM-dd HH:mm:ss');
 
   bool _isLoading = false;
   bool _isLoadingHistory = false;
   String? _loadError;
+  late DateTime _liveNow;
+  Timer? _liveClockTimer;
 
   @override
   void initState() {
     super.initState();
+    _liveNow = AppTimeService.now();
+    _liveClockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() {
+        _liveNow = AppTimeService.now();
+      });
+    });
+
+    final now = AppTimeService.now();
+    _weekEnd = DateTime(now.year, now.month, now.day);
+    _weekStart = _weekEnd.subtract(Duration(days: _weekEnd.weekday - 1));
     _refreshReports();
     _loadReportsHistory();
+  }
+
+  @override
+  void dispose() {
+    _liveClockTimer?.cancel();
+    super.dispose();
   }
 
   void _navigateToPage(String page) {
@@ -132,12 +153,8 @@ class _ReportsPageState extends State<ReportsPage> {
     }
   }
 
-  DateTime _weekStart = DateTime.now().subtract(
-    Duration(days: DateTime.now().weekday - 1),
-  );
-  DateTime _weekEnd = DateTime.now().add(
-    Duration(days: DateTime.sunday - DateTime.now().weekday),
-  );
+  late DateTime _weekStart;
+  late DateTime _weekEnd;
 
   List<AttendanceReport> _rows = [];
   List<ReportHistoryEntry> _history = [];
@@ -170,6 +187,24 @@ class _ReportsPageState extends State<ReportsPage> {
 
   String _dateString(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  int _inclusiveDays(DateTime start, DateTime end) {
+    final a = DateTime(start.year, start.month, start.day);
+    final b = DateTime(end.year, end.month, end.day);
+    return b.difference(a).inDays + 1;
+  }
+
+  double _resolveWeeklyDeduction(
+    Map<String, dynamic> worker,
+    String totalKey,
+    String minKey,
+  ) {
+    final total = _toDouble(worker[totalKey]);
+    if (total > 0) return total;
+    final min = _toDouble(worker[minKey]);
+    if (min > 0) return min;
+    return 0;
   }
 
   DateTime? _combineDateAndTime(DateTime date, String? rawTime) {
@@ -249,6 +284,54 @@ class _ReportsPageState extends State<ReportsPage> {
     return data.whereType<Map<String, dynamic>>().toList();
   }
 
+  Future<void> _updateWorkerCashAdvanceSettings({
+    required int workerId,
+    required double cashAdvanceBalance,
+    required double deductionPerSalary,
+  }) async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentUser = authService.currentUser ?? <String, dynamic>{};
+    final projectId = _toInt(currentUser['project_id']);
+    final typeOrRole =
+        (currentUser['type'] ?? currentUser['role'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+    final userId = _toInt(currentUser['user_id']);
+    final supervisorId =
+        _toInt(currentUser['supervisor_id']) ??
+        ((typeOrRole == 'supervisor') ? userId : null);
+
+    final scopeQuery = supervisorId != null
+        ? '?supervisor_id=$supervisorId'
+        : (projectId != null ? '?project_id=$projectId' : '');
+
+    final response = await http.patch(
+      AppConfig.apiUri('field-workers/$workerId/$scopeQuery'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'cash_advance_balance': cashAdvanceBalance,
+        'deduction_per_salary': deductionPerSalary,
+      }),
+    );
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      String detail = response.body;
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map<String, dynamic>) {
+          detail = (decoded['detail'] ?? decoded['message'] ?? response.body)
+              .toString();
+        }
+      } catch (_) {
+        // Keep raw response body as detail.
+      }
+      throw Exception(
+        'Failed to update cash advance settings (${response.statusCode}): $detail',
+      );
+    }
+  }
+
   Future<List<AttendanceReport>> _buildReportsForRange({
     required int projectId,
     required DateTime start,
@@ -295,23 +378,61 @@ class _ReportsPageState extends State<ReportsPage> {
       final firstName = (worker['first_name'] ?? '').toString().trim();
       final lastName = (worker['last_name'] ?? '').toString().trim();
       final fullName = ('$firstName $lastName').trim();
-      final dailyRate = _toDouble(worker['payrate']);
-      final double hourlyRate = dailyRate > 0 ? dailyRate / 8.0 : 0.0;
+      final hourlyRate = _toDouble(worker['payrate']);
+
+      final periodDays = _inclusiveDays(start, end);
+      final periodFactor = periodDays / 7.0;
+
+      final sssWeekly = _resolveWeeklyDeduction(
+        worker,
+        'sss_weekly_total',
+        'sss_weekly_min',
+      );
+      final philhealthWeekly = _resolveWeeklyDeduction(
+        worker,
+        'philhealth_weekly_total',
+        'philhealth_weekly_min',
+      );
+      final pagibigWeekly = _resolveWeeklyDeduction(
+        worker,
+        'pagibig_weekly_total',
+        'pagibig_weekly_min',
+      );
+
+      // Fallback for older worker records that don't have computed deduction fields yet.
+        final regularHours = (totals.totalHours - totals.overtimeHours) < 0
+          ? 0.0
+          : (totals.totalHours - totals.overtimeHours);
+        final grossPayEstimate =
+          regularHours * hourlyRate + totals.overtimeHours * hourlyRate * 1.5;
+      final sssDeduction = sssWeekly > 0
+          ? sssWeekly * periodFactor
+          : grossPayEstimate * 0.0323;
+      final philhealthDeduction = philhealthWeekly > 0
+          ? philhealthWeekly * periodFactor
+          : grossPayEstimate * 0.0115;
+      final pagibigDeduction = pagibigWeekly > 0
+          ? pagibigWeekly * periodFactor
+          : ((grossPayEstimate > 1154.73 ? 1154.73 : grossPayEstimate) * 0.0046);
 
       reports.add(
         AttendanceReport(
+          fieldWorkerId: workerId,
           name: fullName.isEmpty ? 'Worker #$workerId' : fullName,
           role: (worker['role'] ?? 'Worker').toString(),
           totalDaysPresent: totals.totalDaysPresent,
           totalHours: totals.totalHours,
           overtimeHours: totals.overtimeHours,
           cashAdvance: _toDouble(
-            worker['cash_advance'] ?? worker['cashAdvance'] ?? 0,
+            worker['cash_advance_balance'] ?? worker['cash_advance'] ?? worker['cashAdvance'] ?? 0,
           ),
           deduction: _toDouble(
-            worker['deduction'] ?? worker['other_deduction'] ?? 0,
+            worker['deduction_per_salary'] ?? worker['deduction'] ?? worker['other_deduction'] ?? 0,
           ),
           hourlyRate: hourlyRate,
+          sssDeduction: sssDeduction,
+          philhealthDeduction: philhealthDeduction,
+          pagibigDeduction: pagibigDeduction,
         ),
       );
     });
@@ -599,24 +720,7 @@ class _ReportsPageState extends State<ReportsPage> {
       _rows.fold(0.0, (t, r) => t + r.philhealthDeduction);
   double get _totalPagibig => _rows.fold(0.0, (t, r) => t + r.pagibigDeduction);
 
-  Future<void> _pickStartDate() async {
-    final d = await showDatePicker(
-      context: context,
-      initialDate: _weekStart,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
-    );
-    if (d != null) {
-      setState(() {
-        _weekStart = d;
-        _weekEnd = _weekStart.add(const Duration(days: 6));
-      });
-      await _refreshReports();
-      await _loadReportsHistory();
-    }
-  }
-
-  Future<void> _pickEndDate() async {
+  Future<void> _pickReportDate() async {
     final d = await showDatePicker(
       context: context,
       initialDate: _weekEnd,
@@ -625,7 +729,8 @@ class _ReportsPageState extends State<ReportsPage> {
     );
     if (d != null) {
       setState(() {
-        _weekEnd = d;
+        _weekEnd = DateTime(d.year, d.month, d.day);
+        _weekStart = _weekEnd.subtract(Duration(days: _weekEnd.weekday - 1));
       });
       await _refreshReports();
       await _loadReportsHistory();
@@ -687,7 +792,7 @@ class _ReportsPageState extends State<ReportsPage> {
         .take(2)
         .join();
     final salaryStr = _money.format(r.computedSalary);
-    final deductionStr = _money.format(r.deduction + r.cashAdvance);
+    final deductionStr = _money.format(r.deduction);
     final cashAdvanceStr = _money.format(r.cashAdvance);
     return Card(
       elevation: 1,
@@ -791,7 +896,7 @@ class _ReportsPageState extends State<ReportsPage> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Deduct: $deductionStr',
+                  'Cash Adv. Deduct: $deductionStr',
                   style: const TextStyle(color: Colors.redAccent, fontSize: 12),
                 ),
               ],
@@ -853,7 +958,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                 if (!isMobile) const SizedBox(height: 6),
                                 if (!isMobile)
                                   Text(
-                                    'Summary for ${_dateFmt.format(_weekStart)} — ${_dateFmt.format(_weekEnd)}',
+                                    _liveDateTimeFmt.format(_liveNow),
                                     style: TextStyle(color: Colors.grey[700]),
                                   ),
                               ],
@@ -1046,7 +1151,7 @@ class _ReportsPageState extends State<ReportsPage> {
                         padding: const EdgeInsets.symmetric(horizontal: 24),
                         child: Row(
                           children: [
-                            // date range selector
+                            // single date selector
                             Card(
                               elevation: 1,
                               shape: RoundedRectangleBorder(
@@ -1060,16 +1165,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                 child: Row(
                                   children: [
                                     TextButton.icon(
-                                      onPressed: _pickStartDate,
-                                      icon: const Icon(
-                                        Icons.calendar_today,
-                                        size: 18,
-                                      ),
-                                      label: Text(_dateFmt.format(_weekStart)),
-                                    ),
-                                    const Text('—'),
-                                    TextButton.icon(
-                                      onPressed: _pickEndDate,
+                                      onPressed: _pickReportDate,
                                       icon: const Icon(
                                         Icons.calendar_today,
                                         size: 18,
@@ -1154,7 +1250,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                         : _rows.isEmpty
                                         ? Center(
                                             child: Text(
-                                              'No attendance data for selected week',
+                                              'No attendance data up to selected date',
                                               style: TextStyle(
                                                 color: Colors.grey[700],
                                               ),
@@ -1357,13 +1453,38 @@ class _ReportsPageState extends State<ReportsPage> {
                                                           ],
                                                         ),
                                                         const SizedBox(
-                                                          width: 8,
+                                                          width: 10,
                                                         ),
-                                                        Icon(
-                                                          Icons.chevron_right,
-                                                          color:
-                                                              Colors.grey[400],
-                                                          size: 20,
+                                                        TextButton.icon(
+                                                          onPressed: () =>
+                                                              _showWorkerDetails(
+                                                                r,
+                                                              ),
+                                                          icon: const Icon(
+                                                            Icons.visibility,
+                                                            size: 16,
+                                                          ),
+                                                          label: const Text(
+                                                            'Summary',
+                                                            style: TextStyle(
+                                                              fontSize: 11,
+                                                            ),
+                                                          ),
+                                                          style:
+                                                              TextButton.styleFrom(
+                                                                padding:
+                                                                    const EdgeInsets.symmetric(
+                                                                      horizontal:
+                                                                          8,
+                                                                      vertical:
+                                                                          4,
+                                                                    ),
+                                                                minimumSize:
+                                                                    Size.zero,
+                                                                tapTargetSize:
+                                                                    MaterialTapTargetSize
+                                                                        .shrinkWrap,
+                                                              ),
                                                         ),
                                                       ],
                                                     ),
@@ -1555,7 +1676,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                           Expanded(
                                             flex: 2,
                                             child: Text(
-                                              'Other',
+                                              'Cash Adv. Deduct',
                                               style: TextStyle(
                                                 fontWeight: FontWeight.w700,
                                                 color: Colors.grey[800],
@@ -1568,6 +1689,18 @@ class _ReportsPageState extends State<ReportsPage> {
                                             flex: 3,
                                             child: Text(
                                               'Net Salary',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w700,
+                                                color: Colors.grey[800],
+                                                fontSize: 13,
+                                              ),
+                                              textAlign: TextAlign.right,
+                                            ),
+                                          ),
+                                          Expanded(
+                                            flex: 2,
+                                            child: Text(
+                                              'Summary',
                                               style: TextStyle(
                                                 fontWeight: FontWeight.w700,
                                                 color: Colors.grey[800],
@@ -1606,7 +1739,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                           : _rows.isEmpty
                                           ? Center(
                                               child: Text(
-                                                'No attendance data for selected week',
+                                                'No attendance data up to selected date',
                                                 style: TextStyle(
                                                   color: Colors.grey[700],
                                                 ),
@@ -1866,8 +1999,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                                         flex: 2,
                                                         child: Text(
                                                           _money.format(
-                                                            r.cashAdvance +
-                                                                r.deduction,
+                                                            r.deduction,
                                                           ),
                                                           style:
                                                               const TextStyle(
@@ -1901,6 +2033,45 @@ class _ReportsPageState extends State<ReportsPage> {
                                                               ),
                                                           textAlign:
                                                               TextAlign.right,
+                                                        ),
+                                                      ),
+                                                      Expanded(
+                                                        flex: 2,
+                                                        child: Align(
+                                                          alignment:
+                                                              Alignment
+                                                                  .centerRight,
+                                                          child: OutlinedButton.icon(
+                                                            onPressed: () =>
+                                                                _showWorkerDetails(
+                                                                  r,
+                                                                ),
+                                                            icon: const Icon(
+                                                              Icons.visibility,
+                                                              size: 16,
+                                                            ),
+                                                            label: const Text(
+                                                              'View',
+                                                              style: TextStyle(
+                                                                fontSize: 12,
+                                                              ),
+                                                            ),
+                                                            style: OutlinedButton.styleFrom(
+                                                              padding:
+                                                                  const EdgeInsets.symmetric(
+                                                                    horizontal:
+                                                                        10,
+                                                                    vertical:
+                                                                        6,
+                                                                  ),
+                                                              side: BorderSide(
+                                                                color: accent
+                                                                    .withOpacity(
+                                                                      0.5,
+                                                                    ),
+                                                              ),
+                                                            ),
+                                                          ),
                                                         ),
                                                       ),
                                                     ],
@@ -2223,22 +2394,38 @@ class _ReportsPageState extends State<ReportsPage> {
 
   // Show detailed worker salary breakdown in a modal
   void _showWorkerDetails(AttendanceReport r) {
+    final cashAdvanceController = TextEditingController(
+      text: r.cashAdvance.toStringAsFixed(2),
+    );
+    final deductionController = TextEditingController(
+      text: r.deduction.toStringAsFixed(2),
+    );
+    double editableCashAdvance = r.cashAdvance;
+    double editableDeduction = r.deduction;
+    bool isSaving = false;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.all(20),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          final liveTotalDeductions =
+              r.totalGovernmentDeductions + editableDeduction;
+          final liveNetSalary = r.grossPay - liveTotalDeductions;
+
+          return Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            padding: const EdgeInsets.all(20),
+            child: SafeArea(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                 // Handle bar
                 Center(
                   child: Container(
@@ -2345,8 +2532,144 @@ class _ReportsPageState extends State<ReportsPage> {
                       ),
                       _detailItem(
                         'Rate',
-                        _money.format(r.hourlyRate),
+                        '${_money.format(r.hourlyRate)}/hr',
                         Icons.attach_money,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF9FAFB),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFE5E7EB)),
+                  ),
+                  child: Text(
+                    'Summary period: ${_dateFmt.format(_weekStart)} to ${_dateFmt.format(_weekEnd)} (as of selected date)',
+                    style: TextStyle(
+                      color: Colors.grey[700],
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Cash advance controls
+                const Text(
+                  'Cash Advance Controls',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF7ED),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFFFD7A8)),
+                  ),
+                  child: Column(
+                    children: [
+                      TextField(
+                        controller: cashAdvanceController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: InputDecoration(
+                          labelText: 'Cash Advance Balance (PHP)',
+                          prefixText: '₱ ',
+                          isDense: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onChanged: (val) {
+                          final parsed = _toDouble(val);
+                          setModalState(() {
+                            editableCashAdvance = parsed < 0 ? 0 : parsed;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: deductionController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: InputDecoration(
+                          labelText: 'Deduction Per Salary (PHP)',
+                          prefixText: '₱ ',
+                          isDense: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onChanged: (val) {
+                          final parsed = _toDouble(val);
+                          setModalState(() {
+                            editableDeduction = parsed < 0 ? 0 : parsed;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: ElevatedButton.icon(
+                          onPressed: isSaving
+                              ? null
+                              : () async {
+                                  setModalState(() {
+                                    isSaving = true;
+                                  });
+                                  try {
+                                    await _updateWorkerCashAdvanceSettings(
+                                      workerId: r.fieldWorkerId,
+                                      cashAdvanceBalance: editableCashAdvance,
+                                      deductionPerSalary: editableDeduction,
+                                    );
+                                    await _refreshReports();
+                                    if (!mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Cash advance settings updated',
+                                        ),
+                                      ),
+                                    );
+                                  } catch (e) {
+                                    if (!mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text(e.toString())),
+                                    );
+                                  } finally {
+                                    if (!mounted) return;
+                                    setModalState(() {
+                                      isSaving = false;
+                                    });
+                                  }
+                                },
+                          icon: isSaving
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.save, size: 16),
+                          label: Text(
+                            isSaving ? 'Saving...' : 'Save',
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: accent,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -2395,16 +2718,15 @@ class _ReportsPageState extends State<ReportsPage> {
                   Colors.lightBlue,
                 ),
                 _salaryRow(
-                  'Cash Advance',
-                  '- ${_money.format(r.cashAdvance)}',
+                  'Cash Advance Balance',
+                  _money.format(editableCashAdvance),
                   Colors.orange,
                 ),
-                if (r.deduction > 0)
-                  _salaryRow(
-                    'Other Deductions',
-                    '- ${_money.format(r.deduction)}',
-                    Colors.redAccent,
-                  ),
+                _salaryRow(
+                  'Deduction Per Salary',
+                  '- ${_money.format(editableDeduction)}',
+                  Colors.redAccent,
+                ),
 
                 const SizedBox(height: 12),
                 Divider(height: 1, thickness: 2, color: Colors.grey[400]),
@@ -2412,7 +2734,7 @@ class _ReportsPageState extends State<ReportsPage> {
 
                 _salaryRow(
                   'Total Deductions',
-                  _money.format(r.totalDeductions),
+                  _money.format(liveTotalDeductions),
                   Colors.redAccent,
                   isBold: true,
                 ),
@@ -2437,7 +2759,7 @@ class _ReportsPageState extends State<ReportsPage> {
                         ),
                       ),
                       Text(
-                        _money.format(r.computedSalary),
+                        _money.format(liveNetSalary),
                         style: const TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w900,
@@ -2448,10 +2770,12 @@ class _ReportsPageState extends State<ReportsPage> {
                   ),
                 ),
                 const SizedBox(height: 12),
-              ],
+                  ],
+                ),
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }

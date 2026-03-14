@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:typed_data';
+import 'dart:math' as math;
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -22,16 +23,18 @@ class AddFieldWorkerModal extends StatefulWidget {
 }
 
 class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
+  static const double _standardHoursPerWeek = 48;
+
   final _formKey = GlobalKey<FormState>();
   final _firstNameController = TextEditingController();
   final _middleNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _phoneNumberController = TextEditingController();
   final _birthdateController = TextEditingController();
-  final _sssIdController = TextEditingController();
-  final _philHealthIdController = TextEditingController();
-  final _pagIbigIdController = TextEditingController();
   final _payrateController = TextEditingController();
+  final _sssTopupController = TextEditingController();
+  final _philHealthTopupController = TextEditingController();
+  final _pagIbigTopupController = TextEditingController();
   final _customRoleController = TextEditingController();
 
   String _selectedRole = 'Mason';
@@ -66,13 +69,63 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
     _lastNameController.dispose();
     _phoneNumberController.dispose();
     _birthdateController.dispose();
-    _sssIdController.dispose();
-    _philHealthIdController.dispose();
-    _pagIbigIdController.dispose();
     _payrateController.dispose();
+    _sssTopupController.dispose();
+    _philHealthTopupController.dispose();
+    _pagIbigTopupController.dispose();
     _customRoleController.dispose();
     super.dispose();
   }
+
+  double _readMoney(TextEditingController controller) {
+    final raw = controller.text.trim().replaceAll(',', '');
+    return double.tryParse(raw) ?? 0;
+  }
+
+  double _round2(double value) => (value * 100).roundToDouble() / 100;
+
+  double _weeklyToMonthlyEquivalent(double weekly) => (weekly * 52) / 12;
+
+  double _sssWeeklyMin(double weeklySalary) {
+    final monthly = _weeklyToMonthlyEquivalent(weeklySalary);
+    final salaryBase = math.min(monthly, 35000);
+    final monthlyEmployeeShare = salaryBase * 0.05;
+    return _round2((monthlyEmployeeShare * 12) / 52);
+  }
+
+  double _philHealthWeeklyMin(double weeklySalary) {
+    final monthly = _weeklyToMonthlyEquivalent(weeklySalary);
+    final salaryBase = math.max(10000, math.min(monthly, 100000));
+    final monthlyEmployeeShare = (salaryBase * 0.05) / 2;
+    return _round2((monthlyEmployeeShare * 12) / 52);
+  }
+
+  double _pagIbigWeeklyMin(double weeklySalary) {
+    final monthly = _weeklyToMonthlyEquivalent(weeklySalary);
+    final salaryBase = math.min(monthly, 5000);
+    final rate = monthly <= 1500 ? 0.01 : 0.02;
+    final monthlyEmployeeShare = salaryBase * rate;
+    return _round2((monthlyEmployeeShare * 12) / 52);
+  }
+
+  double get _hourlyPayrate => math.max(0, _readMoney(_payrateController));
+  double get _weeklySalary => _round2(_hourlyPayrate * _standardHoursPerWeek);
+  double get _sssTopup => math.max(0, _readMoney(_sssTopupController));
+  double get _philHealthTopup => math.max(0, _readMoney(_philHealthTopupController));
+  double get _pagIbigTopup => math.max(0, _readMoney(_pagIbigTopupController));
+
+  double get _sssMinDeduction => _weeklySalary > 0 ? _sssWeeklyMin(_weeklySalary) : 0;
+  double get _philHealthMinDeduction =>
+      _weeklySalary > 0 ? _philHealthWeeklyMin(_weeklySalary) : 0;
+  double get _pagIbigMinDeduction => _weeklySalary > 0 ? _pagIbigWeeklyMin(_weeklySalary) : 0;
+
+  double get _sssTotalDeduction => _round2(_sssMinDeduction + _sssTopup);
+  double get _philHealthTotalDeduction =>
+      _round2(_philHealthMinDeduction + _philHealthTopup);
+  double get _pagIbigTotalDeduction => _round2(_pagIbigMinDeduction + _pagIbigTopup);
+  double get _totalWeeklyDeduction =>
+      _round2(_sssTotalDeduction + _philHealthTotalDeduction + _pagIbigTotalDeduction);
+  double get _netWeeklyPay => _round2(_weeklySalary - _totalWeeklyDeduction);
 
   Future<void> _pickImage() async {
     final ImagePicker picker = ImagePicker();
@@ -298,18 +351,19 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
           'role': _isCustomRole
               ? _customRoleController.text.trim()
               : _selectedRole,
-          'sss_id': _sssIdController.text.trim().isEmpty
-              ? null
-              : _sssIdController.text.trim(),
-          'philhealth_id': _philHealthIdController.text.trim().isEmpty
-              ? null
-              : _philHealthIdController.text.trim(),
-          'pagibig_id': _pagIbigIdController.text.trim().isEmpty
-              ? null
-              : _pagIbigIdController.text.trim(),
-          'payrate': _payrateController.text.trim().isEmpty
-              ? null
-              : double.tryParse(_payrateController.text.trim()),
+            'payrate': _hourlyPayrate > 0 ? _hourlyPayrate : null,
+            'weekly_salary': _weeklySalary > 0 ? _weeklySalary : null,
+            'sss_weekly_topup': _sssTopup,
+            'philhealth_weekly_topup': _philHealthTopup,
+            'pagibig_weekly_topup': _pagIbigTopup,
+            'sss_weekly_min': _sssMinDeduction,
+            'philhealth_weekly_min': _philHealthMinDeduction,
+            'pagibig_weekly_min': _pagIbigMinDeduction,
+            'sss_weekly_total': _sssTotalDeduction,
+            'philhealth_weekly_total': _philHealthTotalDeduction,
+            'pagibig_weekly_total': _pagIbigTotalDeduction,
+            'total_weekly_deduction': _totalWeeklyDeduction,
+            'net_weekly_pay': _netWeeklyPay,
           'region': _selectedRegionId,
           'province': _selectedProvinceId,
           'city': _selectedCityId,
@@ -780,6 +834,7 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
           ? const Center(child: CircularProgressIndicator())
           : DropdownButtonFormField<int>(
               value: _selectedRegionId,
+              isExpanded: true,
               decoration: InputDecoration(
                 labelText: 'Region',
                 labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
@@ -806,11 +861,28 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
                 ),
               ),
               items: _regions.map((region) {
+                final name = region['name'] as String;
                 return DropdownMenuItem<int>(
                   value: region['id'] as int,
-                  child: Text(region['name'] as String),
+                  child: Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 );
               }).toList(),
+              selectedItemBuilder: (context) =>
+                  _regions.map((region) {
+                    final name = region['name'] as String;
+                    return Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    );
+                  }).toList(),
               onChanged: (int? value) async {
                 if (value == null) return;
                 setState(() {
@@ -828,6 +900,7 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
       SizedBox(height: spacing),
       DropdownButtonFormField<int>(
         value: _selectedProvinceId,
+        isExpanded: true,
         decoration: InputDecoration(
           labelText: 'Province',
           labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
@@ -851,11 +924,28 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
           ),
         ),
         items: _provinces.map((province) {
+          final name = province['name'] as String;
           return DropdownMenuItem<int>(
             value: province['id'] as int,
-            child: Text(province['name'] as String),
+            child: Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           );
         }).toList(),
+        selectedItemBuilder: (context) =>
+            _provinces.map((province) {
+              final name = province['name'] as String;
+              return Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              );
+            }).toList(),
         onChanged: (int? value) async {
           if (value == null) return;
           setState(() {
@@ -871,6 +961,7 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
       SizedBox(height: spacing),
       DropdownButtonFormField<int>(
         value: _selectedCityId,
+        isExpanded: true,
         decoration: InputDecoration(
           labelText: 'City',
           labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
@@ -894,11 +985,28 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
           ),
         ),
         items: _cities.map((city) {
+          final name = city['name'] as String;
           return DropdownMenuItem<int>(
             value: city['id'] as int,
-            child: Text(city['name'] as String),
+            child: Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           );
         }).toList(),
+        selectedItemBuilder: (context) =>
+            _cities.map((city) {
+              final name = city['name'] as String;
+              return Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              );
+            }).toList(),
         onChanged: (int? value) async {
           if (value == null) return;
           setState(() {
@@ -912,6 +1020,7 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
       SizedBox(height: spacing),
       DropdownButtonFormField<int>(
         value: _selectedBarangayId,
+        isExpanded: true,
         decoration: InputDecoration(
           labelText: 'Barangay (Optional)',
           labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
@@ -935,11 +1044,28 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
           ),
         ),
         items: _barangays.map((barangay) {
+          final name = barangay['name'] as String;
           return DropdownMenuItem<int>(
             value: barangay['id'] as int,
-            child: Text(barangay['name'] as String),
+            child: Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           );
         }).toList(),
+        selectedItemBuilder: (context) =>
+            _barangays.map((barangay) {
+              final name = barangay['name'] as String;
+              return Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              );
+            }).toList(),
         onChanged: (int? value) {
           setState(() {
             _selectedBarangayId = value;
@@ -949,29 +1075,117 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
       SizedBox(height: spacing),
 
       const Text(
-        'ID Numbers',
+        'Salary & Deductions',
         style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
       ),
       SizedBox(height: spacing),
       _buildTextField(
-        controller: _sssIdController,
-        hintText: 'SSS ID (Optional)',
-      ),
-      SizedBox(height: spacing),
-      _buildTextField(
-        controller: _philHealthIdController,
-        hintText: 'PhilHealth ID (Optional)',
-      ),
-      SizedBox(height: spacing),
-      _buildTextField(
-        controller: _pagIbigIdController,
-        hintText: 'PagIbig ID (Optional)',
-      ),
-      SizedBox(height: spacing),
-      _buildTextField(
         controller: _payrateController,
-        hintText: 'Payrate (Optional)',
+        hintText: 'Payrate Per Hour',
         keyboardType: TextInputType.number,
+        onChanged: (_) => setState(() {}),
+        validator: (value) {
+          final amount = double.tryParse((value ?? '').trim().replaceAll(',', ''));
+          if (amount == null || amount <= 0) {
+            return 'Hourly payrate is required';
+          }
+          return null;
+        },
+      ),
+      SizedBox(height: spacing),
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF9FAFB),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFE5E7EB)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Minimum weekly deductions (auto-computed)',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF6B7280),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _buildDeductionRow(
+              'Computed weekly salary (48 hrs/week)',
+              _weeklySalary,
+            ),
+            const SizedBox(height: 4),
+            _buildDeductionRow('SSS (minimum)', _sssMinDeduction),
+            _buildDeductionRow('PhilHealth (minimum)', _philHealthMinDeduction),
+            _buildDeductionRow('Pag-IBIG (minimum)', _pagIbigMinDeduction),
+          ],
+        ),
+      ),
+      SizedBox(height: spacing),
+      _buildTextField(
+        controller: _sssTopupController,
+        hintText: 'SSS top-up (optional, additional only)',
+        keyboardType: TextInputType.number,
+        onChanged: (_) => setState(() {}),
+        validator: (value) {
+          final amount = double.tryParse((value ?? '').trim().replaceAll(',', ''));
+          if (amount == null && (value ?? '').trim().isNotEmpty) {
+            return 'Invalid amount';
+          }
+          if ((amount ?? 0) < 0) return 'Cannot be negative';
+          return null;
+        },
+      ),
+      SizedBox(height: spacing),
+      _buildTextField(
+        controller: _philHealthTopupController,
+        hintText: 'PhilHealth top-up (optional, additional only)',
+        keyboardType: TextInputType.number,
+        onChanged: (_) => setState(() {}),
+        validator: (value) {
+          final amount = double.tryParse((value ?? '').trim().replaceAll(',', ''));
+          if (amount == null && (value ?? '').trim().isNotEmpty) {
+            return 'Invalid amount';
+          }
+          if ((amount ?? 0) < 0) return 'Cannot be negative';
+          return null;
+        },
+      ),
+      SizedBox(height: spacing),
+      _buildTextField(
+        controller: _pagIbigTopupController,
+        hintText: 'Pag-IBIG top-up (optional, additional only)',
+        keyboardType: TextInputType.number,
+        onChanged: (_) => setState(() {}),
+        validator: (value) {
+          final amount = double.tryParse((value ?? '').trim().replaceAll(',', ''));
+          if (amount == null && (value ?? '').trim().isNotEmpty) {
+            return 'Invalid amount';
+          }
+          if ((amount ?? 0) < 0) return 'Cannot be negative';
+          return null;
+        },
+      ),
+      SizedBox(height: spacing),
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF7ED),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFFFD7A8)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildDeductionRow('Total weekly deduction', _totalWeeklyDeduction),
+            const SizedBox(height: 4),
+            _buildDeductionRow('Estimated net weekly pay', _netWeeklyPay),
+          ],
+        ),
       ),
       SizedBox(height: spacing),
       Column(
@@ -1048,6 +1262,27 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
         ),
       ],
     ];
+  }
+
+  Widget _buildDeductionRow(String label, double value) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+          ),
+        ),
+        Text(
+          'PHP ${value.toStringAsFixed(2)}',
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF0C1935),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildTextField({

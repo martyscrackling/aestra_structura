@@ -6,7 +6,7 @@ class ApiService {
   // Configure at build time:
   // flutter build web --dart-define=API_BASE_URL=https://YOUR_BACKEND/api/
   // flutter build apk --dart-define=API_BASE_URL=https://YOUR_BACKEND/api/
-  static const String baseUrl = AppConfig.apiBaseUrl;
+  static final String baseUrl = AppConfig.apiBaseUrl;
 
   static Future<Map<String, dynamic>> registerUser(
     String email,

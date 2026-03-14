@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import 'widgets/sidebar.dart';
 import '../services/auth_service.dart';
+import '../services/app_time_service.dart';
 import 'widgets/supervisor_user_badge.dart';
 
 class DailyLogsPage extends StatefulWidget {
@@ -89,7 +90,7 @@ class _DailyLogsPageState extends State<DailyLogsPage> {
   }
 
   String _timeNow() {
-    final d = DateTime.now();
+    final d = AppTimeService.now();
     return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
   }
 

@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'dart:async';
 import '../services/auth_service.dart';
 import '../services/app_config.dart';
+import '../services/app_time_service.dart';
 import '../services/subscription_helper.dart';
 import 'widgets/sidebar.dart';
 import 'widgets/supervisor_user_badge.dart';
@@ -28,7 +29,7 @@ class _AttendancePageState extends State<AttendancePage> {
   late Future<List<Map<String, dynamic>>> _fieldWorkersFuture;
   late Future<List<Map<String, dynamic>>> _attendanceRecordsFuture;
 
-  DateTime selectedDate = DateTime.now();
+  DateTime selectedDate = AppTimeService.now();
   String searchQuery = '';
   String statusFilter = 'All';
   String roleFilter = 'All';
@@ -88,14 +89,18 @@ class _AttendancePageState extends State<AttendancePage> {
     }
   }
 
-  Future<void> _saveAttendance(Map<String, dynamic> attendanceData) async {
+  Future<void> _saveAttendance(
+    Map<String, dynamic> attendanceData, {
+    DateTime? attendanceDate,
+  }) async {
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
       final projectId = authService.currentUser?['project_id'];
 
       attendanceData['project'] = projectId;
-      attendanceData['attendance_date'] =
-          '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}';
+        final effectiveDate = attendanceDate ?? selectedDate;
+        attendanceData['attendance_date'] =
+          '${effectiveDate.year}-${effectiveDate.month.toString().padLeft(2, '0')}-${effectiveDate.day.toString().padLeft(2, '0')}';
 
       // Check if attendance record exists
       final existingRecords = await http.get(
@@ -109,7 +114,7 @@ class _AttendancePageState extends State<AttendancePage> {
         if (data.isNotEmpty) {
           // Update existing
           final attendanceId = data[0]['attendance_id'];
-          final updateResponse = await http.put(
+          final updateResponse = await http.patch(
             AppConfig.apiUri('attendance/$attendanceId/'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode(attendanceData),
@@ -171,17 +176,72 @@ class _AttendancePageState extends State<AttendancePage> {
     return null;
   }
 
-  String _nowTimeString() {
-    final now = DateTime.now();
-    final hh = now.hour.toString().padLeft(2, '0');
-    final mm = now.minute.toString().padLeft(2, '0');
-    final ss = now.second.toString().padLeft(2, '0');
-    return '$hh:$mm:$ss';
+  String _timeOfDayToTimeString(TimeOfDay time) {
+    final hh = time.hour.toString().padLeft(2, '0');
+    final mm = time.minute.toString().padLeft(2, '0');
+    return '$hh:$mm:00';
+  }
+
+  int? _timeStringToMinutes(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    final normalized = raw.split('.').first;
+    final parts = normalized.split(':');
+    if (parts.length < 2) return null;
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour == null || minute == null) return null;
+    return hour * 60 + minute;
+  }
+
+  Future<Map<String, dynamic>?> _fetchExistingAttendanceRecord({
+    required int fieldWorkerId,
+    required DateTime attendanceDate,
+  }) async {
+    final dateStr =
+        '${attendanceDate.year}-${attendanceDate.month.toString().padLeft(2, '0')}-${attendanceDate.day.toString().padLeft(2, '0')}';
+    final existingRecords = await http.get(
+      AppConfig.apiUri(
+        'attendance/?field_worker_id=$fieldWorkerId&attendance_date=$dateStr',
+      ),
+    );
+
+    if (existingRecords.statusCode != 200) return null;
+    final List<dynamic> data = jsonDecode(existingRecords.body);
+    if (data.isEmpty) return null;
+    return data.first is Map<String, dynamic>
+        ? data.first as Map<String, dynamic>
+        : null;
+  }
+
+  Future<String?> _pickScanTime() async {
+    final seededNow = AppTimeService.now();
+    final now = TimeOfDay(hour: seededNow.hour, minute: seededNow.minute);
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: now,
+      helpText: 'Set attendance time',
+      confirmText: 'Use time',
+      cancelText: 'Cancel',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+              primary: primary,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked == null) return null;
+    return _timeOfDayToTimeString(picked);
   }
 
   Future<void> _recordAttendanceFromScan({
     required String action,
     required int fieldWorkerId,
+    required String time,
   }) async {
     final authService = Provider.of<AuthService>(context, listen: false);
     final projectId = authService.currentUser?['project_id'];
@@ -195,8 +255,40 @@ class _AttendancePageState extends State<AttendancePage> {
     }
 
     final attendanceData = <String, dynamic>{'field_worker': fieldWorkerId};
+    final scanNow = AppTimeService.now();
+    final scanDate = DateTime(scanNow.year, scanNow.month, scanNow.day);
 
-    final time = _nowTimeString();
+    if (action == 'Time Out') {
+      final existing = await _fetchExistingAttendanceRecord(
+        fieldWorkerId: fieldWorkerId,
+        attendanceDate: scanDate,
+      );
+      final inMinutes = _timeStringToMinutes(
+        (existing?['check_in_time'] ?? '').toString(),
+      );
+      final outMinutes = _timeStringToMinutes(time);
+
+      if (inMinutes == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cannot time out before time in is recorded.'),
+          ),
+        );
+        return;
+      }
+
+      if (outMinutes == null || outMinutes <= inMinutes) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Time Out must be later than Time In.'),
+          ),
+        );
+        return;
+      }
+    }
+
     switch (action) {
       case 'Time In':
         attendanceData['check_in_time'] = time;
@@ -219,7 +311,14 @@ class _AttendancePageState extends State<AttendancePage> {
         break;
     }
 
-    await _saveAttendance(attendanceData);
+    if (mounted) {
+      setState(() {
+        // Keep attendance view aligned with the actual scan day.
+        selectedDate = scanDate;
+      });
+    }
+
+    await _saveAttendance(attendanceData, attendanceDate: scanDate);
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -763,49 +862,6 @@ class _AttendancePageState extends State<AttendancePage> {
                                             ),
                                           ),
                                         ),
-                                        const SizedBox(width: 4),
-                                        Expanded(
-                                          child: InkWell(
-                                            onTap: _showCashAdvanceDialog,
-                                            borderRadius: BorderRadius.circular(
-                                              8,
-                                            ),
-                                            child: Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    vertical: 8,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: const Color(
-                                                  0xFFFFA726,
-                                                ).withOpacity(0.1),
-                                                borderRadius:
-                                                    BorderRadius.circular(8),
-                                              ),
-                                              child: Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.center,
-                                                children: const [
-                                                  Icon(
-                                                    Icons.request_page,
-                                                    color: Color(0xFFFFA726),
-                                                    size: 16,
-                                                  ),
-                                                  SizedBox(width: 4),
-                                                  Text(
-                                                    'Cash',
-                                                    style: TextStyle(
-                                                      color: Color(0xFFFFA726),
-                                                      fontSize: 11,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        ),
                                       ],
                                     ),
                                   ],
@@ -957,34 +1013,6 @@ class _AttendancePageState extends State<AttendancePage> {
                                               child: const Icon(
                                                 Icons.edit_calendar,
                                                 color: Color(0xFF16A085),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Tooltip(
-                                          message: 'Cash Advance',
-                                          child: InkWell(
-                                            onTap: _showCashAdvanceDialog,
-                                            borderRadius: BorderRadius.circular(
-                                              10,
-                                            ),
-                                            child: Container(
-                                              padding: const EdgeInsets.all(10),
-                                              decoration: BoxDecoration(
-                                                color: Colors.white,
-                                                borderRadius:
-                                                    BorderRadius.circular(10),
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                    color: Colors.black12,
-                                                    blurRadius: 6,
-                                                  ),
-                                                ],
-                                              ),
-                                              child: const Icon(
-                                                Icons.request_page,
-                                                color: Color(0xFFFFA726),
                                               ),
                                             ),
                                           ),
@@ -1773,9 +1801,13 @@ class _AttendancePageState extends State<AttendancePage> {
     final icon = _getActionIcon(action);
 
     return InkWell(
-      onTap: () {
+      onTap: () async {
+        final selectedTime = await _pickScanTime();
+        if (selectedTime == null) {
+          return;
+        }
         Navigator.pop(context);
-        _showQRScannerDialog(action);
+        _showQRScannerDialog(action, selectedTime);
       },
       borderRadius: BorderRadius.circular(12),
       child: Container(
@@ -1820,7 +1852,7 @@ class _AttendancePageState extends State<AttendancePage> {
     );
   }
 
-  void _showQRScannerDialog(String action) {
+  void _showQRScannerDialog(String action, String selectedTime) {
     final color = _getActionColor(action);
     final MobileScannerController controller = MobileScannerController();
     bool isHandlingScan = false;
@@ -1884,8 +1916,8 @@ class _AttendancePageState extends State<AttendancePage> {
                               ),
                             ),
                             const SizedBox(height: 4),
-                            const Text(
-                              'Scan worker QR code',
+                            Text(
+                              'Scan worker QR code • Time: $selectedTime',
                               style: TextStyle(
                                 color: Colors.white70,
                                 fontSize: 12,
@@ -1940,6 +1972,7 @@ class _AttendancePageState extends State<AttendancePage> {
                                 _recordAttendanceFromScan(
                                   action: action,
                                   fieldWorkerId: id,
+                                  time: selectedTime,
                                 ),
                               );
                               break;
@@ -2215,153 +2248,6 @@ class _AttendancePageState extends State<AttendancePage> {
                     : null,
                 style: ElevatedButton.styleFrom(backgroundColor: primary),
                 child: const Text('Add'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  void _showCashAdvanceDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          String? selectedWorkerId;
-          String amount = '';
-          String deductionPerSalary = '';
-
-          return AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            title: const Text('Cash Advance Request'),
-            content: FutureBuilder<List<Map<String, dynamic>>>(
-              future: _fetchFieldWorkers(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting)
-                  return const Center(child: CircularProgressIndicator());
-                if (!snapshot.hasData || snapshot.data!.isEmpty)
-                  return const Text('No workers found');
-
-                final workers = snapshot.data!;
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Select Worker',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: DropdownButton<String>(
-                        value: selectedWorkerId,
-                        hint: const Text('Select worker'),
-                        underline: const SizedBox(),
-                        isExpanded: true,
-                        items: (() {
-                          final sortedWorkers = List<Map<String, dynamic>>.from(
-                            workers,
-                          );
-                          sortedWorkers.sort((a, b) {
-                            final nameA = '${a['first_name']} ${a['last_name']}'
-                                .toLowerCase();
-                            final nameB = '${b['first_name']} ${b['last_name']}'
-                                .toLowerCase();
-                            return nameA.compareTo(nameB);
-                          });
-                          return sortedWorkers
-                              .map(
-                                (w) => DropdownMenuItem<String>(
-                                  value: w['field_worker_id'].toString(),
-                                  child: Text(
-                                    '${w['first_name']} ${w['last_name']} - ${w['role']}',
-                                  ),
-                                ),
-                              )
-                              .toList();
-                        })(),
-                        onChanged: (val) =>
-                            setState(() => selectedWorkerId = val),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Amount (PHP)',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Enter advance amount',
-                        prefixText: '₱ ',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        isDense: true,
-                      ),
-                      keyboardType: TextInputType.number,
-                      onChanged: (val) => amount = val,
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Deduction per salary (PHP)',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      decoration: InputDecoration(
-                        hintText: 'How much to deduct every salary',
-                        prefixText: '₱ ',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        isDense: true,
-                      ),
-                      keyboardType: TextInputType.number,
-                      onChanged: (val) => deductionPerSalary = val,
-                    ),
-                  ],
-                );
-              },
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed:
-                    selectedWorkerId != null &&
-                        amount.isNotEmpty &&
-                        deductionPerSalary.isNotEmpty
-                    ? () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Cash advance request submitted'),
-                          ),
-                        );
-                        Navigator.pop(context);
-                      }
-                    : null,
-                style: ElevatedButton.styleFrom(backgroundColor: primary),
-                child: const Text('Submit Request'),
               ),
             ],
           );

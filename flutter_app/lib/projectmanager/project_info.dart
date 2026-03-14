@@ -8,6 +8,7 @@ import 'widgets/responsive_page_layout.dart';
 import 'project_details_page.dart' as task_details;
 import '../services/app_config.dart';
 import '../services/auth_service.dart';
+import '../services/app_time_service.dart';
 
 class ProjectDetailsPage extends StatefulWidget {
   final String projectTitle;
@@ -125,6 +126,24 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
 
   bool _showDaysLeftReminder = true;
 
+  @override
+  void initState() {
+    super.initState();
+    AppTimeService.overrideNotifier.addListener(_onTestTimeChanged);
+    _fetchProjectDetails();
+  }
+
+  @override
+  void dispose() {
+    AppTimeService.overrideNotifier.removeListener(_onTestTimeChanged);
+    super.dispose();
+  }
+
+  void _onTestTimeChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
   int? _toInt(dynamic value) {
     if (value == null) return null;
     if (value is int) return value;
@@ -160,7 +179,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
       final endDateStr = _projectInfo!['end_date'] as String;
       if (endDateStr.isEmpty) return null;
       final endDate = DateTime.parse(endDateStr);
-      final now = DateTime.now();
+      final now = AppTimeService.now();
       final today = DateTime(now.year, now.month, now.day);
       final diff = endDate.difference(today).inDays;
       return diff >= 0 ? diff : 0;
@@ -175,12 +194,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
   List<dynamic>? _phases;
   bool _isLoading = true;
   String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _fetchProjectDetails();
-  }
 
   // Calculate overall project progress based on phases (matching task_progress.dart)
   double _calculateProjectProgress() {

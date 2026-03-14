@@ -21,6 +21,7 @@ class _SidebarState extends State<Sidebar> {
       'Clients': '/clients',
       'Reports': '/reports',
       'Inventory': '/inventory',
+      'Test Time': '/test-time',
       'Settings': '/settings',
     };
 
@@ -39,6 +40,7 @@ class _SidebarState extends State<Sidebar> {
       {"label": "Clients", "icon": Icons.person},
       {"label": "Inventory", "icon": Icons.inventory_2_outlined},
       {"label": "Reports", "icon": Icons.insert_chart},
+      {"label": "Test Time", "icon": Icons.access_time_filled},
     ];
 
     // more compact sizes

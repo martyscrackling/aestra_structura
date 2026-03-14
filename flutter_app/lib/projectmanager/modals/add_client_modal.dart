@@ -631,6 +631,7 @@ class _AddClientModalState extends State<AddClientModal> {
                                       )
                                     : DropdownButtonFormField<int>(
                                         value: _selectedRegionId,
+                                      isExpanded: true,
                                         decoration: InputDecoration(
                                           labelText: 'Region',
                                           labelStyle: TextStyle(
@@ -686,6 +687,7 @@ class _AddClientModalState extends State<AddClientModal> {
 
                                 DropdownButtonFormField<int>(
                                   value: _selectedProvinceId,
+                                  isExpanded: true,
                                   decoration: InputDecoration(
                                     labelText: 'Province',
                                     labelStyle: TextStyle(
@@ -733,6 +735,7 @@ class _AddClientModalState extends State<AddClientModal> {
 
                                 DropdownButtonFormField<int>(
                                   value: _selectedCityId,
+                                  isExpanded: true,
                                   decoration: InputDecoration(
                                     labelText: 'City',
                                     labelStyle: TextStyle(
@@ -780,6 +783,7 @@ class _AddClientModalState extends State<AddClientModal> {
 
                                 DropdownButtonFormField<int>(
                                   value: _selectedBarangayId,
+                                  isExpanded: true,
                                   decoration: InputDecoration(
                                     labelText: 'Barangay',
                                     labelStyle: TextStyle(
@@ -1001,6 +1005,7 @@ class _AddClientModalState extends State<AddClientModal> {
                                         )
                                       : DropdownButtonFormField<int>(
                                           value: _selectedRegionId,
+                                          isExpanded: true,
                                           decoration: InputDecoration(
                                             labelText: 'Region',
                                             labelStyle: TextStyle(
@@ -1053,6 +1058,7 @@ class _AddClientModalState extends State<AddClientModal> {
 
                                   DropdownButtonFormField<int>(
                                     value: _selectedProvinceId,
+                                    isExpanded: true,
                                     decoration: InputDecoration(
                                       labelText: 'Province',
                                       labelStyle: TextStyle(
@@ -1100,6 +1106,7 @@ class _AddClientModalState extends State<AddClientModal> {
 
                                   DropdownButtonFormField<int>(
                                     value: _selectedCityId,
+                                    isExpanded: true,
                                     decoration: InputDecoration(
                                       labelText: 'City',
                                       labelStyle: TextStyle(
@@ -1147,6 +1154,7 @@ class _AddClientModalState extends State<AddClientModal> {
 
                                   DropdownButtonFormField<int>(
                                     value: _selectedBarangayId,
+                                    isExpanded: true,
                                     decoration: InputDecoration(
                                       labelText: 'Barangay',
                                       labelStyle: TextStyle(

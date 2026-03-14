@@ -1,7 +1,52 @@
 from rest_framework import serializers
 from django.db import IntegrityError, transaction
+from decimal import Decimal, ROUND_HALF_UP
 from .email_utils import send_invitation_email, send_project_assignment_email
 from app import models
+
+
+_TWO_DP = Decimal('0.01')
+_STANDARD_HOURS_PER_WEEK = Decimal('48')
+
+
+def _q(value):
+    return value.quantize(_TWO_DP, rounding=ROUND_HALF_UP)
+
+
+def _to_decimal(value, default='0'):
+    if value in (None, ''):
+        return Decimal(default)
+    if isinstance(value, Decimal):
+        return value
+    return Decimal(str(value))
+
+
+def _weekly_statutory_minimums(weekly_salary):
+    """Compute weekly employee-share statutory minimum deductions.
+
+    These are intentionally centralized so rates/caps can be updated in one place.
+    """
+    weekly = _to_decimal(weekly_salary)
+    monthly_equivalent = (weekly * Decimal('52')) / Decimal('12')
+
+    # SSS employee share baseline: 5% of monthly equivalent, capped.
+    sss_salary_base = min(monthly_equivalent, Decimal('35000'))
+    sss_monthly_min = sss_salary_base * Decimal('0.05')
+
+    # PhilHealth employee share: half of 5% premium with salary floor/ceiling.
+    philhealth_base = max(Decimal('10000'), min(monthly_equivalent, Decimal('100000')))
+    philhealth_monthly_min = (philhealth_base * Decimal('0.05')) / Decimal('2')
+
+    # Pag-IBIG employee share with common mandatory cap behavior.
+    pagibig_base = min(monthly_equivalent, Decimal('5000'))
+    pagibig_rate = Decimal('0.01') if monthly_equivalent <= Decimal('1500') else Decimal('0.02')
+    pagibig_monthly_min = pagibig_base * pagibig_rate
+
+    return {
+        'sss_weekly_min': _q((sss_monthly_min * Decimal('12')) / Decimal('52')),
+        'philhealth_weekly_min': _q((philhealth_monthly_min * Decimal('12')) / Decimal('52')),
+        'pagibig_weekly_min': _q((pagibig_monthly_min * Decimal('12')) / Decimal('52')),
+    }
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -410,6 +455,20 @@ class FieldWorkerSerializer(serializers.ModelSerializer):
             'philhealth_id',
             'pagibig_id',
             'payrate',
+            'cash_advance_balance',
+            'deduction_per_salary',
+            'weekly_salary',
+            'sss_weekly_min',
+            'philhealth_weekly_min',
+            'pagibig_weekly_min',
+            'sss_weekly_topup',
+            'philhealth_weekly_topup',
+            'pagibig_weekly_topup',
+            'sss_weekly_total',
+            'philhealth_weekly_total',
+            'pagibig_weekly_total',
+            'total_weekly_deduction',
+            'net_weekly_pay',
             'photo',
             'created_at',
         ]
@@ -430,8 +489,102 @@ class FieldWorkerSerializer(serializers.ModelSerializer):
             'philhealth_id': {'required': False, 'allow_null': True},
             'pagibig_id': {'required': False, 'allow_null': True},
             'payrate': {'required': False, 'allow_null': True},
+            'cash_advance_balance': {'required': False, 'allow_null': True},
+            'deduction_per_salary': {'required': False, 'allow_null': True},
+            'weekly_salary': {'required': False, 'allow_null': True},
+            'sss_weekly_topup': {'required': False, 'allow_null': True},
+            'philhealth_weekly_topup': {'required': False, 'allow_null': True},
+            'pagibig_weekly_topup': {'required': False, 'allow_null': True},
             'photo': {'required': False, 'allow_null': True},
         }
+
+    def validate(self, attrs):
+        cash_advance_balance = _to_decimal(
+            attrs.get(
+                'cash_advance_balance',
+                self.instance.cash_advance_balance if self.instance is not None else Decimal('0'),
+            )
+        )
+        deduction_per_salary = _to_decimal(
+            attrs.get(
+                'deduction_per_salary',
+                self.instance.deduction_per_salary if self.instance is not None else Decimal('0'),
+            )
+        )
+
+        if cash_advance_balance < 0:
+            raise serializers.ValidationError({'cash_advance_balance': 'Cash advance cannot be negative.'})
+        if deduction_per_salary < 0:
+            raise serializers.ValidationError({'deduction_per_salary': 'Deduction per salary cannot be negative.'})
+
+        attrs['cash_advance_balance'] = _q(cash_advance_balance)
+        attrs['deduction_per_salary'] = _q(deduction_per_salary)
+
+        payroll_keys = {
+            'payrate',
+            'weekly_salary',
+            'sss_weekly_topup',
+            'philhealth_weekly_topup',
+            'pagibig_weekly_topup',
+        }
+        if self.instance is not None and not any(k in attrs for k in payroll_keys):
+            return attrs
+
+        weekly_salary = attrs.get('weekly_salary', None)
+        payrate = attrs.get('payrate', None)
+        hourly_payrate = None
+
+        if weekly_salary in (None, '') and payrate not in (None, ''):
+            hourly_payrate = _to_decimal(payrate)
+            weekly_salary = hourly_payrate * _STANDARD_HOURS_PER_WEEK
+        elif payrate not in (None, ''):
+            hourly_payrate = _to_decimal(payrate)
+
+        if weekly_salary in (None, '') and self.instance is not None:
+            if self.instance.weekly_salary not in (None, ''):
+                weekly_salary = self.instance.weekly_salary
+            elif self.instance.payrate not in (None, ''):
+                hourly_payrate = _to_decimal(self.instance.payrate)
+                weekly_salary = hourly_payrate * _STANDARD_HOURS_PER_WEEK
+
+        if hourly_payrate is None:
+            hourly_payrate = _to_decimal(weekly_salary) / _STANDARD_HOURS_PER_WEEK
+
+        if weekly_salary in (None, ''):
+            raise serializers.ValidationError({'weekly_salary': 'Weekly salary is required.'})
+
+        weekly_salary_dec = _to_decimal(weekly_salary)
+        if weekly_salary_dec <= Decimal('0'):
+            raise serializers.ValidationError({'weekly_salary': 'Weekly salary must be greater than zero.'})
+
+        sss_topup = _to_decimal(attrs.get('sss_weekly_topup', Decimal('0')))
+        philhealth_topup = _to_decimal(attrs.get('philhealth_weekly_topup', Decimal('0')))
+        pagibig_topup = _to_decimal(attrs.get('pagibig_weekly_topup', Decimal('0')))
+
+        if sss_topup < 0 or philhealth_topup < 0 or pagibig_topup < 0:
+            raise serializers.ValidationError('Top-up deductions cannot be negative.')
+
+        mins = _weekly_statutory_minimums(weekly_salary_dec)
+        sss_total = _q(mins['sss_weekly_min'] + sss_topup)
+        philhealth_total = _q(mins['philhealth_weekly_min'] + philhealth_topup)
+        pagibig_total = _q(mins['pagibig_weekly_min'] + pagibig_topup)
+        total_deduction = _q(sss_total + philhealth_total + pagibig_total)
+        net_weekly = _q(weekly_salary_dec - total_deduction)
+
+        attrs['weekly_salary'] = _q(weekly_salary_dec)
+        attrs['payrate'] = _q(hourly_payrate)
+        attrs['sss_weekly_min'] = mins['sss_weekly_min']
+        attrs['philhealth_weekly_min'] = mins['philhealth_weekly_min']
+        attrs['pagibig_weekly_min'] = mins['pagibig_weekly_min']
+        attrs['sss_weekly_topup'] = _q(sss_topup)
+        attrs['philhealth_weekly_topup'] = _q(philhealth_topup)
+        attrs['pagibig_weekly_topup'] = _q(pagibig_topup)
+        attrs['sss_weekly_total'] = sss_total
+        attrs['philhealth_weekly_total'] = philhealth_total
+        attrs['pagibig_weekly_total'] = pagibig_total
+        attrs['total_weekly_deduction'] = total_deduction
+        attrs['net_weekly_pay'] = net_weekly
+        return attrs
     
     def create(self, validated_data):
         # If the client doesn't send a user_id (common for Supervisor logins where

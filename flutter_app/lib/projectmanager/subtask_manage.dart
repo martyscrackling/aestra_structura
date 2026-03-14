@@ -430,6 +430,8 @@ class _ViewWorkForceModalState extends State<ViewWorkForceModal> {
           if (workerResponse.statusCode == 200) {
             final workerData = jsonDecode(workerResponse.body);
             workers.add({
+              'assignment_id': assignment['assignment_id'],
+              'field_worker_id': assignment['field_worker'],
               'name': '${workerData['first_name']} ${workerData['last_name']}',
               'role': workerData['role'] ?? 'Field Worker',
               'phone': workerData['phone_number'] ?? 'N/A',
@@ -453,6 +455,68 @@ class _ViewWorkForceModalState extends State<ViewWorkForceModal> {
         _error = e.toString();
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _removeAssignedWorker(Map<String, dynamic> worker) async {
+    final assignmentId = worker['assignment_id'];
+    if (assignmentId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Missing assignment id.')),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Text('Remove Worker'),
+        content: Text('Remove ${worker['name']} from this subtask?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Remove', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      final response = await http.delete(
+        AppConfig.apiUri('subtask-assignments/$assignmentId/'),
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 204 || response.statusCode == 200) {
+        setState(() {
+          _assignedWorkers.removeWhere(
+            (w) => w['assignment_id'].toString() == assignmentId.toString(),
+          );
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${worker['name']} removed from subtask')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to remove worker (${response.statusCode})'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error removing worker: $e')),
+      );
     }
   }
 
@@ -670,6 +734,16 @@ class _ViewWorkForceModalState extends State<ViewWorkForceModal> {
                                     fontWeight: FontWeight.w600,
                                     color: Color(0xFF10B981),
                                   ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                tooltip: 'Remove worker',
+                                onPressed: () => _removeAssignedWorker(worker),
+                                icon: const Icon(
+                                  Icons.person_remove,
+                                  color: Colors.red,
+                                  size: 20,
                                 ),
                               ),
                             ],

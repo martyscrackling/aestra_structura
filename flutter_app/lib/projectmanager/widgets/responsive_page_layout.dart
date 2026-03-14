@@ -137,7 +137,7 @@ class _BottomNavBar extends StatelessWidget {
     ];
 
     // Check if current page is in the "More" submenu
-    final morePages = ['Inventory', 'Reports', 'Settings'];
+    final morePages = ['Inventory', 'Reports', 'Test Time', 'Settings'];
     final isOnMorePage = morePages.contains(currentPage);
 
     return Container(
@@ -259,6 +259,12 @@ class _BottomNavBar extends StatelessWidget {
             _buildMoreMenuItem(
               rootContext,
               sheetContext,
+              "Test Time",
+              Icons.access_time_filled,
+            ),
+            _buildMoreMenuItem(
+              rootContext,
+              sheetContext,
               "Settings",
               Icons.settings,
             ),
@@ -292,6 +298,7 @@ class _BottomNavBar extends StatelessWidget {
       'Clients': '/clients',
       'Inventory': '/inventory',
       'Reports': '/reports',
+      'Test Time': '/test-time',
       'Settings': '/settings',
     };
 

@@ -13,6 +13,7 @@ import 'projectmanager/clients_page.dart';
 import 'projectmanager/reports_page.dart';
 import 'projectmanager/inventory_page.dart';
 import 'projectmanager/settings_page.dart';
+import 'projectmanager/test_time_page.dart';
 import 'supervisor/dashboard_page.dart' as supervisor;
 import 'supervisor/all_projects.dart' as supervisor;
 import 'supervisor/workers_management.dart' as supervisor;
@@ -24,6 +25,7 @@ import 'supervisor/inventory.dart' as supervisor;
 import 'client/cl_dashboard.dart' as client;
 import 'license/plan.dart';
 import 'services/auth_service.dart';
+import 'services/app_time_service.dart';
 import 'services/url_strategy/url_strategy.dart';
 
 void main() async {
@@ -47,6 +49,7 @@ void main() async {
   );
 
   configureUrlStrategy();
+  await AppTimeService.initialize();
 
   // Initialize auth ONCE before app starts
   final authService = AuthService();
@@ -143,6 +146,11 @@ class StructuraApp extends StatelessWidget {
           path: '/settings',
           builder: (context, state) => SettingsPage(),
           name: 'settings',
+        ),
+        GoRoute(
+          path: '/test-time',
+          builder: (context, state) => const PMTestTimePage(),
+          name: 'test-time',
         ),
         GoRoute(
           path: '/supervisor',

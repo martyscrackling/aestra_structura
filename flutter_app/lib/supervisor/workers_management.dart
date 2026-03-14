@@ -41,18 +41,32 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
   Future<List<Map<String, dynamic>>> _fetchFieldWorkers() async {
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
-      final projectId = authService.currentUser?['project_id'];
-      final supervisorId = authService.currentUser?['supervisor_id'];
-      final userId = authService.currentUser?['user_id'];
+      final currentUser = authService.currentUser ?? <String, dynamic>{};
+      final userId = _toInt(currentUser['user_id']);
+      final projectId = _toInt(currentUser['project_id']);
+      final typeOrRole =
+        (currentUser['type'] ?? currentUser['role'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
+
+      // Some sessions only keep `user_id` for supervisors. Fall back to it.
+      final supervisorId =
+        _toInt(currentUser['supervisor_id']) ??
+        ((typeOrRole == 'supervisor') ? userId : null);
 
       await _fetchProjects(supervisorId: supervisorId, userId: userId);
 
       print('=== Fetching Field Workers ===');
       print('Scope: all projects | filter: active workers');
+      print('Current user payload: $currentUser');
+      print('Resolved supervisorId: $supervisorId, projectId: $projectId, userId: $userId');
 
       final url = supervisorId != null
-          ? AppConfig.apiUri('field-workers/?supervisor_id=$supervisorId')
-          : AppConfig.apiUri('field-workers/');
+        ? AppConfig.apiUri('field-workers/?supervisor_id=$supervisorId')
+        : (projectId != null
+          ? AppConfig.apiUri('field-workers/?project_id=$projectId')
+          : AppConfig.apiUri('field-workers/'));
       print('📡 API URL: $url');
 
       final response = await http.get(url);
@@ -390,7 +404,20 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
 
   String _formatPayrate(dynamic payrate) {
     if (payrate == null) return 'Not set';
-    return '₱${payrate}/day';
+    return '₱${payrate}/hr';
+  }
+
+  String _formatCurrency(dynamic value) {
+    if (value == null) return 'Not set';
+    final parsed = double.tryParse(value.toString());
+    if (parsed == null) return 'Not set';
+    return '₱${parsed.toStringAsFixed(2)}';
+  }
+
+  String _formatDeductionWithFallback(dynamic totalValue, dynamic minValue) {
+    if (totalValue != null) return _formatCurrency(totalValue);
+    if (minValue != null) return '${_formatCurrency(minValue)} (minimum)';
+    return 'Not set';
   }
 
   String _getProjectName(Map<String, dynamic> worker) {
@@ -452,9 +479,21 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
         final birthdate = _formatDate(worker['birthdate']);
         final payrate = _formatPayrate(worker['payrate']);
         final dateHired = _formatDate(worker['created_at']);
-        final sssId = worker['sss_id'] ?? 'N/A';
-        final philhealthId = worker['philhealth_id'] ?? 'N/A';
-        final pagibigId = worker['pagibig_id'] ?? 'N/A';
+        final sssDeduction = _formatDeductionWithFallback(
+          worker['sss_weekly_total'],
+          worker['sss_weekly_min'],
+        );
+        final philhealthDeduction = _formatDeductionWithFallback(
+          worker['philhealth_weekly_total'],
+          worker['philhealth_weekly_min'],
+        );
+        final pagibigDeduction = _formatDeductionWithFallback(
+          worker['pagibig_weekly_total'],
+          worker['pagibig_weekly_min'],
+        );
+        final weeklySalary = _formatCurrency(worker['weekly_salary']);
+        final totalWeeklyDeduction = _formatCurrency(worker['total_weekly_deduction']);
+        final netWeeklyPay = _formatCurrency(worker['net_weekly_pay']);
         final fieldWorkerId = (worker['fieldworker_id'] as num?)?.toInt();
 
         return Dialog(
@@ -583,9 +622,9 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                     const SizedBox(height: 12),
                     _buildDetailRow("Phone", phoneNumber),
                     _buildDetailRow("Birthdate", birthdate),
-                    _buildDetailRow("SSS ID", sssId),
-                    _buildDetailRow("PhilHealth ID", philhealthId),
-                    _buildDetailRow("Pag-IBIG ID", pagibigId),
+                    _buildDetailRow("SSS Deduction (Weekly)", sssDeduction),
+                    _buildDetailRow("PhilHealth Deduction (Weekly)", philhealthDeduction),
+                    _buildDetailRow("Pag-IBIG Deduction (Weekly)", pagibigDeduction),
                     const SizedBox(height: 12),
                     const Text(
                       "Work Details",
@@ -596,7 +635,10 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                     ),
                     const SizedBox(height: 12),
                     _buildDetailRow("Date Hired", dateHired),
-                    _buildDetailRow("Payrate", payrate),
+                    _buildDetailRow("Payrate (Hourly)", payrate),
+                    _buildDetailRow("Weekly Salary", weeklySalary),
+                    _buildDetailRow("Total Weekly Deduction", totalWeeklyDeduction),
+                    _buildDetailRow("Net Weekly Pay", netWeeklyPay),
                     _buildDetailRowWithStatus(
                       "Status",
                       "Active",

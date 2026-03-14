@@ -68,7 +68,7 @@ def health_check(request):
             'status': db_status,
             'error': db_error,
             'engine': connection.settings_dict.get('ENGINE', 'unknown'),
-            'name': connection.settings_dict.get('NAME', 'unknown'),
+            'name': str(connection.settings_dict.get('NAME', 'unknown')),
         },
         'version': '1.0',
     })
