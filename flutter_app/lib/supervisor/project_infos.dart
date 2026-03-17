@@ -8,6 +8,7 @@ import '../services/app_config.dart';
 import '../services/auth_service.dart';
 import '../services/app_time_service.dart';
 import 'task_update.dart';
+import 'all_workforce.dart';
 
 class ProjectInfosPage extends StatefulWidget {
   final String projectTitle;
@@ -994,6 +995,36 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
                     ],
                   ),
                 const SizedBox(height: 24),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => AllWorkforcePage(
+                            projectId: widget.projectId,
+                            projectTitle: widget.projectTitle,
+                          ),
+                        ),
+                      );
+                    },
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFFFF6F00),
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 0),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text(
+                      'View Workforce',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
                 _clientCard(isMobile: isMobile),
                 const SizedBox(height: 20),
                 const Divider(),
