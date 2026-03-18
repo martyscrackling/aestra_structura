@@ -774,70 +774,83 @@ class _SortOrderDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dropdown = DropdownButton<_ProjectSortOrder>(
-      value: value,
-      isDense: true,
-      onChanged: (v) {
-        if (v == null) return;
-        onChanged(v);
-      },
-      items: _ProjectSortOrder.values
-          .map(
-            (order) => DropdownMenuItem(
-              value: order,
-              child: Text(
-                _label(order),
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF0C1935),
-                ),
-              ),
-            ),
-          )
-          .toList(),
-      icon: const Icon(Icons.swap_vert, size: 18, color: Color(0xFF0C1935)),
-    );
-
     if (isMobile) {
       return SizedBox(
-        height: 40,
-        width: 40,
-        child: _DropdownShell(
-          child: DropdownButtonHideUnderline(
-            child: ButtonTheme(alignedDropdown: true, child: dropdown),
+        height: 36,
+        child: PopupMenuButton<_ProjectSortOrder>(
+          onSelected: onChanged,
+          itemBuilder: (BuildContext context) => _ProjectSortOrder.values
+              .map(
+                (order) => PopupMenuItem<_ProjectSortOrder>(
+                  value: order,
+                  child: Text(_label(order)),
+                ),
+              )
+              .toList(),
+          child: OutlinedButton(
+            onPressed: null,
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              side: BorderSide(color: Colors.grey[300]!),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: Row(
+              children: const [
+                Icon(Icons.swap_vert, size: 16, color: Color(0xFF0C1935)),
+                SizedBox(width: 4),
+                Icon(Icons.arrow_drop_down, size: 18, color: Color(0xFF0C1935)),
+              ],
+            ),
           ),
         ),
       );
     }
 
     return SizedBox(
-      height: 40,
-      width: 200,
-      child: _DropdownShell(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: DropdownButtonHideUnderline(child: dropdown),
+      height: 36,
+      child: PopupMenuButton<_ProjectSortOrder>(
+        onSelected: onChanged,
+        itemBuilder: (BuildContext context) => _ProjectSortOrder.values
+            .map(
+              (order) => PopupMenuItem<_ProjectSortOrder>(
+                value: order,
+                child: Text(_label(order)),
+              ),
+            )
+            .toList(),
+        child: OutlinedButton(
+          onPressed: null,
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            side: BorderSide(color: Colors.grey[300]!),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.swap_vert, size: 16, color: Color(0xFF0C1935)),
+              const SizedBox(width: 6),
+              Text(
+                _label(value),
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF0C1935),
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Icon(
+                Icons.arrow_drop_down,
+                size: 18,
+                color: Color(0xFF0C1935),
+              ),
+            ],
+          ),
+        ),
       ),
-    );
-  }
-}
-
-class _DropdownShell extends StatelessWidget {
-  const _DropdownShell({required this.child, this.padding = EdgeInsets.zero});
-
-  final Widget child;
-  final EdgeInsets padding;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: padding,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-        color: Colors.white,
-      ),
-      child: Center(child: child),
     );
   }
 }
@@ -1156,13 +1169,6 @@ class ProjectListPanel extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                   color: Color(0xFF0C1935),
                 ),
-              ),
-              const Spacer(),
-              IconButton(
-                onPressed: () {},
-                icon: const Icon(Icons.add, size: 18),
-                color: const Color(0xFF6B7280),
-                padding: EdgeInsets.zero,
               ),
             ],
           ),

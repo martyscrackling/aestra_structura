@@ -376,7 +376,9 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
         );
       }
 
-      final response = await request.send().timeout(const Duration(seconds: 30));
+      final response = await request.send().timeout(
+        const Duration(seconds: 30),
+      );
       if (response.statusCode == 200) {
         final respStr = await response.stream.bytesToString();
         final respData = jsonDecode(respStr);
@@ -492,9 +494,7 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text(
-                    'Project created, but image failed: $e',
-                  ),
+                  content: Text('Project created, but image failed: $e'),
                   backgroundColor: Colors.orange,
                 ),
               );
@@ -719,6 +719,7 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
             ? const Center(child: CircularProgressIndicator())
             : DropdownButtonFormField<int>(
                 value: _selectedRegionId,
+                isExpanded: true,
                 decoration: InputDecoration(
                   labelText: 'Region',
                   labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
@@ -743,7 +744,11 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
                 items: _regions.map((region) {
                   return DropdownMenuItem<int>(
                     value: region['id'] as int,
-                    child: Text(region['name'] as String),
+                    child: Text(
+                      region['name'] as String,
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
                   );
                 }).toList(),
                 onChanged: (int? value) {
