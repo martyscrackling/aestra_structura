@@ -395,22 +395,6 @@ class PaymentHistoryAdmin(admin.ModelAdmin):
     )
 
 
-@admin.register(Supervisors)
-class SupervisorsAdmin(admin.ModelAdmin):
-    list_display = (
-        'supervisor_id',
-        'email',
-        'first_name',
-        'last_name',
-        'role',
-        'project_id',
-        'created_by',
-    )
-    list_filter = ('role', 'project_id')
-    search_fields = ('email', 'first_name', 'last_name', 'phone')
-    readonly_fields = ('supervisor_id',)
-
-
 # Customize admin site
 admin.site.site_header = "Structura SuperAdmin Dashboard"
 admin.site.site_title = "Structura Admin"

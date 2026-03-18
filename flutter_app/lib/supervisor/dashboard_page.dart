@@ -3,17 +3,20 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:http/http.dart' as http;
-import 'package:go_router/go_router.dart';
 import 'widgets/sidebar.dart';
 import 'widgets/dashboard_header.dart';
 import 'widgets/active_project.dart';
 import 'widgets/tasks.dart';
 import 'widgets/workers.dart';
 import 'widgets/phases.dart';
-import 'widgets/mobile_bottom_nav.dart';
+import 'workers_management.dart';
+import 'attendance_page.dart';
+import 'daily_logs.dart';
+import 'task_progress.dart';
+import 'reports.dart';
+import 'inventory.dart';
 import '../services/auth_service.dart';
 import '../services/app_config.dart';
-import '../services/app_theme_tokens.dart';
 
 class _ProjectProgressPoint {
   const _ProjectProgressPoint({
@@ -40,9 +43,8 @@ class SupervisorDashboardPage extends StatefulWidget {
 
 class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
   int? _currentProjectId;
-  bool _showMobileDetails = false;
   final GlobalKey _activeProjectKey = GlobalKey();
-  final Color _primary = AppColors.accent;
+  final Color _primary = const Color(0xFFFF6F00);
   List<_ProjectProgressPoint> _projectProgressPoints = const [];
   bool _isLoadingProjectProgress = true;
 
@@ -184,43 +186,42 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
 
   Widget _buildDashboardProgressChart(bool isMobile) {
     return Card(
-      elevation: 1,
+      elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: EdgeInsets.all(isMobile ? 10 : 14),
+        padding: EdgeInsets.all(isMobile ? 12 : 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.show_chart, color: _primary, size: isMobile ? 18 : 20),
-                const SizedBox(width: 6),
+                Icon(Icons.show_chart, color: _primary, size: 20),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Project Progress Overview',
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
-                      fontSize: isMobile ? 14 : 15,
+                      fontSize: isMobile ? 15 : 16,
                     ),
                   ),
                 ),
               ],
             ),
-            if (!isMobile) const SizedBox(height: 4),
-            if (!isMobile)
-              Text(
-                'Completion trend across assigned projects',
-                style: TextStyle(fontSize: 11, color: Colors.grey[700]),
-              ),
-            SizedBox(height: isMobile ? 10 : 14),
+            const SizedBox(height: 6),
+            Text(
+              'Completion trend across assigned projects',
+              style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+            ),
+            const SizedBox(height: 16),
             if (_isLoadingProjectProgress)
-              SizedBox(
-                height: isMobile ? 150 : 180,
+              const SizedBox(
+                height: 200,
                 child: Center(child: CircularProgressIndicator()),
               )
             else if (_projectProgressPoints.isEmpty)
               Container(
-                height: isMobile ? 130 : 160,
+                height: 180,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: Colors.grey[50],
@@ -229,12 +230,12 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
                 ),
                 child: Text(
                   'No project progress data yet.',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
                 ),
               )
             else
               SizedBox(
-                height: isMobile ? 172 : 204,
+                height: 220,
                 child: LineChart(
                   LineChartData(
                     minY: 0,
@@ -265,7 +266,7 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
                       leftTitles: AxisTitles(
                         sideTitles: SideTitles(
                           showTitles: true,
-                          reservedSize: 30,
+                          reservedSize: 34,
                           interval: 20,
                           getTitlesWidget: (value, _) => Text(
                             '${value.toInt()}%',
@@ -280,7 +281,7 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
                         sideTitles: SideTitles(
                           showTitles: true,
                           interval: 1,
-                          reservedSize: isMobile ? 30 : 34,
+                          reservedSize: 38,
                           getTitlesWidget: (value, axisMeta) {
                             final index = value.toInt();
                             if (index < 0 ||
@@ -290,8 +291,8 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
 
                             final rawTitle =
                                 _projectProgressPoints[index].projectName;
-              final shortTitle = rawTitle.length > 8
-                ? '${rawTitle.substring(0, 8)}...'
+                            final shortTitle = rawTitle.length > 10
+                                ? '${rawTitle.substring(0, 10)}...'
                                 : rawTitle;
 
                             return SideTitleWidget(
@@ -343,13 +344,13 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
                           ),
                         ),
                         color: _primary,
-                        barWidth: 2.6,
+                        barWidth: 3,
                         isCurved: true,
                         dotData: FlDotData(
                           show: true,
                           getDotPainter: (spot, percent, bar, index) =>
                               FlDotCirclePainter(
-                                radius: 2.6,
+                                radius: 3,
                                 color: Colors.white,
                                 strokeWidth: 2,
                                 strokeColor: _primary,
@@ -371,46 +372,46 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
   }
 
   void _navigateToPage(String page) {
+    Widget destination;
     switch (page) {
       case 'Dashboard':
         return; // Already on dashboard
       case 'Workers':
       case 'Worker Management':
-        context.go('/supervisor/workers');
+        destination = const WorkerManagementPage(initialSidebarVisible: false);
         break;
       case 'Attendance':
-        context.go('/supervisor/attendance');
+        destination = const AttendancePage(initialSidebarVisible: false);
+        break;
+      case 'Logs':
+      case 'Daily Logs':
+        destination = const DailyLogsPage(initialSidebarVisible: false);
         break;
       case 'Tasks':
       case 'Task Progress':
-        context.go('/supervisor/task-progress');
+        destination = const TaskProgressPage(initialSidebarVisible: false);
         break;
       case 'Reports':
-        context.go('/supervisor/reports');
+        destination = const ReportsPage(initialSidebarVisible: false);
         break;
       case 'Inventory':
-        context.go('/supervisor/inventory');
+        destination = const InventoryPage(initialSidebarVisible: false);
         break;
       default:
         return;
     }
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => destination),
+    );
   }
 
   void _setProjectId(int projectId) {
+    print('🎯 Dashboard: Setting project ID to $projectId');
     setState(() {
       _currentProjectId = projectId;
     });
-  }
-
-  void _scrollToActiveProjects() {
-    final targetContext = _activeProjectKey.currentContext;
-    if (targetContext == null) return;
-    Scrollable.ensureVisible(
-      targetContext,
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOutCubic,
-      alignment: 0.02,
-    );
+    print('📌 Dashboard: _currentProjectId is now $_currentProjectId');
   }
 
   Widget _buildScrollableActiveProjects({required double height}) {
@@ -419,8 +420,6 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
       onProjectLoaded: _setProjectId,
       scrollOnlyCards: true,
       cardsViewportHeight: height,
-      compactCards: true,
-      carouselWhenMultiple: true,
     );
   }
 
@@ -432,7 +431,7 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
     final isMobile = screenWidth <= 600;
 
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: const Color(0xFFF4F6F9),
       body: Stack(
         children: [
           Row(
@@ -446,7 +445,7 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
                 child: Column(
                   children: [
                     // Header fixed at top of right area
-                    const DashboardHeader(),
+                    DashboardHeader(onMenuPressed: () {}),
 
                     // Scrollable content below header while sidebar stays put
                     Expanded(
@@ -471,133 +470,171 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
   }
 
   Widget _buildBottomNavBar() {
-    return SupervisorMobileBottomNav(
-      activeTab: SupervisorMobileTab.dashboard,
-      onSelect: _navigateToPage,
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0C1935),
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildNavItem(Icons.dashboard, 'Dashboard', true),
+                _buildNavItem(Icons.people, 'Workers', false),
+                _buildNavItem(Icons.check_circle, 'Attendance', false),
+                _buildNavItem(Icons.list_alt, 'Logs', false),
+                _buildNavItem(Icons.more_horiz, 'More', false),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem(IconData icon, String label, bool isActive) {
+    final color = isActive ? const Color(0xFFFF6F00) : Colors.white70;
+
+    return InkWell(
+      onTap: () {
+        if (label == 'More') {
+          _showMoreOptions();
+        } else {
+          _navigateToPage(label);
+        }
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive
+              ? const Color(0xFFFF6F00).withOpacity(0.15)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showMoreOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF0C1935),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white30,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              _buildMoreOption(Icons.show_chart, 'Task Progress', 'Tasks'),
+              _buildMoreOption(Icons.file_copy, 'Reports', 'Reports'),
+              _buildMoreOption(Icons.inventory, 'Inventory', 'Inventory'),
+              const SizedBox(height: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMoreOption(IconData icon, String title, String page) {
+    return ListTile(
+      leading: Icon(icon, color: Colors.white70, size: 24),
+      title: Text(
+        title,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      onTap: () {
+        Navigator.pop(context);
+        _navigateToPage(page);
+      },
     );
   }
 
   // Mobile layout - Stack everything vertically
   Widget _buildMobileLayout() {
-    final viewHeight = MediaQuery.of(context).size.height;
-    final activeProjectsHeight = (viewHeight * 0.36).clamp(300.0, 360.0);
-
+    print('📱 Building mobile layout, _currentProjectId: $_currentProjectId');
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+      padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildDashboardProgressChart(true),
-          const SizedBox(height: 10),
-          _buildScrollableActiveProjects(height: activeProjectsHeight),
-          const SizedBox(height: 10),
+          const SizedBox(height: 16),
+          _buildScrollableActiveProjects(height: 380),
+          const SizedBox(height: 16),
           Tasks(projectId: _currentProjectId),
-          const SizedBox(height: 10),
+          const SizedBox(height: 16),
           if (_currentProjectId != null) ...[
-            Material(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              child: InkWell(
-                onTap: () {
-                  setState(() {
-                    _showMobileDetails = !_showMobileDetails;
-                  });
-                },
-                borderRadius: BorderRadius.circular(12),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.tune_rounded,
-                        size: 18,
-                        color: Color(0xFF0C1935),
-                      ),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text(
-                          'Project details',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF0C1935),
-                          ),
-                        ),
-                      ),
-                      Icon(
-                        _showMobileDetails
-                            ? Icons.keyboard_arrow_up_rounded
-                            : Icons.keyboard_arrow_down_rounded,
-                        color: Colors.grey[700],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            AnimatedCrossFade(
-              duration: const Duration(milliseconds: 220),
-              sizeCurve: Curves.easeOutCubic,
-              crossFadeState: _showMobileDetails
-                  ? CrossFadeState.showSecond
-                  : CrossFadeState.showFirst,
-              firstChild: const SizedBox.shrink(),
-              secondChild: Column(
-                children: [
-                  const SizedBox(height: 10),
-                  PhasesWidget(projectId: _currentProjectId!),
-                  const SizedBox(height: 10),
-                  Workers(projectId: _currentProjectId!),
-                ],
-              ),
-            ),
+            PhasesWidget(projectId: _currentProjectId!),
+            const SizedBox(height: 16),
+            Workers(projectId: _currentProjectId!),
           ] else
             Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: Colors.orange.shade50,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade200),
+                border: Border.all(color: Colors.orange.shade200),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Select a project to load details',
-                    style: TextStyle(
-                      color: Color(0xFF0C1935),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Pick an active project above to view phases and workers.',
-                    style: TextStyle(color: Colors.grey[700], fontSize: 12),
-                  ),
-                  const SizedBox(height: 10),
-                  OutlinedButton.icon(
-                    onPressed: _scrollToActiveProjects,
-                    icon: const Icon(Icons.arrow_upward_rounded, size: 16),
-                    label: const Text('Go to Active Projects'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF0C1935),
-                      side: BorderSide(color: Colors.grey.shade300),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 8,
-                      ),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-                ],
+              child: Text(
+                '⚠️ No project ID available. _currentProjectId = $_currentProjectId',
+                style: TextStyle(color: Colors.orange.shade900),
               ),
             ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
         ],
       ),
     );
@@ -605,26 +642,23 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
 
   // Tablet layout - Stack vertically with more spacing
   Widget _buildTabletLayout() {
-    final viewHeight = MediaQuery.of(context).size.height;
-    final activeProjectsHeight = (viewHeight * 0.4).clamp(330.0, 430.0);
-
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildDashboardProgressChart(false),
-          const SizedBox(height: 12),
-          _buildScrollableActiveProjects(height: activeProjectsHeight),
-          const SizedBox(height: 12),
+          const SizedBox(height: 18),
+          _buildScrollableActiveProjects(height: 450),
+          const SizedBox(height: 18),
           Tasks(projectId: _currentProjectId),
-          const SizedBox(height: 12),
+          const SizedBox(height: 18),
           if (_currentProjectId != null) ...[
             PhasesWidget(projectId: _currentProjectId!),
-            const SizedBox(height: 12),
+            const SizedBox(height: 18),
             Workers(projectId: _currentProjectId!),
           ],
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
         ],
       ),
     );
@@ -636,22 +670,22 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(18, 18, 18, 0),
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
           child: _buildDashboardProgressChart(false),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               flex: 4,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 18, 10, 18),
+                padding: const EdgeInsets.all(24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildScrollableActiveProjects(height: 560),
-                    const SizedBox(height: 12),
+                    _buildScrollableActiveProjects(height: 640),
+                    const SizedBox(height: 16),
                   ],
                 ),
               ),
@@ -659,14 +693,14 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
             Expanded(
               flex: 2,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 18, 18, 18),
+                padding: const EdgeInsets.all(24),
                 child: Column(
                   children: [
                     Tasks(projectId: _currentProjectId),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 20),
                     if (_currentProjectId != null) ...[
                       PhasesWidget(projectId: _currentProjectId!),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 20),
                       Workers(projectId: _currentProjectId!),
                     ],
                   ],

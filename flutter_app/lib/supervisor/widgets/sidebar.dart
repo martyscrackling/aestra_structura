@@ -6,6 +6,7 @@ import '../dashboard_page.dart';
 import '../all_projects.dart';
 import '../workers_management.dart';
 import '../attendance_page.dart';
+import '../daily_logs.dart';
 import '../task_progress.dart';
 import '../reports.dart';
 import '../inventory.dart';
@@ -25,10 +26,6 @@ class _SidebarState extends State<Sidebar> {
 
   // Navigation function
   void navigateToPage(String label) {
-    if (label == widget.activePage) {
-      return;
-    }
-
     // Close drawer/sidebar on navigation
     if (Navigator.canPop(context)) {
       Navigator.pop(context);
@@ -46,6 +43,9 @@ class _SidebarState extends State<Sidebar> {
         break;
       case "Attendance":
         context.go('/supervisor/attendance');
+        break;
+      case "Daily Logs":
+        context.go('/supervisor/daily-logs');
         break;
       case "Task Progress":
         context.go('/supervisor/task-progress');
@@ -68,6 +68,7 @@ class _SidebarState extends State<Sidebar> {
       {"label": "Projects", "icon": Icons.folder_open},
       {"label": "Worker Management", "icon": Icons.people},
       {"label": "Attendance", "icon": Icons.check_circle},
+      {"label": "Daily Logs", "icon": Icons.list_alt},
       {"label": "Task Progress", "icon": Icons.show_chart},
       {"label": "Reports", "icon": Icons.file_copy},
       {"label": "Inventory", "icon": Icons.inventory},

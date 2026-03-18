@@ -6,8 +6,6 @@ import 'package:http/http.dart' as http;
 
 import '../../services/app_config.dart';
 import '../../services/auth_service.dart';
-import '../../services/app_theme_tokens.dart';
-import 'supervisor_user_badge.dart';
 
 class DashboardHeader extends StatefulWidget {
   final VoidCallback? onMenuPressed;
@@ -26,8 +24,120 @@ class DashboardHeader extends StatefulWidget {
 class _DashboardHeaderState extends State<DashboardHeader> {
   // Notifications are handled by _SupervisorNotificationMenu.
 
+  Map<String, dynamic>? _profileUser;
+
+  @override
+  void initState() {
+    super.initState();
+    _hydrateSupervisorProfileIfNeeded();
+  }
+
+  Future<void> _hydrateSupervisorProfileIfNeeded() async {
+    try {
+      final auth = AuthService();
+      final user = auth.currentUser;
+      final first = (user?['first_name'] as String? ?? '').trim();
+      final last = (user?['last_name'] as String? ?? '').trim();
+      final hasName = ('$first $last').trim().isNotEmpty;
+
+      if (hasName) {
+        if (!mounted) return;
+        setState(() {
+          _profileUser = user;
+        });
+        return;
+      }
+
+      final supervisorIdRaw = user?['supervisor_id'];
+      final supervisorId = supervisorIdRaw is int
+          ? supervisorIdRaw
+          : int.tryParse(supervisorIdRaw?.toString() ?? '');
+
+      final projectIdRaw = user?['project_id'];
+      final projectId = projectIdRaw is int
+          ? projectIdRaw
+          : int.tryParse(projectIdRaw?.toString() ?? '');
+
+      if (supervisorId == null || projectId == null) {
+        if (!mounted) return;
+        setState(() {
+          _profileUser = user;
+        });
+        return;
+      }
+
+      final response = await http.get(
+        AppConfig.apiUri('supervisors/$supervisorId/?project_id=$projectId'),
+      );
+
+      if (response.statusCode != 200) {
+        if (!mounted) return;
+        setState(() {
+          _profileUser = user;
+        });
+        return;
+      }
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map) {
+        if (!mounted) return;
+        setState(() {
+          _profileUser = user;
+        });
+        return;
+      }
+
+      final profile = Map<String, dynamic>.from(decoded);
+      await auth.updateLocalUserFields({
+        'first_name': profile['first_name'],
+        'last_name': profile['last_name'],
+        'email': profile['email'],
+      });
+
+      if (!mounted) return;
+      setState(() {
+        _profileUser = auth.currentUser;
+      });
+    } catch (_) {
+      // Best-effort only; fall back to cached auth user.
+      if (!mounted) return;
+      setState(() {
+        _profileUser = AuthService().currentUser;
+      });
+    }
+  }
+
+  String _displayName(Map<String, dynamic>? user) {
+    final first = (user?['first_name'] as String? ?? '').trim();
+    final last = (user?['last_name'] as String? ?? '').trim();
+    final full = ('$first $last').trim();
+    if (full.isNotEmpty) return full;
+    final email = (user?['email'] as String? ?? '').trim();
+    if (email.isNotEmpty) return email;
+    return 'AESTRA';
+  }
+
+  String _subtitle(Map<String, dynamic>? user) {
+    final role = (user?['role'] as String? ?? '').trim();
+    if (role.isNotEmpty) return role;
+    final type = (user?['type'] as String? ?? '').trim();
+    if (type.isNotEmpty) return type;
+    return 'Supervisor';
+  }
+
+  String _avatarLetter(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return 'A';
+    return trimmed.substring(0, 1).toUpperCase();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final auth = AuthService();
+    final user = _profileUser ?? auth.currentUser;
+    final name = _displayName(user);
+    final subtitle = _subtitle(user);
+
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -37,7 +147,7 @@ class _DashboardHeaderState extends State<DashboardHeader> {
           Text(
             widget.title,
             style: const TextStyle(
-              color: AppColors.textPrimary,
+              color: Color(0xFF0C1935),
               fontSize: 20,
               fontWeight: FontWeight.w700,
             ),
@@ -102,14 +212,58 @@ class _DashboardHeaderState extends State<DashboardHeader> {
                 child: MouseRegion(
                   cursor: SystemMouseCursors.click,
                   child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceMuted,
-                      borderRadius: BorderRadius.circular(999),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
                     ),
-                    child: const SupervisorUserBadge(
-                      showName: false,
-                      avatarSize: 34,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE8D5F2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Center(
+                            child: Text(
+                              _avatarLetter(name),
+                              style: const TextStyle(
+                                color: Color(0xFFB088D9),
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              name,
+                              style: const TextStyle(
+                                color: Color(0xFF0C1935),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            Text(
+                              subtitle,
+                              style: const TextStyle(
+                                color: Colors.grey,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -348,10 +502,17 @@ class _SupervisorNotificationMenuState
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          const Icon(
-            Icons.notifications_outlined,
-            color: Color(0xFF0C1935),
-            size: 24,
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.notifications_outlined,
+              color: Color(0xFF0C1935),
+              size: 24,
+            ),
           ),
           if (!_loading && _error == null && count > 0)
             Positioned(

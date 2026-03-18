@@ -10,11 +10,9 @@ import 'package:fl_chart/fl_chart.dart';
 
 import '../services/auth_service.dart';
 import '../services/app_config.dart';
-import '../services/app_theme_tokens.dart';
 import '../services/subscription_helper.dart';
 import 'widgets/sidebar.dart';
-import 'widgets/mobile_bottom_nav.dart';
-import 'widgets/dashboard_header.dart';
+import 'widgets/supervisor_user_badge.dart';
 
 class Subtask {
   Subtask({
@@ -58,8 +56,8 @@ class TaskProgressPage extends StatefulWidget {
 }
 
 class _TaskProgressPageState extends State<TaskProgressPage> {
-  final Color primary = AppColors.accent;
-  final Color neutral = AppColors.surface;
+  final Color primary = const Color(0xFFFF6F00);
+  final Color neutral = const Color(0xFFF4F6F9);
   final ImagePicker _picker = ImagePicker();
   List<Phase> _phases = [];
   bool _isLoadingPhases = true;
@@ -84,6 +82,10 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
         break;
       case 'Attendance':
         context.go('/supervisor/attendance');
+        break;
+      case 'Logs':
+      case 'Daily Logs':
+        context.go('/supervisor/daily-logs');
         break;
       case 'Tasks':
       case 'Task Progress':
@@ -1111,7 +1113,256 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
               Expanded(
                 child: Column(
                   children: [
-                    const DashboardHeader(title: 'Task Progress'),
+                    // Creative white header with blue vertical accent on the left (keeps notification bell + AESTRA)
+                    Container(
+                      color: Colors.white,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isMobile ? 12 : 24,
+                        vertical: 12,
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: isMobile ? 3 : 4,
+                            height: isMobile ? 40 : 56,
+                            decoration: BoxDecoration(
+                              color: primary,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'Task Progress',
+                                  style: TextStyle(
+                                    fontSize: isMobile ? 16 : 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: const Color(0xFF0C1935),
+                                  ),
+                                ),
+                                if (!isMobile) const SizedBox(height: 6),
+                                if (!isMobile)
+                                  StreamBuilder<DateTime>(
+                                    stream: Stream.periodic(
+                                      const Duration(seconds: 1),
+                                      (_) => DateTime.now(),
+                                    ),
+                                    builder: (context, snap) {
+                                      final now = snap.data ?? DateTime.now();
+                                      final formatted =
+                                          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+                                      return Text(
+                                        formatted,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.grey[700],
+                                        ),
+                                      );
+                                    },
+                                  ),
+                              ],
+                            ),
+                          ),
+                          if (!isMobile) const SizedBox(width: 12),
+                          if (!isMobile) ...[
+                            _miniKPI(
+                              'Projects',
+                              '${_projectProgressPoints.length}',
+                              Icons.apartment,
+                              const Color(0xFF9C27B0),
+                            ),
+                            const SizedBox(width: 12),
+                            if (_projectInfo != null) ...[
+                              _miniKPI(
+                                'Duration',
+                                '${_projectInfo!['duration_days'] ?? 0} days',
+                                Icons.calendar_today,
+                                const Color(0xFF2196F3),
+                              ),
+                              const SizedBox(width: 12),
+                              _miniKPI(
+                                'Start Date',
+                                _projectInfo!['start_date'] ?? 'N/A',
+                                Icons.event,
+                                const Color(0xFF4CAF50),
+                              ),
+                              const SizedBox(width: 12),
+                              _miniKPI(
+                                'End Date',
+                                _projectInfo!['end_date'] ?? 'N/A',
+                                Icons.event_available,
+                                const Color(0xFFF44336),
+                              ),
+                              const SizedBox(width: 16),
+                            ],
+                            _miniKPI(
+                              'Phases',
+                              '${_phases.length}',
+                              Icons.view_list,
+                              const Color(0xFF757575),
+                            ),
+                            const SizedBox(width: 12),
+                            _miniKPI(
+                              'Subtasks',
+                              '${_phases.fold<int>(0, (t, p) => t + p.subtasks.length)}',
+                              Icons.task,
+                              primary,
+                            ),
+                            const SizedBox(width: 16),
+                          ],
+                          if (!isMobile)
+                            Stack(
+                              children: [
+                                IconButton(
+                                  onPressed: () => ScaffoldMessenger.of(context)
+                                      .showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Notifications opened (demo)',
+                                          ),
+                                        ),
+                                      ),
+                                  icon: Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[100],
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Icon(
+                                      Icons.notifications_outlined,
+                                      color: Color(0xFF0C1935),
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  right: 6,
+                                  top: 6,
+                                  child: Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFF6B6B),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          if (!isMobile) const SizedBox(width: 8),
+                          if (!isMobile)
+                            PopupMenuButton<String>(
+                              onSelected: (value) async {
+                                if (value == 'switch') {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Switch account (demo)'),
+                                    ),
+                                  );
+                                } else if (value == 'logout') {
+                                  await AuthService().logout();
+                                  if (!context.mounted) return;
+                                  context.go('/login');
+                                }
+                              },
+                              offset: const Offset(0, 48),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              itemBuilder: (context) =>
+                                  const <PopupMenuEntry<String>>[
+                                    PopupMenuItem<String>(
+                                      value: 'switch',
+                                      height: 48,
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.swap_horiz,
+                                            size: 18,
+                                            color: Colors.black87,
+                                          ),
+                                          SizedBox(width: 12),
+                                          Text('Switch Account'),
+                                        ],
+                                      ),
+                                    ),
+                                    PopupMenuDivider(height: 1),
+                                    PopupMenuItem<String>(
+                                      value: 'logout',
+                                      height: 48,
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.logout,
+                                            size: 18,
+                                            color: Color(0xFFFF6B6B),
+                                          ),
+                                          SizedBox(width: 12),
+                                          Text(
+                                            'Logout',
+                                            style: TextStyle(
+                                              color: Color(0xFFFF6B6B),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[100],
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const SupervisorUserBadge(
+                                  showSubtitle: false,
+                                  gap: 8,
+                                ),
+                              ),
+                            ),
+                          if (isMobile)
+                            IconButton(
+                              icon: Stack(
+                                children: [
+                                  const Icon(
+                                    Icons.notifications_outlined,
+                                    color: Color(0xFF0C1935),
+                                    size: 22,
+                                  ),
+                                  Positioned(
+                                    top: 0,
+                                    right: 0,
+                                    child: Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFF6B6B),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              onPressed: () =>
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Notifications opened (demo)',
+                                      ),
+                                    ),
+                                  ),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+                        ],
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     Expanded(
                       child: RefreshIndicator(
@@ -1133,15 +1384,48 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
   }
 
   Widget _buildBottomNavBar() {
-    return SupervisorMobileBottomNav(
-      activeTab: SupervisorMobileTab.more,
-      activeMorePage: 'Tasks',
-      onSelect: _navigateToPage,
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0C1935),
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildNavItem(Icons.dashboard, 'Dashboard', false),
+                _buildNavItem(Icons.people, 'Workers', false),
+                _buildNavItem(Icons.check_circle, 'Attendance', false),
+                _buildNavItem(Icons.list_alt, 'Logs', false),
+                _buildNavItem(Icons.more_horiz, 'More', false),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
   Widget _buildNavItem(IconData icon, String label, bool isActive) {
-    final color = isActive ? AppColors.accent : Colors.white70;
+    final color = isActive ? const Color(0xFFFF6F00) : Colors.white70;
 
     return InkWell(
       onTap: () {
@@ -1154,19 +1438,26 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
       borderRadius: BorderRadius.circular(12),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: AppSpacing.sm),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-          color: isActive ? AppColors.accent.withOpacity(0.15) : Colors.transparent,
+          color: isActive
+              ? const Color(0xFFFF6F00).withOpacity(0.15)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, color: color, size: 24),
-            const SizedBox(height: AppSpacing.xs),
+            const SizedBox(height: 4),
             Text(
               label,
-              style: AppTypography.mobileNavLabel(color, isActive: isActive),
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                letterSpacing: 0.3,
+              ),
             ),
           ],
         ),
@@ -1180,7 +1471,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         decoration: const BoxDecoration(
-          color: AppColors.navSurface,
+          color: Color(0xFF0C1935),
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: SafeArea(
