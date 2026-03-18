@@ -23,6 +23,7 @@ class Subtask {
     this.status = 'Pending',
     this.photos = const [],
     this.notes = '',
+    this.completed = false,
   });
 
   final String id;
@@ -31,13 +32,22 @@ class Subtask {
   String status; // 'Pending' | 'In Progress' | 'Completed'
   List<XFile> photos;
   String notes;
+  bool completed; // Checkbox flag for completion
 }
 
 class Phase {
-  Phase({required this.id, required this.title, required this.subtasks});
+  Phase({
+    required this.id,
+    required this.title,
+    required this.subtasks,
+    this.phasePhotos = const [],
+    this.phaseNotes = '',
+  });
   final String id;
   String title;
   List<Subtask> subtasks;
+  List<XFile> phasePhotos; // Phase-level photos
+  String phaseNotes; // Phase-level notes
 }
 
 class TaskProgressPage extends StatefulWidget {
@@ -225,16 +235,16 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
     return ((completed / subs.length) * 100).round();
   }
 
-  // pick one or multiple images and append to subtask photos
-  Future<void> _pickPhotosForSubtask(int phaseIndex, int subtaskIndex) async {
+  // Pick multiple images for phase level update
+  Future<void> _pickPhotosForPhase(int phaseIndex) async {
     try {
       final List<XFile>? picked = await _picker.pickMultiImage(
         imageQuality: 80,
       );
       if (picked != null && picked.isNotEmpty) {
         setState(() {
-          _phases[phaseIndex].subtasks[subtaskIndex].photos = [
-            ..._phases[phaseIndex].subtasks[subtaskIndex].photos,
+          _phases[phaseIndex].phasePhotos = [
+            ..._phases[phaseIndex].phasePhotos,
             ...picked,
           ];
         });
@@ -247,195 +257,27 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
     }
   }
 
-  // Submit subtask update to Project Manager
-  Future<void> _submitSubtaskUpdate(int phaseIndex, int subtaskIndex) async {
-    final subtask = _phases[phaseIndex].subtasks[subtaskIndex];
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: Row(
-          children: [
-            Icon(Icons.send, color: primary),
-            const SizedBox(width: 12),
-            const Text('Submit Update'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Submit update for:',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '"${subtask.title}"',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: primary,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Status: ${subtask.status}',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Photos: ${subtask.photos.length}',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Notes: ${subtask.notes.isEmpty ? "None" : subtask.notes}',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'This will notify the Project Manager.',
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: primary),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Submit to PM'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      if (!mounted) return;
-
-      // Show loading indicator
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Row(
-            children: [
-              SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              ),
-              SizedBox(width: 16),
-              Text('Submitting update...'),
-            ],
-          ),
-          duration: Duration(seconds: 30),
-        ),
-      );
-
-      try {
-        // Map UI status to backend format
-        String backendStatus;
-        switch (subtask.status) {
-          case 'Pending':
-            backendStatus = 'pending';
-            break;
-          case 'In Progress':
-            backendStatus = 'in_progress';
-            break;
-          case 'Completed':
-            backendStatus = 'completed';
-            break;
-          default:
-            backendStatus = 'pending';
-        }
-
-        // Prepare the request body
-        final Map<String, dynamic> requestBody = {'status': backendStatus};
-
-        // Send PATCH request to update subtask
-        final response = await http.patch(
-          AppConfig.apiUri('subtasks/${subtask.id}/'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode(requestBody),
-        );
-
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-
-        // Check for subscription expiry first
-        if (SubscriptionHelper.handleResponse(context, response)) {
-          return;
-        }
-
-        if (response.statusCode == 200) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Update for "${subtask.title}" submitted to Project Manager',
-              ),
-              backgroundColor: Colors.green,
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to submit update: ${response.statusCode}'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error submitting update: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  // remove single photo from subtask
-  void _removePhoto(int phaseIndex, int subtaskIndex, int photoIndex) {
+  // Remove photo from phase
+  void _removePhasePhoto(int phaseIndex, int photoIndex) {
     setState(() {
-      _phases[phaseIndex].subtasks[subtaskIndex].photos.removeAt(photoIndex);
+      _phases[phaseIndex].phasePhotos.removeAt(photoIndex);
     });
   }
 
-  // single subtask detail dialog (edit notes and status; progress tracked at phase level)
-  void _openSubtaskDialog(int phaseIndex, int subtaskIndex) {
-    final sub = _phases[phaseIndex].subtasks[subtaskIndex];
-    final notesCtrl = TextEditingController(text: sub.notes);
-    String status = sub.status;
+  // Open phase-level update dialog
+  void _openPhaseUpdateDialog(int phaseIndex) {
+    final phase = _phases[phaseIndex];
+    final notesCtrl = TextEditingController(text: phase.phaseNotes);
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: Row(
           children: [
-            Icon(Icons.edit_note, color: primary),
+            Icon(Icons.update, color: primary),
             const SizedBox(width: 12),
-            Expanded(child: Text(sub.title)),
+            Expanded(child: Text(phase.title)),
           ],
         ),
         content: SingleChildScrollView(
@@ -444,7 +286,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Assigned Workers',
+                'Subtasks',
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
                   fontSize: 12,
@@ -455,54 +297,67 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.grey[100],
+                  color: Colors.grey[50],
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey[300]!),
+                  border: Border.all(color: Colors.grey[200]!),
                 ),
-                child: Row(
+                child: Column(
                   children: [
-                    Icon(Icons.person, size: 16, color: Colors.grey[600]),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        sub.assignedWorkers.isEmpty
-                            ? 'No workers assigned yet'
-                            : sub.assignedWorkers.join(', '),
-                        style: TextStyle(
-                          color: sub.assignedWorkers.isEmpty
-                              ? Colors.grey[500]
-                              : Colors.grey[800],
-                          fontSize: 13,
+                    for (
+                      var sIndex = 0;
+                      sIndex < phase.subtasks.length;
+                      sIndex++
+                    )
+                      Padding(
+                        padding: EdgeInsets.only(
+                          bottom: sIndex < phase.subtasks.length - 1 ? 8 : 0,
+                        ),
+                        child: Row(
+                          children: [
+                            Checkbox(
+                              value: phase.subtasks[sIndex].completed,
+                              onChanged: (val) {
+                                ctx.findAncestorStateOfType<State>()?.setState(
+                                  () {
+                                    phase.subtasks[sIndex].completed =
+                                        val ?? false;
+                                  },
+                                );
+                              },
+                              activeColor: primary,
+                            ),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    phase.subtasks[sIndex].title,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  Text(
+                                    phase
+                                            .subtasks[sIndex]
+                                            .assignedWorkers
+                                            .isEmpty
+                                        ? 'No workers'
+                                        : phase.subtasks[sIndex].assignedWorkers
+                                              .join(', '),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
                   ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Update Status',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
-                  color: Colors.grey,
-                ),
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                value: status,
-                items: ['Pending', 'In Progress', 'Completed']
-                    .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                    .toList(),
-                onChanged: (v) => status = v ?? status,
-                decoration: InputDecoration(
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 12,
-                  ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -518,7 +373,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
               TextField(
                 controller: notesCtrl,
                 decoration: InputDecoration(
-                  hintText: 'Add notes about progress, issues, or updates...',
+                  hintText: 'Add progress notes for this phase...',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -526,6 +381,41 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                 ),
                 maxLines: 4,
               ),
+              const SizedBox(height: 16),
+              const Text(
+                'Photos',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                icon: Icon(Icons.photo_camera, color: primary, size: 16),
+                label: const Text('Add Photos'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+                onPressed: () => _pickPhotosForPhase(phaseIndex),
+              ),
+              if (phase.phasePhotos.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 90,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: phase.phasePhotos.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, photoIndex) {
+                      return _buildPhasePhotoThumb(phaseIndex, photoIndex);
+                    },
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -538,9 +428,9 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
             style: ElevatedButton.styleFrom(backgroundColor: primary),
             onPressed: () async {
               final notes = notesCtrl.text.trim();
+              Navigator.pop(ctx);
 
               // Show loading
-              Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Row(
@@ -556,7 +446,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                         ),
                       ),
                       SizedBox(width: 16),
-                      Text('Saving changes...'),
+                      Text('Submitting phase update...'),
                     ],
                   ),
                   duration: Duration(seconds: 30),
@@ -564,59 +454,81 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
               );
 
               try {
-                // Map UI status to backend format
-                String backendStatus;
-                switch (status) {
-                  case 'Pending':
-                    backendStatus = 'pending';
-                    break;
-                  case 'In Progress':
-                    backendStatus = 'in_progress';
-                    break;
-                  case 'Completed':
-                    backendStatus = 'completed';
-                    break;
-                  default:
-                    backendStatus = 'pending';
+                // Update all completed subtasks
+                List<Future<http.Response>> requests = [];
+
+                for (var subtask in phase.subtasks) {
+                  if (subtask.completed) {
+                    final requestBody = {
+                      'status': 'completed',
+                      'progress_notes': notes,
+                    };
+
+                    requests.add(
+                      http.patch(
+                        AppConfig.apiUri('subtasks/${subtask.id}/'),
+                        headers: {'Content-Type': 'application/json'},
+                        body: jsonEncode(requestBody),
+                      ),
+                    );
+                  }
                 }
 
-                // Prepare the request body
-                final Map<String, dynamic> requestBody = {
-                  'status': backendStatus,
-                  'progress_notes': notes,
-                };
+                // Wait for all requests
+                if (requests.isNotEmpty) {
+                  final responses = await Future.wait(requests);
 
-                // Send PATCH request to update subtask
-                final response = await http.patch(
-                  AppConfig.apiUri('subtasks/${sub.id}/'),
-                  headers: {'Content-Type': 'application/json'},
-                  body: jsonEncode(requestBody),
-                );
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                  // Check first response for subscription
+                  if (responses.isNotEmpty &&
+                      SubscriptionHelper.handleResponse(
+                        context,
+                        responses[0],
+                      )) {
+                    return;
+                  }
 
-                // Check for subscription expiry first
-                if (SubscriptionHelper.handleResponse(context, response)) {
-                  return;
-                }
+                  // Check if all succeeded
+                  final allSuccess = responses.every(
+                    (r) => r.statusCode == 200,
+                  );
 
-                if (response.statusCode == 200) {
-                  setState(() {
-                    sub.notes = notes;
-                    sub.status = status;
-                  });
+                  if (allSuccess && responses.isNotEmpty) {
+                    setState(() {
+                      phase.phaseNotes = notes;
+                      phase.phasePhotos = [];
+                      for (var subtask in phase.subtasks) {
+                        if (subtask.completed) {
+                          subtask.status = 'Completed';
+                          subtask.completed = false;
+                          subtask.notes = notes;
+                        }
+                      }
+                    });
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Phase update submitted successfully'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Failed to submit some updates'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                } else {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('Subtask updated successfully'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Failed to save: ${response.statusCode}'),
-                      backgroundColor: Colors.red,
+                      content: Text('Please select at least one subtask'),
+                      backgroundColor: Colors.orange,
                     ),
                   );
                 }
@@ -625,25 +537,22 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                 ScaffoldMessenger.of(context).hideCurrentSnackBar();
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Error saving changes: $e'),
+                    content: Text('Error submitting update: $e'),
                     backgroundColor: Colors.red,
                   ),
                 );
               }
             },
-            child: const Text('Save Changes'),
+            child: const Text('Submit Phase Update'),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildPhotoThumb(
-    int phaseIndex,
-    int subtaskIndex,
-    int photoIndex,
-    XFile xfile,
-  ) {
+  // Build photo thumbnail for phase
+  Widget _buildPhasePhotoThumb(int phaseIndex, int photoIndex) {
+    final xfile = _phases[phaseIndex].phasePhotos[photoIndex];
     return Stack(
       children: [
         ClipRRect(
@@ -680,7 +589,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
           top: 4,
           right: 4,
           child: GestureDetector(
-            onTap: () => _removePhoto(phaseIndex, subtaskIndex, photoIndex),
+            onTap: () => _removePhasePhoto(phaseIndex, photoIndex),
             child: Container(
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
@@ -897,204 +806,72 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                         sIndex < _phases[pIndex].subtasks.length;
                         sIndex++
                       ) ...[
-                        Card(
-                          color: Colors.white,
-                          shape: RoundedRectangleBorder(
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
                             borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.grey[200]!),
                           ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Row(
+                          child: Row(
+                            children: [
+                              Checkbox(
+                                value:
+                                    _phases[pIndex].subtasks[sIndex].completed,
+                                onChanged: (val) {
+                                  setState(() {
+                                    _phases[pIndex].subtasks[sIndex].completed =
+                                        val ?? false;
+                                  });
+                                },
+                                activeColor: primary,
+                              ),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Expanded(
-                                      child: Text(
-                                        _phases[pIndex].subtasks[sIndex].title,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                        ),
+                                    Text(
+                                      _phases[pIndex].subtasks[sIndex].title,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
                                       ),
                                     ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color:
-                                            _phases[pIndex]
-                                                    .subtasks[sIndex]
-                                                    .status ==
-                                                'Completed'
-                                            ? const Color(
-                                                0xFF757575,
-                                              ).withOpacity(0.12)
-                                            : _phases[pIndex]
-                                                      .subtasks[sIndex]
-                                                      .status ==
-                                                  'In Progress'
-                                            ? primary.withOpacity(0.12)
-                                            : Colors.grey[200],
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Text(
-                                        _phases[pIndex].subtasks[sIndex].status,
-                                        style: TextStyle(
-                                          color:
-                                              _phases[pIndex]
-                                                      .subtasks[sIndex]
-                                                      .status ==
-                                                  'Completed'
-                                              ? const Color(0xFF757575)
-                                              : _phases[pIndex]
-                                                        .subtasks[sIndex]
-                                                        .status ==
-                                                    'In Progress'
-                                              ? primary
-                                              : Colors.grey[600],
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[50],
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: Colors.grey[200]!,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.person_outline,
-                                        size: 16,
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _phases[pIndex]
+                                              .subtasks[sIndex]
+                                              .assignedWorkers
+                                              .isEmpty
+                                          ? 'No workers assigned'
+                                          : 'Workers: ${_phases[pIndex].subtasks[sIndex].assignedWorkers.join(', ')}',
+                                      style: TextStyle(
                                         color: Colors.grey[600],
+                                        fontSize: 12,
                                       ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          _phases[pIndex]
-                                                  .subtasks[sIndex]
-                                                  .assignedWorkers
-                                                  .isEmpty
-                                              ? 'No workers assigned'
-                                              : 'Workers: ${_phases[pIndex].subtasks[sIndex].assignedWorkers.join(', ')}',
-                                          style: TextStyle(
-                                            color: Colors.grey[700],
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    OutlinedButton.icon(
-                                      icon: Icon(
-                                        Icons.photo_camera,
-                                        color: primary,
-                                        size: 16,
-                                      ),
-                                      label: const Text(
-                                        'Photos',
-                                        style: TextStyle(fontSize: 12),
-                                      ),
-                                      style: OutlinedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 8,
-                                        ),
-                                      ),
-                                      onPressed: () =>
-                                          _pickPhotosForSubtask(pIndex, sIndex),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    OutlinedButton.icon(
-                                      icon: const Icon(Icons.edit, size: 16),
-                                      label: const Text(
-                                        'Update',
-                                        style: TextStyle(fontSize: 12),
-                                      ),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: Colors.grey[700],
-                                        side: BorderSide(
-                                          color: Colors.grey[400]!,
-                                        ),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 8,
-                                        ),
-                                      ),
-                                      onPressed: () =>
-                                          _openSubtaskDialog(pIndex, sIndex),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    ElevatedButton.icon(
-                                      icon: const Icon(Icons.send, size: 16),
-                                      label: const Text(
-                                        'Submit',
-                                        style: TextStyle(fontSize: 12),
-                                      ),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: primary,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 8,
-                                        ),
-                                      ),
-                                      onPressed: () =>
-                                          _submitSubtaskUpdate(pIndex, sIndex),
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 8),
-                                if (_phases[pIndex]
-                                    .subtasks[sIndex]
-                                    .photos
-                                    .isNotEmpty)
-                                  SizedBox(
-                                    height: 90,
-                                    child: ListView.separated(
-                                      scrollDirection: Axis.horizontal,
-                                      itemCount: _phases[pIndex]
-                                          .subtasks[sIndex]
-                                          .photos
-                                          .length,
-                                      separatorBuilder: (_, __) =>
-                                          const SizedBox(width: 8),
-                                      itemBuilder: (context, photoIndex) {
-                                        final xfile = _phases[pIndex]
-                                            .subtasks[sIndex]
-                                            .photos[photoIndex];
-                                        return _buildPhotoThumb(
-                                          pIndex,
-                                          sIndex,
-                                          photoIndex,
-                                          xfile,
-                                        );
-                                      },
-                                    ),
-                                  ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(height: 8),
                       ],
-                      // Add Subtask removed — managed by Project Manager
-                      const SizedBox.shrink(),
+                      // Phase level Update button
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.update, size: 16),
+                        label: const Text(
+                          'Update Phase',
+                          style: TextStyle(fontSize: 13),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primary,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(double.infinity, 40),
+                        ),
+                        onPressed: () => _openPhaseUpdateDialog(pIndex),
+                      ),
                     ],
                   ),
                 ),
@@ -1167,9 +944,14 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
       borderRadius: BorderRadius.circular(12),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: AppSpacing.sm),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: AppSpacing.sm,
+        ),
         decoration: BoxDecoration(
-          color: isActive ? AppColors.accent.withOpacity(0.15) : Colors.transparent,
+          color: isActive
+              ? AppColors.accent.withOpacity(0.15)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
