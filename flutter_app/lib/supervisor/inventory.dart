@@ -3,7 +3,10 @@ import 'widgets/sidebar.dart';
 import 'package:go_router/go_router.dart';
 import '../services/inventory_service.dart';
 import '../services/auth_service.dart';
+import '../services/app_theme_tokens.dart';
 import 'package:intl/intl.dart';
+import 'widgets/mobile_bottom_nav.dart';
+import 'widgets/dashboard_header.dart';
 
 class ToolItem {
   final String id;
@@ -74,7 +77,7 @@ class InventoryPage extends StatefulWidget {
 class _InventoryPageState extends State<InventoryPage> {
   final Color primary = const Color(0xFF1396E9);
   final Color accent = const Color(0xFFFF6F00);
-  final Color neutral = const Color(0xFFF6F8FA);
+  final Color neutral = AppColors.surface;
 
   List<ToolItem> _items = [];
   List<ActiveUsage> _active = [];
@@ -150,10 +153,6 @@ class _InventoryPageState extends State<InventoryPage> {
       case 'Attendance':
         context.go('/supervisor/attendance');
         break;
-      case 'Logs':
-      case 'Daily Logs':
-        context.go('/supervisor/daily-logs');
-        break;
       case 'Tasks':
       case 'Task Progress':
         context.go('/supervisor/task-progress');
@@ -185,124 +184,7 @@ class _InventoryPageState extends State<InventoryPage> {
               Expanded(
                 child: Column(
                   children: [
-                    // White header with slim blue line at left corner
-                    Container(
-                      color: Colors.white,
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isMobile ? 12 : 22,
-                        vertical: isMobile ? 12 : 14,
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: isMobile ? 3 : 4,
-                            height: isMobile ? 40 : 56,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFF6F00),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Inventory',
-                                  style: TextStyle(
-                                    color: const Color(0xFF0C1935),
-                                    fontSize: isMobile ? 16 : 20,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                if (!isMobile) const SizedBox(height: 4),
-                                if (!isMobile)
-                                  const Text(
-                                    'Tools & machines used on site',
-                                    style: TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          // Search field (hidden on mobile)
-                          if (!isMobile) ...[
-                            SizedBox(
-                              width: width > 1100 ? 360 : 200,
-                              child: TextField(
-                                onChanged: (v) => setState(() => _query = v),
-                                decoration: InputDecoration(
-                                  hintText: 'Search tools, category, status',
-                                  isDense: true,
-                                  prefixIcon: const Icon(
-                                    Icons.search,
-                                    size: 20,
-                                  ),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  filled: true,
-                                  fillColor: Colors.grey[100],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            TextButton.icon(
-                              onPressed: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => const MaterialsPage(),
-                                  ),
-                                );
-                              },
-                              icon: const Icon(Icons.layers),
-                              label: const Text('Materials'),
-                              style: TextButton.styleFrom(
-                                foregroundColor: primary,
-                              ),
-                            ),
-                          ],
-                          // Notification icon
-                          IconButton(
-                            icon: Stack(
-                              children: [
-                                Icon(
-                                  Icons.notifications_outlined,
-                                  color: const Color(0xFF0C1935),
-                                  size: isMobile ? 22 : 24,
-                                ),
-                                Positioned(
-                                  top: 0,
-                                  right: 0,
-                                  child: Container(
-                                    width: isMobile ? 8 : 10,
-                                    height: isMobile ? 8 : 10,
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFFF6B6B),
-                                      borderRadius: BorderRadius.circular(
-                                        isMobile ? 4 : 6,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            onPressed: () =>
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Notifications opened (demo)',
-                                    ),
-                                  ),
-                                ),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
-                        ],
-                      ),
-                    ),
+                    const DashboardHeader(title: 'Inventory'),
 
                     const SizedBox(height: 18),
 
@@ -1250,48 +1132,15 @@ class _InventoryPageState extends State<InventoryPage> {
   }
 
   Widget _buildBottomNavBar() {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF0C1935),
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 16,
-            offset: const Offset(0, -4),
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavItem(Icons.dashboard, 'Dashboard', false),
-                _buildNavItem(Icons.people, 'Workers', false),
-                _buildNavItem(Icons.check_circle, 'Attendance', false),
-                _buildNavItem(Icons.list_alt, 'Logs', false),
-                _buildNavItem(Icons.more_horiz, 'More', true),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return SupervisorMobileBottomNav(
+      activeTab: SupervisorMobileTab.more,
+      activeMorePage: 'Inventory',
+      onSelect: _navigateToPage,
     );
   }
 
   Widget _buildNavItem(IconData icon, String label, bool isActive) {
-    final color = isActive ? const Color(0xFFFF6F00) : Colors.white70;
+    final color = isActive ? AppColors.accent : Colors.white70;
 
     return InkWell(
       onTap: () {
@@ -1304,25 +1153,19 @@ class _InventoryPageState extends State<InventoryPage> {
       borderRadius: BorderRadius.circular(12),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: AppSpacing.sm),
         decoration: BoxDecoration(
-          color: isActive
-              ? const Color(0xFFFF6F00).withOpacity(0.15)
-              : Colors.transparent,
+          color: isActive ? AppColors.accent.withOpacity(0.15) : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, color: color, size: 24),
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               label,
-              style: TextStyle(
-                color: color,
-                fontSize: 11,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
-              ),
+              style: AppTypography.mobileNavLabel(color, isActive: isActive),
             ),
           ],
         ),
@@ -1336,7 +1179,7 @@ class _InventoryPageState extends State<InventoryPage> {
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         decoration: const BoxDecoration(
-          color: Color(0xFF0C1935),
+          color: AppColors.navSurface,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: SafeArea(
@@ -1408,7 +1251,8 @@ class _InventoryPageState extends State<InventoryPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: Colors.white,
+        border: Border.all(color: const Color(0xFFE5E7EB)),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
@@ -1526,7 +1370,7 @@ class _InventoryPageState extends State<InventoryPage> {
           ElevatedButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
+              backgroundColor: AppColors.accent,
               foregroundColor: Colors.white,
             ),
             child: const Text('Return'),
@@ -1682,7 +1526,7 @@ class _InventoryPageState extends State<InventoryPage> {
                       icon: const Icon(Icons.assignment_return, size: 18),
                       label: const Text('Return'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
+                        backgroundColor: AppColors.accent,
                         foregroundColor: Colors.white,
                       ),
                     ),
@@ -2442,7 +2286,7 @@ class _MaterialsPageState extends State<MaterialsPage> {
                         vertical: 14,
                       ),
                       decoration: BoxDecoration(
-                        color: primary.withOpacity(0.05),
+                        color: Colors.white,
                         borderRadius: const BorderRadius.only(
                           topLeft: Radius.circular(12),
                           topRight: Radius.circular(12),
@@ -2638,7 +2482,8 @@ class _MaterialsPageState extends State<MaterialsPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: Colors.white,
+        border: Border.all(color: const Color(0xFFE5E7EB)),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(

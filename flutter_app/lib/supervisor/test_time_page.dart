@@ -110,10 +110,6 @@ class _TestTimePageState extends State<TestTimePage> {
       case 'Attendance':
         context.go('/supervisor/attendance');
         break;
-      case 'Logs':
-      case 'Daily Logs':
-        context.go('/supervisor/daily-logs');
-        break;
       case 'Tasks':
       case 'Task Progress':
         context.go('/supervisor/task-progress');
@@ -164,7 +160,7 @@ class _TestTimePageState extends State<TestTimePage> {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      const SupervisorUserBadge(),
+                      const SupervisorUserBadge(showName: false),
                     ],
                   ),
                 ),

@@ -817,7 +817,7 @@ class _PhaseSection extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     Icon(
-                      Icons.stairs,
+                      Icons.view_timeline,
                       size: 18,
                       color: isGanttView
                           ? const Color(0xFF0C1935)
