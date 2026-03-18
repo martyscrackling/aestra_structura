@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'widgets/sidebar.dart';
-import 'widgets/dashboard_header.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'widgets/responsive_page_layout.dart';
 import 'package:intl/intl.dart';
+import 'dart:convert';
 
 class AttendanceReport {
   AttendanceReport({
@@ -44,6 +44,8 @@ class _ReportsPageState extends State<ReportsPage> {
 
   DateTime _weekStart = DateTime.now();
   DateTime _weekEnd = DateTime.now();
+  List<Map<String, dynamic>> _submittedReports = [];
+  int _selectedReportIndex = -1;
 
   // sample data (UI/layout only - no backend)
   List<AttendanceReport> _rows = [
@@ -85,6 +87,214 @@ class _ReportsPageState extends State<ReportsPage> {
     decimalDigits: 2,
   );
 
+  @override
+  void initState() {
+    super.initState();
+    _loadSubmittedSupervisorReports();
+  }
+
+  int? _toInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '');
+  }
+
+  String _readText(Map<String, dynamic> map, List<String> keys, String fallback) {
+    for (final k in keys) {
+      final v = map[k];
+      if (v == null) continue;
+      final text = v.toString().trim();
+      if (text.isNotEmpty && text.toLowerCase() != 'null') return text;
+    }
+    return fallback;
+  }
+
+  DateTime? _parseSubmittedAt(Map<String, dynamic> map) {
+    final raw = (map['submitted_at'] ?? '').toString();
+    return DateTime.tryParse(raw);
+  }
+
+  void _applySubmission(Map<String, dynamic> report) {
+    final workerRows = (report['workers'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((w) {
+          final m = Map<String, dynamic>.from(w);
+          return AttendanceReport(
+            name: (m['name'] ?? 'Unknown').toString(),
+            role: (m['role'] ?? 'Worker').toString(),
+            totalDaysPresent: int.tryParse((m['day'] ?? '0').toString()) ?? 0,
+            totalHours: double.tryParse((m['hours'] ?? '0').toString()) ?? 0,
+            overtimeHours:
+                double.tryParse((m['ot_hours'] ?? '0').toString()) ?? 0,
+            cashAdvance:
+                double.tryParse((m['cash_advance'] ?? '0').toString()) ?? 0,
+            deduction:
+                double.tryParse((m['deduction'] ?? '0').toString()) ?? 0,
+            hourlyRate:
+                double.tryParse((m['hourly_rate'] ?? '0').toString()) ?? 0,
+          );
+        })
+        .toList();
+
+    final start = DateTime.tryParse((report['report_start'] ?? '').toString());
+    final end = DateTime.tryParse((report['report_end'] ?? '').toString());
+
+    if (!mounted) return;
+    setState(() {
+      if (start != null) _weekStart = start;
+      if (end != null) _weekEnd = end;
+      _rows = workerRows;
+    });
+  }
+
+  Future<void> _loadSubmittedSupervisorReports() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final collected = <Map<String, dynamic>>[];
+
+      final latestRaw = prefs.getString('pm_latest_report_v1');
+      if (latestRaw != null && latestRaw.isNotEmpty) {
+        final decodedLatest = jsonDecode(latestRaw);
+        if (decodedLatest is Map) {
+          collected.add(Map<String, dynamic>.from(decodedLatest));
+        }
+      }
+
+      final raw = prefs.getString('supervisor_submitted_reports_v1');
+      final decoded =
+          (raw == null || raw.isEmpty) ? const [] : jsonDecode(raw);
+      if (decoded is List) {
+        for (final item in decoded) {
+          if (item is Map) {
+            collected.add(Map<String, dynamic>.from(item));
+          }
+        }
+      }
+
+      final seen = <String>{};
+      final unique = <Map<String, dynamic>>[];
+      for (final report in collected) {
+        final key = '${report['submission_id'] ?? ''}|${report['submitted_at'] ?? ''}';
+        if (seen.contains(key)) continue;
+        seen.add(key);
+        unique.add(report);
+      }
+
+      unique.sort((a, b) {
+        final da = _parseSubmittedAt(a);
+        final db = _parseSubmittedAt(b);
+        if (da == null && db == null) return 0;
+        if (da == null) return 1;
+        if (db == null) return -1;
+        return db.compareTo(da);
+      });
+
+      if (!mounted) return;
+      setState(() {
+        _submittedReports = unique;
+        _selectedReportIndex = unique.isEmpty ? -1 : 0;
+      });
+
+      if (unique.isNotEmpty) {
+        _applySubmission(unique.first);
+      } else {
+        setState(() {
+          _rows = [];
+        });
+      }
+    } catch (_) {
+      // Keep existing sample data if loading fails.
+    }
+  }
+
+  Widget _submissionCard({
+    required Map<String, dynamic> report,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    final projectId = _toInt(report['project_id']);
+    final projectLabel = _readText(
+      report,
+      const ['project_name'],
+      projectId == null ? 'Unknown Project' : 'Project #$projectId',
+    );
+    final supervisorLabel = _readText(
+      report,
+      const ['supervisor_name'],
+      'Unknown Supervisor',
+    );
+    final submittedAt = _parseSubmittedAt(report);
+    final submittedText = submittedAt == null
+        ? 'Unknown submit date'
+        : DateFormat('MMM d, yyyy • h:mm a').format(submittedAt);
+    final totalWorkers = (report['workers'] as List?)?.length ?? 0;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFFFF3E8) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? accent : const Color(0xFFE6E9EF),
+            width: isSelected ? 1.4 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: accent.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(Icons.assignment_rounded, color: accent, size: 20),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    projectLabel,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF0C1935),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Supervisor: $supervisorLabel',
+                    style: TextStyle(
+                      color: Colors.grey[700],
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$submittedText • $totalWorkers workers',
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              isSelected ? Icons.check_circle : Icons.chevron_right,
+              color: isSelected ? accent : Colors.grey,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // Submit the current report to PM (demo)
   void _submitToPM() {
     setState(() {
@@ -118,48 +328,46 @@ class _ReportsPageState extends State<ReportsPage> {
   }
 
   Widget _kpiCard(String title, String value, {Color? color, IconData? icon}) {
-    return Expanded(
-      child: Card(
-        elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              if (icon != null)
-                Container(
-                  decoration: BoxDecoration(
-                    color: (color ?? accent).withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  padding: const EdgeInsets.all(10),
-                  child: Icon(icon, color: color ?? accent, size: 20),
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            if (icon != null)
+              Container(
+                decoration: BoxDecoration(
+                  color: (color ?? accent).withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-              if (icon != null) const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    value,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: color ?? Colors.black,
-                    ),
-                  ),
-                ],
+                padding: const EdgeInsets.all(10),
+                child: Icon(icon, color: color ?? accent, size: 20),
               ),
-            ],
-          ),
+            if (icon != null) const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: color ?? Colors.black,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -288,7 +496,26 @@ class _ReportsPageState extends State<ReportsPage> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 768;
-    final isTablet = screenWidth >= 768 && screenWidth < 1024;
+    final selectedReport =
+      (_selectedReportIndex >= 0 && _selectedReportIndex < _submittedReports.length)
+      ? _submittedReports[_selectedReportIndex]
+      : null;
+    final selectedProjectId =
+      selectedReport == null ? null : _toInt(selectedReport['project_id']);
+    final selectedProjectLabel = selectedReport == null
+      ? 'No selected report'
+      : _readText(
+        selectedReport,
+        const ['project_name'],
+        selectedProjectId == null ? 'Unknown Project' : 'Project #$selectedProjectId',
+        );
+    final selectedSupervisorLabel = selectedReport == null
+      ? 'Select a submission below'
+      : _readText(
+        selectedReport,
+        const ['supervisor_name'],
+        'Unknown Supervisor',
+        );
 
     return ResponsivePageLayout(
       currentPage: 'Reports',
@@ -310,7 +537,7 @@ class _ReportsPageState extends State<ReportsPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Weekly Attendance Report',
+                        'Supervisor Report Summary',
                         style: TextStyle(
                           color: Color(0xFF0C1935),
                           fontSize: 16,
@@ -319,7 +546,7 @@ class _ReportsPageState extends State<ReportsPage> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        _dateFmt.format(_weekStart),
+                        '$selectedProjectLabel\nSupervisor: $selectedSupervisorLabel',
                         style: TextStyle(color: Colors.grey[700], fontSize: 12),
                       ),
                       const SizedBox(height: 12),
@@ -360,7 +587,7 @@ class _ReportsPageState extends State<ReportsPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'Weekly Attendance Report',
+                              'Supervisor Report Summary',
                               style: TextStyle(
                                 color: Color(0xFF0C1935),
                                 fontSize: 18,
@@ -369,7 +596,7 @@ class _ReportsPageState extends State<ReportsPage> {
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              _dateFmt.format(_weekStart),
+                              '$selectedProjectLabel • Supervisor: $selectedSupervisorLabel',
                               style: TextStyle(color: Colors.grey[700]),
                             ),
                           ],
@@ -399,6 +626,50 @@ class _ReportsPageState extends State<ReportsPage> {
                   ),
 
                 const SizedBox(height: 16),
+
+                Card(
+                  elevation: 1,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.all(isMobile ? 12 : 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Submitted Reports',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF0C1935),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        if (_submittedReports.isEmpty)
+                          Text(
+                            'No supervisor submissions yet.',
+                            style: TextStyle(color: Colors.grey[700]),
+                          )
+                        else
+                          ...List.generate(_submittedReports.length, (index) {
+                            final report = _submittedReports[index];
+                            return _submissionCard(
+                              report: report,
+                              isSelected: index == _selectedReportIndex,
+                              onTap: () {
+                                setState(() {
+                                  _selectedReportIndex = index;
+                                });
+                                _applySubmission(report);
+                              },
+                            );
+                          }),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
 
                 // Date selector
                 Card(
@@ -461,25 +732,31 @@ class _ReportsPageState extends State<ReportsPage> {
                 else
                   Row(
                     children: [
-                      _kpiCard(
-                        'Total Hours',
-                        '${_totalHours.toStringAsFixed(1)}',
-                        icon: Icons.access_time,
-                        color: accent,
+                      Expanded(
+                        child: _kpiCard(
+                          'Total Hours',
+                          '${_totalHours.toStringAsFixed(1)}',
+                          icon: Icons.access_time,
+                          color: accent,
+                        ),
                       ),
                       const SizedBox(width: 12),
-                      _kpiCard(
-                        'Overtime',
-                        '${_totalOvertime.toStringAsFixed(1)} hrs',
-                        icon: Icons.flash_on,
-                        color: Colors.orange,
+                      Expanded(
+                        child: _kpiCard(
+                          'Overtime',
+                          '${_totalOvertime.toStringAsFixed(1)} hrs',
+                          icon: Icons.flash_on,
+                          color: Colors.orange,
+                        ),
                       ),
                       const SizedBox(width: 12),
-                      _kpiCard(
-                        'Total Deductions',
-                        _money.format(_totalDeductions),
-                        icon: Icons.money_off,
-                        color: Colors.redAccent,
+                      Expanded(
+                        child: _kpiCard(
+                          'Total Deductions',
+                          _money.format(_totalDeductions),
+                          icon: Icons.money_off,
+                          color: Colors.redAccent,
+                        ),
                       ),
                     ],
                   ),
@@ -490,158 +767,157 @@ class _ReportsPageState extends State<ReportsPage> {
           ),
 
           // Worker List
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: isMobile ? 16 : 24,
-                vertical: 8,
+          Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 16 : 24,
+              vertical: 8,
+            ),
+            child: Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
-              child: Card(
-                elevation: 2,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Padding(
-                  padding: EdgeInsets.all(isMobile ? 10 : 14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (!isMobile)
-                        Row(
-                          children: [
-                            const Expanded(
+              child: Padding(
+                padding: EdgeInsets.all(isMobile ? 10 : 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (!isMobile)
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Worker',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(
+                            width: 220,
+                            child: Text(
+                              'Computed Salary',
+                              textAlign: TextAlign.right,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    if (!isMobile) const Divider(),
+                    _rows.isEmpty
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 20),
                               child: Text(
-                                'Worker',
+                                'No data for selected week',
                                 style: TextStyle(
-                                  fontWeight: FontWeight.w700,
+                                  color: Colors.grey[700],
                                 ),
                               ),
                             ),
-                            const SizedBox(
-                              width: 220,
-                              child: Text(
-                                'Computed Salary',
-                                textAlign: TextAlign.right,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      if (!isMobile) const Divider(),
-                      Expanded(
-                        child: _rows.isEmpty
-                            ? Center(
-                                child: Text(
-                                  'No data for selected week',
+                          )
+                        : ListView.builder(
+                            itemCount: _rows.length,
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemBuilder: (context, i) => _rowCard(_rows[i]),
+                          ),
+                    const SizedBox(height: 12),
+                    // Totals summary
+                    Container(
+                      padding: EdgeInsets.all(isMobile ? 10 : 12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: isMobile
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Total Deductions',
                                   style: TextStyle(
                                     color: Colors.grey[700],
+                                    fontSize: 12,
                                   ),
                                 ),
-                              )
-                            : ListView.builder(
-                                itemCount: _rows.length,
-                                itemBuilder: (context, i) => _rowCard(_rows[i]),
-                              ),
-                      ),
-                      const SizedBox(height: 12),
-                      // Totals summary
-                      Container(
-                        padding: EdgeInsets.all(isMobile ? 10 : 12),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: isMobile
-                            ? Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Total Deductions',
-                                    style: TextStyle(
-                                      color: Colors.grey[700],
-                                      fontSize: 12,
-                                    ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _money.format(_totalDeductions),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 14,
+                                    color: Colors.redAccent,
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    _money.format(_totalDeductions),
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 14,
-                                      color: Colors.redAccent,
-                                    ),
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'Total Computed Salary',
+                                  style: TextStyle(
+                                    color: Colors.grey[700],
+                                    fontSize: 12,
                                   ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    'Total Computed Salary',
-                                    style: TextStyle(
-                                      color: Colors.grey[700],
-                                      fontSize: 12,
-                                    ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _money.format(_totalComputedSalary),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 16,
+                                    color: Colors.green,
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    _money.format(_totalComputedSalary),
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 16,
-                                      color: Colors.green,
-                                    ),
-                                  ),
-                                ],
-                              )
-                            : Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Total Deductions',
-                                        style: TextStyle(
-                                          color: Colors.grey[700],
-                                        ),
+                                ),
+                              ],
+                            )
+                          : Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Total Deductions',
+                                      style: TextStyle(
+                                        color: Colors.grey[700],
                                       ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        _money.format(_totalDeductions),
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 16,
-                                          color: Colors.redAccent,
-                                        ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      _money.format(_totalDeductions),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 16,
+                                        color: Colors.redAccent,
                                       ),
-                                    ],
-                                  ),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Text(
-                                        'Total Computed Salary',
-                                        style: TextStyle(
-                                          color: Colors.grey[700],
-                                        ),
+                                    ),
+                                  ],
+                                ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      'Total Computed Salary',
+                                      style: TextStyle(
+                                        color: Colors.grey[700],
                                       ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        _money.format(_totalComputedSalary),
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w900,
-                                          fontSize: 18,
-                                          color: Colors.green,
-                                        ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      _money.format(_totalComputedSalary),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 18,
+                                        color: Colors.green,
                                       ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                      ),
-                    ],
-                  ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                    ),
+                  ],
                 ),
               ),
             ),

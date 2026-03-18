@@ -5,19 +5,24 @@ import 'package:http/http.dart' as http;
 
 import '../../services/app_config.dart';
 import '../../services/auth_service.dart';
+import '../../services/app_theme_tokens.dart';
 
 class SupervisorUserBadge extends StatefulWidget {
   final bool showSubtitle;
+  final bool showName;
   final String subtitle;
   final double gap;
+  final double avatarSize;
   final TextStyle? nameStyle;
   final TextStyle? subtitleStyle;
 
   const SupervisorUserBadge({
     super.key,
     this.showSubtitle = true,
+    this.showName = true,
     this.subtitle = 'Supervisor',
     this.gap = 10,
+    this.avatarSize = 36,
     this.nameStyle,
     this.subtitleStyle,
   });
@@ -134,7 +139,7 @@ class _SupervisorUserBadgeState extends State<SupervisorUserBadge> {
     final nameStyle =
         widget.nameStyle ??
         TextStyle(
-          color: const Color(0xFF0C1935),
+          color: AppColors.textPrimary,
           fontSize: widget.showSubtitle ? 13 : null,
           fontWeight: FontWeight.w700,
         );
@@ -142,33 +147,35 @@ class _SupervisorUserBadgeState extends State<SupervisorUserBadge> {
     final subtitleStyle =
         widget.subtitleStyle ??
         const TextStyle(
-          color: Colors.grey,
+          color: AppColors.textMuted,
           fontSize: 10,
           fontWeight: FontWeight.w400,
         );
 
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 36,
-          height: 36,
+          width: widget.avatarSize,
+          height: widget.avatarSize,
           decoration: BoxDecoration(
-            color: const Color(0xFFE8D5F2),
-            borderRadius: BorderRadius.circular(8),
+            color: AppColors.surfaceCard,
+            border: Border.all(color: AppColors.borderSubtle),
+            shape: BoxShape.circle,
           ),
           child: Center(
             child: Text(
               _avatarLetter(name),
-              style: const TextStyle(
-                color: Color(0xFFB088D9),
-                fontSize: 18,
+              style: TextStyle(
+                color: AppColors.accent,
+                fontSize: widget.avatarSize * 0.48,
                 fontWeight: FontWeight.w700,
               ),
             ),
           ),
         ),
-        SizedBox(width: widget.gap),
-        if (widget.showSubtitle)
+        if (widget.showName) SizedBox(width: widget.gap),
+        if (widget.showName && widget.showSubtitle)
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -187,7 +194,7 @@ class _SupervisorUserBadgeState extends State<SupervisorUserBadge> {
               ),
             ],
           )
-        else
+        else if (widget.showName)
           Text(
             name,
             maxLines: 1,

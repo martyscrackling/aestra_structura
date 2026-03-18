@@ -8,9 +8,11 @@ import 'dart:async';
 import '../services/auth_service.dart';
 import '../services/app_config.dart';
 import '../services/app_time_service.dart';
+import '../services/app_theme_tokens.dart';
 import '../services/subscription_helper.dart';
 import 'widgets/sidebar.dart';
-import 'widgets/supervisor_user_badge.dart';
+import 'widgets/mobile_bottom_nav.dart';
+import 'widgets/dashboard_header.dart';
 
 class AttendancePage extends StatefulWidget {
   final bool initialSidebarVisible;
@@ -22,9 +24,9 @@ class AttendancePage extends StatefulWidget {
 }
 
 class _AttendancePageState extends State<AttendancePage> {
-  final Color primary = const Color(0xFFFF6F00);
+  final Color primary = AppColors.accent;
   final Color primaryLight = const Color(0xFFFFF3E0);
-  final Color neutral = const Color(0xFFF4F6F9);
+  final Color neutral = AppColors.surface;
 
   late Future<List<Map<String, dynamic>>> _fieldWorkersFuture;
   late Future<List<Map<String, dynamic>>> _attendanceRecordsFuture;
@@ -126,6 +128,12 @@ class _AttendancePageState extends State<AttendancePage> {
           if (SubscriptionHelper.handleResponse(context, updateResponse)) {
             return;
           }
+
+          if (updateResponse.statusCode < 200 || updateResponse.statusCode >= 300) {
+            throw Exception(
+              'Failed to update attendance (${updateResponse.statusCode}): ${updateResponse.body}',
+            );
+          }
         } else {
           // Create new
           final createResponse = await http.post(
@@ -140,7 +148,17 @@ class _AttendancePageState extends State<AttendancePage> {
           if (SubscriptionHelper.handleResponse(context, createResponse)) {
             return;
           }
+
+          if (createResponse.statusCode < 200 || createResponse.statusCode >= 300) {
+            throw Exception(
+              'Failed to create attendance (${createResponse.statusCode}): ${createResponse.body}',
+            );
+          }
         }
+      } else {
+        throw Exception(
+          'Failed to query attendance (${existingRecords.statusCode}): ${existingRecords.body}',
+        );
       }
 
       // Refresh attendance records
@@ -149,6 +167,10 @@ class _AttendancePageState extends State<AttendancePage> {
       });
     } catch (e) {
       print('Error saving attendance: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save attendance: $e')),
+      );
     }
   }
 
@@ -182,14 +204,81 @@ class _AttendancePageState extends State<AttendancePage> {
     return '$hh:$mm:00';
   }
 
+  int? _asInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value.trim());
+    return null;
+  }
+
+  Map<String, dynamic> _resolveWorkerFromRecord(
+    Map<String, dynamic> record,
+    List<Map<String, dynamic>> fieldWorkers,
+  ) {
+    final recordWorkerRaw = record['field_worker_id'] ?? record['field_worker'];
+    final recordWorkerId = recordWorkerRaw is Map<String, dynamic>
+        ? _asInt(recordWorkerRaw['fieldworker_id'] ?? recordWorkerRaw['id'])
+        : _asInt(recordWorkerRaw);
+
+    if (recordWorkerId != null) {
+      for (final worker in fieldWorkers) {
+        final workerId = _asInt(
+          worker['fieldworker_id'] ?? worker['field_worker'] ?? worker['id'],
+        );
+        if (workerId == recordWorkerId) {
+          return worker;
+        }
+      }
+    }
+
+    if (recordWorkerRaw is Map<String, dynamic>) {
+      return {
+        'first_name': recordWorkerRaw['first_name'] ?? 'Unknown',
+        'last_name': recordWorkerRaw['last_name'] ?? '',
+        'role': recordWorkerRaw['role'] ?? 'N/A',
+      };
+    }
+
+    final rawName = (record['field_worker_name'] ?? '').toString().trim();
+    if (rawName.isNotEmpty) {
+      final parts = rawName.split(RegExp(r'\s+'));
+      final first = parts.isNotEmpty ? parts.first : 'Unknown';
+      final last = parts.length > 1 ? parts.sublist(1).join(' ') : '';
+      return {
+        'first_name': first,
+        'last_name': last,
+        'role': record['role'] ?? 'N/A',
+      };
+    }
+
+    return {
+      'first_name': 'Unknown',
+      'last_name': '',
+      'role': 'N/A',
+    };
+  }
+
   int? _timeStringToMinutes(String? raw) {
     if (raw == null || raw.trim().isEmpty) return null;
-    final normalized = raw.split('.').first;
-    final parts = normalized.split(':');
-    if (parts.length < 2) return null;
-    final hour = int.tryParse(parts[0]);
-    final minute = int.tryParse(parts[1]);
+    final text = raw.trim();
+    final match = RegExp(
+      r'^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AaPp][Mm])?$',
+    ).firstMatch(text);
+    if (match == null) return null;
+
+    var hour = int.tryParse(match.group(1) ?? '');
+    final minute = int.tryParse(match.group(2) ?? '');
     if (hour == null || minute == null) return null;
+
+    final meridiem = (match.group(4) ?? '').toLowerCase();
+    if (meridiem == 'am') {
+      if (hour == 12) hour = 0;
+    } else if (meridiem == 'pm') {
+      if (hour < 12) hour += 12;
+    }
+
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
     return hour * 60 + minute;
   }
 
@@ -340,10 +429,6 @@ class _AttendancePageState extends State<AttendancePage> {
         break;
       case 'Attendance':
         return; // Already on attendance page
-      case 'Logs':
-      case 'Daily Logs':
-        context.go('/supervisor/daily-logs');
-        break;
       case 'Tasks':
       case 'Task Progress':
         context.go('/supervisor/task-progress');
@@ -384,8 +469,8 @@ class _AttendancePageState extends State<AttendancePage> {
               .toLowerCase();
       final matchesSearch =
           searchQuery.isEmpty || fullName.contains(searchQuery.toLowerCase());
-      final matchesStatus =
-          statusFilter == 'All' || record['status'] == statusFilter;
+        final matchesStatus =
+          statusFilter == 'All' || _statusLabelForRecord(record) == statusFilter;
       final matchesRole = roleFilter == 'All' || worker['role'] == roleFilter;
 
       return matchesSearch && matchesStatus && matchesRole;
@@ -394,8 +479,31 @@ class _AttendancePageState extends State<AttendancePage> {
     return filtered;
   }
 
+  String _statusKeyForRecord(Map<String, dynamic> record) {
+    final checkOut = (record['check_out_time'] ?? '').toString().trim();
+    if (checkOut.isNotEmpty) return 'checked_out';
+    return (record['status'] ?? 'absent').toString().trim().toLowerCase();
+  }
+
+  String _statusLabelForRecord(Map<String, dynamic> record) {
+    switch (_statusKeyForRecord(record)) {
+      case 'checked_out':
+        return 'Checked Out';
+      case 'on_site':
+        return 'On Site';
+      case 'on_break':
+        return 'On Break';
+      case 'absent':
+        return 'Absent';
+      default:
+        return 'Unknown';
+    }
+  }
+
   Color _statusColor(String s) {
     switch (s) {
+      case 'checked_out':
+        return const Color(0xFF2563EB);
       case 'on_site':
         return const Color(0xFF757575);
       case 'on_break':
@@ -443,204 +551,7 @@ class _AttendancePageState extends State<AttendancePage> {
               Expanded(
                 child: Column(
                   children: [
-                    // White header with slim blue line on the left (keeps Notification bell & AESTRA)
-                    Container(
-                      color: Colors.white,
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isMobile ? 12 : 20,
-                        vertical: isMobile ? 12 : 12,
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: isMobile ? 3 : 4,
-                            height: isMobile ? 40 : 56,
-                            decoration: BoxDecoration(
-                              color: primary,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                          ),
-                          SizedBox(width: isMobile ? 8 : 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Attendance',
-                                  style: TextStyle(
-                                    fontSize: isMobile ? 16 : 22,
-                                    fontWeight: FontWeight.bold,
-                                    color: const Color(0xFF0C1935),
-                                  ),
-                                ),
-                                if (!isMobile) const SizedBox(height: 4),
-                                if (!isMobile)
-                                  Text(
-                                    'Weekly overview • ${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}',
-                                    style: TextStyle(
-                                      color: Colors.grey[700],
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-
-                          // Notification bell and AESTRA
-                          if (!isMobile) ...[
-                            Stack(
-                              children: [
-                                IconButton(
-                                  onPressed: () {
-                                    setState(() => hasNotifications = false);
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Notifications opened (demo)',
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                  icon: Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey[100],
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: const Icon(
-                                      Icons.notifications_outlined,
-                                      color: Color(0xFF0C1935),
-                                    ),
-                                  ),
-                                ),
-                                if (hasNotifications)
-                                  Positioned(
-                                    right: 6,
-                                    top: 6,
-                                    child: Container(
-                                      width: 10,
-                                      height: 10,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFFF6B6B),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(width: 12),
-                            PopupMenuButton<String>(
-                              onSelected: (value) async {
-                                if (value == 'switch') {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Switch account (demo)'),
-                                    ),
-                                  );
-                                } else if (value == 'logout') {
-                                  await AuthService().logout();
-                                  if (!context.mounted) return;
-                                  context.go('/login');
-                                }
-                              },
-                              offset: const Offset(0, 48),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              itemBuilder: (BuildContext context) =>
-                                  <PopupMenuEntry<String>>[
-                                    const PopupMenuItem<String>(
-                                      value: 'switch',
-                                      height: 48,
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            Icons.swap_horiz,
-                                            size: 18,
-                                            color: Color(0xFF0C1935),
-                                          ),
-                                          SizedBox(width: 12),
-                                          Text('Switch Account'),
-                                        ],
-                                      ),
-                                    ),
-                                    const PopupMenuDivider(height: 1),
-                                    const PopupMenuItem<String>(
-                                      value: 'logout',
-                                      height: 48,
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            Icons.logout,
-                                            size: 18,
-                                            color: Color(0xFFFF6B6B),
-                                          ),
-                                          SizedBox(width: 12),
-                                          Text(
-                                            'Logout',
-                                            style: TextStyle(
-                                              color: Color(0xFFFF6B6B),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[100],
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const SupervisorUserBadge(),
-                              ),
-                            ),
-                          ] else
-                            // Mobile: Just notification icon
-                            IconButton(
-                              icon: Stack(
-                                children: [
-                                  const Icon(
-                                    Icons.notifications_outlined,
-                                    color: Color(0xFF0C1935),
-                                    size: 22,
-                                  ),
-                                  if (hasNotifications)
-                                    Positioned(
-                                      top: 0,
-                                      right: 0,
-                                      child: Container(
-                                        width: 8,
-                                        height: 8,
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFFF6B6B),
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                              onPressed: () {
-                                setState(() => hasNotifications = false);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Notifications opened (demo)',
-                                    ),
-                                  ),
-                                );
-                              },
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                        ],
-                      ),
-                    ),
+                    const DashboardHeader(title: 'Attendance'),
 
                     SizedBox(height: isMobile ? 4 : 8),
 
@@ -752,7 +663,13 @@ class _AttendancePageState extends State<AttendancePage> {
                                               color: Colors.black87,
                                             ),
                                             items:
-                                                ['All', 'On Site', 'On Break']
+                                                [
+                                                      'All',
+                                                      'On Site',
+                                                      'On Break',
+                                                      'Checked Out',
+                                                      'Absent',
+                                                    ]
                                                     .map(
                                                       (s) => DropdownMenuItem(
                                                         value: s,
@@ -934,7 +851,13 @@ class _AttendancePageState extends State<AttendancePage> {
                                       flex: 2,
                                       child: Wrap(
                                         spacing: 8,
-                                        children: ['All', 'On Site', 'On Break']
+                                        children: [
+                                              'All',
+                                              'On Site',
+                                              'On Break',
+                                              'Checked Out',
+                                              'Absent',
+                                            ]
                                             .map((s) {
                                               final sel = statusFilter == s;
                                               return ChoiceChip(
@@ -1166,7 +1089,7 @@ class _AttendancePageState extends State<AttendancePage> {
         children: [
           Container(
             decoration: BoxDecoration(
-              color: primary.withOpacity(0.05),
+              color: Colors.white,
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(12),
               ),
@@ -1190,13 +1113,12 @@ class _AttendancePageState extends State<AttendancePage> {
               separatorBuilder: (context, index) => const Divider(height: 1),
               itemBuilder: (context, index) {
                 final record = filteredRecords[index];
-                final worker = fieldWorkers.firstWhere(
-                  (w) => w['fieldworker_id'] == record['field_worker'],
-                  orElse: () => {'first_name': 'Unknown', 'last_name': ''},
-                );
+                final worker = _resolveWorkerFromRecord(record, fieldWorkers);
                 final workerName =
                     '${worker['first_name']} ${worker['last_name']}';
-                final statusColor = _statusColor(record['status'] ?? 'absent');
+                final statusKey = _statusKeyForRecord(record);
+                final statusColor = _statusColor(statusKey);
+                final statusLabel = _statusLabelForRecord(record);
 
                 return InkWell(
                   onTap: () => _showEditAttendanceDialog(record, worker),
@@ -1234,14 +1156,12 @@ class _AttendancePageState extends State<AttendancePage> {
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: statusColor.withOpacity(0.12),
+                              color: Colors.white,
+                              border: Border.all(color: const Color(0xFFE5E7EB)),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              (record['status'] ?? 'absent').replaceAll(
-                                '_',
-                                ' ',
-                              ),
+                              statusLabel,
                               style: TextStyle(
                                 color: statusColor,
                                 fontWeight: FontWeight.w700,
@@ -1287,48 +1207,14 @@ class _AttendancePageState extends State<AttendancePage> {
   }
 
   Widget _buildBottomNavBar() {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF0C1935),
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 16,
-            offset: const Offset(0, -4),
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavItem(Icons.dashboard, 'Dashboard', false),
-                _buildNavItem(Icons.people, 'Workers', false),
-                _buildNavItem(Icons.check_circle, 'Attendance', true),
-                _buildNavItem(Icons.list_alt, 'Logs', false),
-                _buildNavItem(Icons.more_horiz, 'More', false),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return SupervisorMobileBottomNav(
+      activeTab: SupervisorMobileTab.attendance,
+      onSelect: _navigateToPage,
     );
   }
 
   Widget _buildNavItem(IconData icon, String label, bool isActive) {
-    final color = isActive ? const Color(0xFFFF6F00) : Colors.white70;
+    final color = isActive ? AppColors.accent : Colors.white70;
 
     return InkWell(
       onTap: () {
@@ -1341,26 +1227,19 @@ class _AttendancePageState extends State<AttendancePage> {
       borderRadius: BorderRadius.circular(12),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: AppSpacing.sm),
         decoration: BoxDecoration(
-          color: isActive
-              ? const Color(0xFFFF6F00).withOpacity(0.15)
-              : Colors.transparent,
+          color: isActive ? AppColors.accent.withOpacity(0.15) : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, color: color, size: 24),
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               label,
-              style: TextStyle(
-                color: color,
-                fontSize: 11,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                letterSpacing: 0.3,
-              ),
+              style: AppTypography.mobileNavLabel(color, isActive: isActive),
             ),
           ],
         ),
@@ -1374,7 +1253,7 @@ class _AttendancePageState extends State<AttendancePage> {
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         decoration: const BoxDecoration(
-          color: Color(0xFF0C1935),
+          color: AppColors.navSurface,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: SafeArea(
@@ -1429,21 +1308,16 @@ class _AttendancePageState extends State<AttendancePage> {
       itemCount: filteredRecords.length,
       itemBuilder: (context, index) {
         final record = filteredRecords[index];
-        final worker = fieldWorkers.firstWhere(
-          (w) => w['fieldworker_id'] == record['field_worker'],
-          orElse: () => {
-            'first_name': 'Unknown',
-            'last_name': '',
-            'role': 'N/A',
-          },
-        );
+        final worker = _resolveWorkerFromRecord(record, fieldWorkers);
         final workerName = '${worker['first_name']} ${worker['last_name']}';
         final initials = workerName
             .split(' ')
             .map((s) => s.isNotEmpty ? s[0] : '')
             .take(2)
             .join();
-        final statusColor = _statusColor(record['status'] ?? 'absent');
+        final statusKey = _statusKeyForRecord(record);
+        final statusColor = _statusColor(statusKey);
+        final statusLabel = _statusLabelForRecord(record);
 
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
@@ -1463,7 +1337,7 @@ class _AttendancePageState extends State<AttendancePage> {
                     children: [
                       CircleAvatar(
                         radius: 24,
-                        backgroundColor: primary.withOpacity(0.12),
+                        backgroundColor: Colors.white,
                         child: Text(
                           initials,
                           style: TextStyle(
@@ -1502,11 +1376,12 @@ class _AttendancePageState extends State<AttendancePage> {
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: statusColor.withOpacity(0.12),
+                          color: Colors.white,
+                          border: Border.all(color: const Color(0xFFE5E7EB)),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          (record['status'] ?? 'absent').replaceAll('_', ' '),
+                          statusLabel,
                           style: TextStyle(
                             color: statusColor,
                             fontWeight: FontWeight.w700,
@@ -1564,8 +1439,6 @@ class _AttendancePageState extends State<AttendancePage> {
                       icon: const Icon(Icons.edit, size: 16),
                       label: const Text('Edit Attendance'),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: primary,
-                        side: BorderSide(color: primary),
                         padding: const EdgeInsets.symmetric(vertical: 10),
                       ),
                     ),
@@ -1612,7 +1485,7 @@ class _AttendancePageState extends State<AttendancePage> {
         child: Row(
           children: [
             CircleAvatar(
-              backgroundColor: color.withOpacity(0.12),
+              backgroundColor: Colors.white,
               child: Icon(icon, color: color, size: 18),
             ),
             const SizedBox(width: 12),
