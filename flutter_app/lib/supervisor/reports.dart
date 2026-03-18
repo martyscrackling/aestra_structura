@@ -4,12 +4,18 @@ import 'widgets/sidebar.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'dart:convert';
 import '../services/auth_service.dart';
 import '../services/app_config.dart';
 import '../services/app_time_service.dart';
-import 'widgets/supervisor_user_badge.dart';
+import '../services/app_theme_tokens.dart';
+import 'widgets/mobile_bottom_nav.dart';
+import 'widgets/dashboard_header.dart';
+
+const double _dailyRegularHoursCap = 8.0;
+const double _overtimeRateMultiplier = 1.5;
 
 class AttendanceReport {
   AttendanceReport({
@@ -40,13 +46,10 @@ class AttendanceReport {
   final double philhealthDeduction;
   final double pagibigDeduction;
 
-  double get regularHours {
-    final regular = totalHours - overtimeHours;
-    return regular < 0 ? 0 : regular;
-  }
+  double get regularHours => totalHours;
 
   double get grossPay =>
-      regularHours * hourlyRate + overtimeHours * hourlyRate * 1.5;
+      regularHours * hourlyRate + overtimeHours * hourlyRate * _overtimeRateMultiplier;
 
   double get totalGovernmentDeductions =>
       sssDeduction + philhealthDeduction + pagibigDeduction;
@@ -87,8 +90,8 @@ class ReportsPage extends StatefulWidget {
 }
 
 class _ReportsPageState extends State<ReportsPage> {
-  final Color neutral = const Color(0xFFF4F6F9);
-  final Color accent = const Color(0xFFFF6F00);
+  final Color neutral = AppColors.surface;
+  final Color accent = AppColors.accent;
   final DateFormat _dateFmt = DateFormat('yyyy-MM-dd');
   final DateFormat _prettyDateFmt = DateFormat('MMM d, yyyy');
   final DateFormat _liveDateTimeFmt = DateFormat('yyyy-MM-dd HH:mm:ss');
@@ -112,7 +115,9 @@ class _ReportsPageState extends State<ReportsPage> {
 
     final now = AppTimeService.now();
     _weekEnd = DateTime(now.year, now.month, now.day);
-    _weekStart = _weekEnd.subtract(Duration(days: _weekEnd.weekday - 1));
+    _weekStart = _weekEnd;
+    _salaryDate = _weekEnd;
+    _effectiveReportStart = _weekStart;
     _refreshReports();
     _loadReportsHistory();
   }
@@ -135,10 +140,6 @@ class _ReportsPageState extends State<ReportsPage> {
       case 'Attendance':
         context.go('/supervisor/attendance');
         break;
-      case 'Logs':
-      case 'Daily Logs':
-        context.go('/supervisor/daily-logs');
-        break;
       case 'Tasks':
       case 'Task Progress':
         context.go('/supervisor/task-progress');
@@ -155,6 +156,8 @@ class _ReportsPageState extends State<ReportsPage> {
 
   late DateTime _weekStart;
   late DateTime _weekEnd;
+  late DateTime _salaryDate;
+  late DateTime _effectiveReportStart;
 
   List<AttendanceReport> _rows = [];
   List<ReportHistoryEntry> _history = [];
@@ -168,8 +171,77 @@ class _ReportsPageState extends State<ReportsPage> {
   Future<void> _submitToPM() async {
     await _refreshReports();
     if (!mounted) return;
+
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentUser = authService.currentUser ?? <String, dynamic>{};
+    final projectId = _toInt(authService.currentUser?['project_id']);
+    if (projectId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No project assigned to submit report.')),
+      );
+      return;
+    }
+
+    final payload = <String, dynamic>{
+      'submission_id': '$projectId:${_dateString(_salaryDate)}',
+      'project_id': projectId,
+      'project_name':
+        (currentUser['project_name'] ?? currentUser['assigned_project_name'] ?? '')
+          .toString(),
+      'supervisor_id': _toInt(currentUser['supervisor_id']) ?? _toInt(currentUser['id']),
+      'supervisor_name':
+        (currentUser['full_name'] ?? currentUser['name'] ?? currentUser['username'] ?? 'Supervisor')
+          .toString(),
+      'submitted_at': DateTime.now().toIso8601String(),
+      'salary_date': _dateString(_salaryDate),
+      'report_start': _dateString(_effectiveReportStart),
+      'report_end': _dateString(_weekEnd),
+      'totals': {
+        'total_hours': _totalHours,
+        'total_ot': _totalOvertime,
+        'total_salary': _totalComputedSalary,
+        'total_deductions': _totalDeductions,
+      },
+      'workers': _rows
+          .map(
+            (r) => {
+              'field_worker_id': r.fieldWorkerId,
+              'name': r.name,
+              'role': r.role,
+              'day': r.totalDaysPresent,
+              'hours': r.totalHours,
+              'ot_hours': r.overtimeHours,
+              'hourly_rate': r.hourlyRate,
+              'cash_advance': r.cashAdvance,
+              'deduction': r.deduction,
+              'gross_pay': r.grossPay,
+              'computed_salary': r.computedSalary,
+            },
+          )
+          .toList(),
+    };
+
+    final prefs = await SharedPreferences.getInstance();
+    final existingRaw = prefs.getString('supervisor_submitted_reports_v1');
+    final existingList = existingRaw == null
+        ? <dynamic>[]
+        : (jsonDecode(existingRaw) as List<dynamic>);
+
+    final filtered = existingList.where((entry) {
+      if (entry is! Map) return true;
+      final map = Map<String, dynamic>.from(entry);
+      return map['submission_id'] != payload['submission_id'];
+    }).toList();
+    filtered.add(payload);
+
+    await prefs.setString(
+      'supervisor_submitted_reports_v1',
+      jsonEncode(filtered),
+    );
+    await prefs.setString('pm_latest_report_v1', jsonEncode(payload));
+
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Report data synced from server')),
+      const SnackBar(content: Text('Report submitted to Project Manager')),
     );
   }
 
@@ -195,6 +267,37 @@ class _ReportsPageState extends State<ReportsPage> {
     return b.difference(a).inDays + 1;
   }
 
+  bool get _isSalaryDayMode => _dateString(_weekEnd) == _dateString(_salaryDate);
+
+  Future<DateTime> _resolveSalaryCycleStartDate({
+    required int projectId,
+    required DateTime endDate,
+  }) async {
+    final response = await http.get(
+      AppConfig.apiUri('attendance/?project_id=$projectId'),
+    );
+    if (response.statusCode != 200) return endDate;
+
+    final rows = (jsonDecode(response.body) as List<dynamic>)
+        .whereType<Map<String, dynamic>>();
+
+    DateTime? earliest;
+    for (final row in rows) {
+      final rawDate = (row['attendance_date'] ?? '').toString().trim();
+      if (rawDate.isEmpty || rawDate == 'null') continue;
+      final parsed = DateTime.tryParse(rawDate);
+      if (parsed == null) continue;
+
+      final day = DateTime(parsed.year, parsed.month, parsed.day);
+      if (day.isAfter(endDate)) continue;
+      if (earliest == null || day.isBefore(earliest)) {
+        earliest = day;
+      }
+    }
+
+    return earliest ?? endDate;
+  }
+
   double _resolveWeeklyDeduction(
     Map<String, dynamic> worker,
     String totalKey,
@@ -208,22 +311,54 @@ class _ReportsPageState extends State<ReportsPage> {
   }
 
   DateTime? _combineDateAndTime(DateTime date, String? rawTime) {
-    if (rawTime == null || rawTime.trim().isEmpty) return null;
-    final normalized = rawTime.split('.').first;
-    final pieces = normalized.split(':');
-    if (pieces.length < 2) return null;
-    final hour = int.tryParse(pieces[0]);
-    final minute = int.tryParse(pieces[1]);
-    final second = pieces.length > 2 ? int.tryParse(pieces[2]) ?? 0 : 0;
-    if (hour == null || minute == null) return null;
-    return DateTime(date.year, date.month, date.day, hour, minute, second);
+    final parts = _parseTimeParts(rawTime);
+    if (parts == null) return null;
+    return DateTime(
+      date.year,
+      date.month,
+      date.day,
+      parts.$1,
+      parts.$2,
+      parts.$3,
+    );
   }
 
-  bool _isPresent(Map<String, dynamic> record) {
-    final checkIn = (record['check_in_time'] ?? '').toString();
-    if (checkIn.isNotEmpty) return true;
-    final status = (record['status'] ?? '').toString();
-    return status == 'on_site' || status == 'on_break';
+  (int, int, int)? _parseTimeParts(String? rawTime) {
+    if (rawTime == null || rawTime.trim().isEmpty) return null;
+    final text = rawTime.trim();
+    final match = RegExp(
+      r'^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AaPp][Mm])?$',
+    ).firstMatch(text);
+    if (match == null) return null;
+
+    var hour = int.tryParse(match.group(1) ?? '');
+    final minute = int.tryParse(match.group(2) ?? '');
+    final second = int.tryParse(match.group(3) ?? '0') ?? 0;
+    if (hour == null || minute == null) return null;
+
+    final meridiem = (match.group(4) ?? '').toLowerCase();
+    if (meridiem == 'am') {
+      if (hour == 12) hour = 0;
+    } else if (meridiem == 'pm') {
+      if (hour < 12) hour += 12;
+    }
+
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+    return (hour, minute, second);
+  }
+
+  int? _timeToMinutes(String? rawTime) {
+    final parts = _parseTimeParts(rawTime);
+    if (parts == null) return null;
+    return parts.$1 * 60 + parts.$2;
+  }
+
+  int? _workerIdFromAttendance(Map<String, dynamic> record) {
+    final raw = record['field_worker_id'] ?? record['field_worker'];
+    if (raw is Map<String, dynamic>) {
+      return _toInt(raw['fieldworker_id'] ?? raw['id']);
+    }
+    return _toInt(raw);
   }
 
   double _workedHoursForRecord(Map<String, dynamic> record, DateTime date) {
@@ -255,20 +390,67 @@ class _ReportsPageState extends State<ReportsPage> {
     return minutes / 60.0;
   }
 
+  double _dailyOvertimeHours(double workedHours) {
+    if (workedHours <= _dailyRegularHoursCap) return 0;
+    return workedHours - _dailyRegularHoursCap;
+  }
+
+  double _dailyRegularHours(double workedHours) {
+    if (workedHours <= 0) return 0;
+    return workedHours > _dailyRegularHoursCap
+        ? _dailyRegularHoursCap
+        : workedHours;
+  }
+
   Future<List<Map<String, dynamic>>> _fetchWorkers(int projectId) async {
-    final workersResponse = await http.get(
-      AppConfig.apiUri('field-workers/?project_id=$projectId'),
-    );
-    if (workersResponse.statusCode != 200) {
-      throw Exception('Failed to load workers (${workersResponse.statusCode})');
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentUser = authService.currentUser ?? <String, dynamic>{};
+    final typeOrRole =
+        (currentUser['type'] ?? currentUser['role'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+    final userId = _toInt(currentUser['user_id']);
+    final supervisorId =
+        _toInt(currentUser['supervisor_id']) ??
+        ((typeOrRole == 'supervisor') ? userId : null);
+
+    final candidateQueries = <String>[];
+    if (supervisorId != null) {
+      candidateQueries.add(
+        'field-workers/?project_id=$projectId&supervisor_id=$supervisorId',
+      );
     }
-    final workersData = jsonDecode(workersResponse.body) as List<dynamic>;
-    return workersData.whereType<Map<String, dynamic>>().toList();
+    candidateQueries.add('field-workers/?project_id=$projectId');
+    if (supervisorId != null) {
+      candidateQueries.add('field-workers/?supervisor_id=$supervisorId');
+    }
+
+    int? lastStatus;
+    for (final query in candidateQueries) {
+      final workersResponse = await http.get(AppConfig.apiUri(query));
+      lastStatus = workersResponse.statusCode;
+      if (workersResponse.statusCode != 200) {
+        continue;
+      }
+
+      final workersData = jsonDecode(workersResponse.body) as List<dynamic>;
+      final workers = workersData.whereType<Map<String, dynamic>>().toList();
+      if (workers.isNotEmpty) {
+        return workers;
+      }
+    }
+
+    if (lastStatus != null && lastStatus != 200) {
+      throw Exception('Failed to load workers ($lastStatus)');
+    }
+    return <Map<String, dynamic>>[];
   }
 
   Future<List<Map<String, dynamic>>> _fetchAttendanceForDate(
     int projectId,
     DateTime date,
+    Set<int> workerIds,
   ) async {
     final response = await http.get(
       AppConfig.apiUri(
@@ -280,8 +462,123 @@ class _ReportsPageState extends State<ReportsPage> {
         'Failed to load attendance for ${_dateString(date)} (${response.statusCode})',
       );
     }
-    final data = jsonDecode(response.body) as List<dynamic>;
-    return data.whereType<Map<String, dynamic>>().toList();
+    final scopedRows = (jsonDecode(response.body) as List<dynamic>)
+        .whereType<Map<String, dynamic>>()
+        .where((row) {
+          final workerId = _workerIdFromAttendance(row);
+          return workerId != null && workerIds.contains(workerId);
+        })
+        .toList();
+
+    final coveredWorkers = scopedRows
+        .map(_workerIdFromAttendance)
+        .whereType<int>()
+        .toSet();
+    if (coveredWorkers.length == workerIds.length || workerIds.isEmpty) {
+      return scopedRows;
+    }
+
+    // Fallback: recover worker-day records that may have stale/missing project links.
+    final fallbackResponse = await http.get(
+      AppConfig.apiUri('attendance/?attendance_date=${_dateString(date)}'),
+    );
+    if (fallbackResponse.statusCode != 200) {
+      return scopedRows;
+    }
+
+    return (jsonDecode(fallbackResponse.body) as List<dynamic>)
+        .whereType<Map<String, dynamic>>()
+        .where((row) {
+          final workerId = _workerIdFromAttendance(row);
+          return workerId != null && workerIds.contains(workerId);
+        })
+        .toList();
+  }
+
+  Future<int> _countWorkedDaysForWorkerUntil({
+    required int projectId,
+    required int workerId,
+    required DateTime endDate,
+  }) async {
+    final response = await http.get(
+      AppConfig.apiUri(
+        'attendance/?project_id=$projectId&field_worker_id=$workerId',
+      ),
+    );
+    if (response.statusCode != 200) return 0;
+
+    final rows = (jsonDecode(response.body) as List<dynamic>)
+        .whereType<Map<String, dynamic>>()
+        .toList();
+
+    final mergedByDate = <String, Map<String, dynamic>>{};
+    for (final record in rows) {
+      final rawDate = (record['attendance_date'] ?? '').toString().trim();
+      if (rawDate.isEmpty || rawDate == 'null') continue;
+
+      final parsedDate = DateTime.tryParse(rawDate);
+      if (parsedDate == null) continue;
+
+      final date = DateTime(parsedDate.year, parsedDate.month, parsedDate.day);
+      if (date.isAfter(endDate)) continue;
+      final dateKey = _dateString(date);
+
+      final merged = mergedByDate.putIfAbsent(dateKey, () {
+        return <String, dynamic>{
+          'check_in_time': '',
+          'check_out_time': '',
+          'break_in_time': '',
+          'break_out_time': '',
+        };
+      });
+
+      final inTime = (record['check_in_time'] ?? '').toString();
+      final outTime = (record['check_out_time'] ?? '').toString();
+      final breakIn = (record['break_in_time'] ?? '').toString();
+      final breakOut = (record['break_out_time'] ?? '').toString();
+
+      final mergedIn = (merged['check_in_time'] ?? '').toString();
+      final mergedOut = (merged['check_out_time'] ?? '').toString();
+      final mergedBreakIn = (merged['break_in_time'] ?? '').toString();
+      final mergedBreakOut = (merged['break_out_time'] ?? '').toString();
+
+      final inMinutes = _timeToMinutes(inTime);
+      final mergedInMinutes = _timeToMinutes(mergedIn);
+      if (inMinutes != null &&
+          (mergedInMinutes == null || inMinutes < mergedInMinutes)) {
+        merged['check_in_time'] = inTime;
+      }
+
+      final outMinutes = _timeToMinutes(outTime);
+      final mergedOutMinutes = _timeToMinutes(mergedOut);
+      if (outMinutes != null &&
+          (mergedOutMinutes == null || outMinutes > mergedOutMinutes)) {
+        merged['check_out_time'] = outTime;
+      }
+
+      final breakInMinutes = _timeToMinutes(breakIn);
+      final mergedBreakInMinutes = _timeToMinutes(mergedBreakIn);
+      if (breakInMinutes != null &&
+          (mergedBreakInMinutes == null || breakInMinutes < mergedBreakInMinutes)) {
+        merged['break_in_time'] = breakIn;
+      }
+
+      final breakOutMinutes = _timeToMinutes(breakOut);
+      final mergedBreakOutMinutes = _timeToMinutes(mergedBreakOut);
+      if (breakOutMinutes != null &&
+          (mergedBreakOutMinutes == null || breakOutMinutes > mergedBreakOutMinutes)) {
+        merged['break_out_time'] = breakOut;
+      }
+    }
+
+    var workedDayCount = 0;
+    for (final entry in mergedByDate.entries) {
+      final date = DateTime.tryParse(entry.key);
+      if (date == null) continue;
+      final workedHours = _workedHoursForRecord(entry.value, date);
+      if (workedHours > 0) workedDayCount += 1;
+    }
+    return workedDayCount;
   }
 
   Future<void> _updateWorkerCashAdvanceSettings({
@@ -348,33 +645,87 @@ class _ReportsPageState extends State<ReportsPage> {
 
     final totalsByWorker = <int, _WorkerTotals>{};
     final countedPresencePerDay = <String>{};
+    final workerIds = workersById.keys.toSet();
 
     for (
       DateTime date = DateTime(start.year, start.month, start.day);
       !date.isAfter(end);
       date = date.add(const Duration(days: 1))
     ) {
-      final attendance = await _fetchAttendanceForDate(projectId, date);
+      final attendance = await _fetchAttendanceForDate(projectId, date, workerIds);
+      final mergedByWorker = <int, Map<String, dynamic>>{};
+
       for (final record in attendance) {
-        final workerId = _toInt(record['field_worker']);
+        final workerId = _workerIdFromAttendance(record);
         if (workerId == null || !workersById.containsKey(workerId)) continue;
+
+        final merged = mergedByWorker.putIfAbsent(workerId, () {
+          return <String, dynamic>{
+            'field_worker': workerId,
+            'check_in_time': '',
+            'check_out_time': '',
+            'status': '',
+          };
+        });
+
+        final inTime = (record['check_in_time'] ?? '').toString();
+        final outTime = (record['check_out_time'] ?? '').toString();
+        final status = (record['status'] ?? '').toString();
+
+        final mergedIn = (merged['check_in_time'] ?? '').toString();
+        final mergedOut = (merged['check_out_time'] ?? '').toString();
+
+        final inMinutes = _timeToMinutes(inTime);
+        final mergedInMinutes = _timeToMinutes(mergedIn);
+        if (inMinutes != null &&
+            (mergedInMinutes == null || inMinutes < mergedInMinutes)) {
+          merged['check_in_time'] = inTime;
+        }
+
+        final outMinutes = _timeToMinutes(outTime);
+        final mergedOutMinutes = _timeToMinutes(mergedOut);
+        if (outMinutes != null &&
+            (mergedOutMinutes == null || outMinutes > mergedOutMinutes)) {
+          merged['check_out_time'] = outTime;
+        }
+
+        if (status == 'on_site' || status == 'on_break') {
+          merged['status'] = status;
+        }
+      }
+
+      for (final entry in mergedByWorker.entries) {
+        final workerId = entry.key;
+        final record = entry.value;
 
         final totals = totalsByWorker.putIfAbsent(workerId, _WorkerTotals.new);
         final dayKey = '$workerId:${_dateString(date)}';
-        if (_isPresent(record) && !countedPresencePerDay.contains(dayKey)) {
+        final workedHours = _workedHoursForRecord(record, date);
+        if (workedHours > 0 && !countedPresencePerDay.contains(dayKey)) {
           totals.totalDaysPresent += 1;
           countedPresencePerDay.add(dayKey);
         }
 
-        final workedHours = _workedHoursForRecord(record, date);
-        totals.totalHours += workedHours;
-        totals.overtimeHours += workedHours > 8 ? workedHours - 8 : 0;
+        totals.totalHours += _dailyRegularHours(workedHours);
+        totals.overtimeHours += _dailyOvertimeHours(workedHours);
       }
     }
 
     final reports = <AttendanceReport>[];
-    workersById.forEach((workerId, worker) {
+    for (final workerEntry in workersById.entries) {
+      final workerId = workerEntry.key;
+      final worker = workerEntry.value;
       final totals = totalsByWorker[workerId] ?? _WorkerTotals();
+      if (totals.totalHours <= 0) {
+        continue;
+      }
+
+      final cumulativeWorkedDays = await _countWorkedDaysForWorkerUntil(
+        projectId: projectId,
+        workerId: workerId,
+        endDate: end,
+      );
+
       final firstName = (worker['first_name'] ?? '').toString().trim();
       final lastName = (worker['last_name'] ?? '').toString().trim();
       final fullName = ('$firstName $lastName').trim();
@@ -400,11 +751,11 @@ class _ReportsPageState extends State<ReportsPage> {
       );
 
       // Fallback for older worker records that don't have computed deduction fields yet.
-        final regularHours = (totals.totalHours - totals.overtimeHours) < 0
-          ? 0.0
-          : (totals.totalHours - totals.overtimeHours);
+      // totalHours is regular-only; OT is stored in overtimeHours.
+        final regularHours = totals.totalHours < 0 ? 0.0 : totals.totalHours;
         final grossPayEstimate =
-          regularHours * hourlyRate + totals.overtimeHours * hourlyRate * 1.5;
+          regularHours * hourlyRate +
+          totals.overtimeHours * hourlyRate * _overtimeRateMultiplier;
       final sssDeduction = sssWeekly > 0
           ? sssWeekly * periodFactor
           : grossPayEstimate * 0.0323;
@@ -420,7 +771,7 @@ class _ReportsPageState extends State<ReportsPage> {
           fieldWorkerId: workerId,
           name: fullName.isEmpty ? 'Worker #$workerId' : fullName,
           role: (worker['role'] ?? 'Worker').toString(),
-          totalDaysPresent: totals.totalDaysPresent,
+          totalDaysPresent: cumulativeWorkedDays,
           totalHours: totals.totalHours,
           overtimeHours: totals.overtimeHours,
           cashAdvance: _toDouble(
@@ -435,7 +786,7 @@ class _ReportsPageState extends State<ReportsPage> {
           pagibigDeduction: pagibigDeduction,
         ),
       );
-    });
+    }
 
     reports.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     return reports;
@@ -455,15 +806,24 @@ class _ReportsPageState extends State<ReportsPage> {
         throw Exception('No project assigned to your account.');
       }
 
+      DateTime start = _weekStart;
+      if (_isSalaryDayMode) {
+        start = await _resolveSalaryCycleStartDate(
+          projectId: projectId,
+          endDate: _weekEnd,
+        );
+      }
+
       final reports = await _buildReportsForRange(
         projectId: projectId,
-        start: _weekStart,
+        start: start,
         end: _weekEnd,
       );
 
       if (!mounted) return;
       setState(() {
         _rows = reports;
+        _effectiveReportStart = start;
       });
     } catch (e) {
       if (!mounted) return;
@@ -728,12 +1088,27 @@ class _ReportsPageState extends State<ReportsPage> {
       lastDate: DateTime(2100),
     );
     if (d != null) {
+      final selected = DateTime(d.year, d.month, d.day);
       setState(() {
-        _weekEnd = DateTime(d.year, d.month, d.day);
-        _weekStart = _weekEnd.subtract(Duration(days: _weekEnd.weekday - 1));
+        _weekEnd = selected;
+        _weekStart = selected;
       });
       await _refreshReports();
       await _loadReportsHistory();
+    }
+  }
+
+  Future<void> _pickSalaryDate() async {
+    final d = await showDatePicker(
+      context: context,
+      initialDate: _salaryDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (d != null) {
+      setState(() {
+        _salaryDate = DateTime(d.year, d.month, d.day);
+      });
     }
   }
 
@@ -781,6 +1156,40 @@ class _ReportsPageState extends State<ReportsPage> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _mobileDatePickerButton({
+    required String label,
+    required String value,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon, size: 16),
+      label: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+          ),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
+      style: OutlinedButton.styleFrom(
+        alignment: Alignment.centerLeft,
+        minimumSize: const Size(0, 40),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        side: const BorderSide(color: Color(0xFFE5E7EB)),
+        visualDensity: VisualDensity.compact,
       ),
     );
   }
@@ -845,7 +1254,7 @@ class _ReportsPageState extends State<ReportsPage> {
                   Row(
                     children: [
                       Text(
-                        '${r.totalDaysPresent} days',
+                        'Day ${r.totalDaysPresent}',
                         style: TextStyle(color: Colors.grey[700]),
                       ),
                       const SizedBox(width: 12),
@@ -923,235 +1332,17 @@ class _ReportsPageState extends State<ReportsPage> {
               Expanded(
                 child: Column(
                   children: [
-                    // header with white background and slim blue line at left corner (keeps Notification bell & AESTRA)
-                    Container(
-                      width: double.infinity,
-                      color: Colors.white,
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isMobile ? 12 : 24,
-                        vertical: isMobile ? 12 : 18,
-                      ),
-                      child: Row(
-                        children: [
-                          // slim blue accent line in the left corner
-                          Container(
-                            width: isMobile ? 3 : 4,
-                            height: isMobile ? 40 : 56,
-                            decoration: BoxDecoration(
-                              color: accent,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Weekly Attendance Report',
-                                  style: TextStyle(
-                                    color: const Color(0xFF0C1935),
-                                    fontSize: isMobile ? 16 : 20,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                if (!isMobile) const SizedBox(height: 6),
-                                if (!isMobile)
-                                  Text(
-                                    _liveDateTimeFmt.format(_liveNow),
-                                    style: TextStyle(color: Colors.grey[700]),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          if (!isMobile) ...[
-                            IconButton(
-                              onPressed: () {},
-                              icon: const Icon(
-                                Icons.download_rounded,
-                                color: Color(0xFF0C1935),
-                              ),
-                              tooltip: 'Export CSV (placeholder)',
-                            ),
-                            const SizedBox(width: 6),
-                            IconButton(
-                              onPressed: _showReportsHistory,
-                              icon: const Icon(
-                                Icons.history,
-                                color: Color(0xFF0C1935),
-                              ),
-                              tooltip: 'View Reports History',
-                            ),
-                            const SizedBox(width: 6),
-                            ElevatedButton.icon(
-                              onPressed: _submitToPM,
-                              icon: const Icon(Icons.send),
-                              label: const Text('Submit to PM'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: accent,
-                                foregroundColor: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                          ],
-                          // notification bell
-                          if (!isMobile)
-                            Stack(
-                              children: [
-                                IconButton(
-                                  onPressed: () => ScaffoldMessenger.of(context)
-                                      .showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'Notifications opened (demo)',
-                                          ),
-                                        ),
-                                      ),
-                                  icon: Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey[100],
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: const Icon(
-                                      Icons.notifications_outlined,
-                                      color: Color(0xFF0C1935),
-                                    ),
-                                  ),
-                                ),
-                                Positioned(
-                                  right: 8,
-                                  top: 8,
-                                  child: Container(
-                                    width: 10,
-                                    height: 10,
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFFF6B6B),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          if (!isMobile) const SizedBox(width: 10),
-                          // AESTRA account (hidden on mobile)
-                          if (!isMobile)
-                            PopupMenuButton<String>(
-                              onSelected: (value) async {
-                                if (value == 'switch') {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Switch account (demo)'),
-                                    ),
-                                  );
-                                } else if (value == 'logout') {
-                                  await AuthService().logout();
-                                  if (!context.mounted) return;
-                                  context.go('/login');
-                                }
-                              },
-                              offset: const Offset(0, 48),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              itemBuilder: (BuildContext context) =>
-                                  <PopupMenuEntry<String>>[
-                                    const PopupMenuItem<String>(
-                                      value: 'switch',
-                                      height: 48,
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            Icons.swap_horiz,
-                                            size: 18,
-                                            color: Colors.black87,
-                                          ),
-                                          SizedBox(width: 12),
-                                          Text('Switch Account'),
-                                        ],
-                                      ),
-                                    ),
-                                    const PopupMenuDivider(height: 1),
-                                    const PopupMenuItem<String>(
-                                      value: 'logout',
-                                      height: 48,
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            Icons.logout,
-                                            size: 18,
-                                            color: Color(0xFFFF6B6B),
-                                          ),
-                                          SizedBox(width: 12),
-                                          Text(
-                                            'Logout',
-                                            style: TextStyle(
-                                              color: Color(0xFFFF6B6B),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[100],
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const SupervisorUserBadge(),
-                              ),
-                            ),
-                          if (isMobile)
-                            IconButton(
-                              icon: Stack(
-                                children: [
-                                  const Icon(
-                                    Icons.notifications_outlined,
-                                    color: Color(0xFF0C1935),
-                                    size: 22,
-                                  ),
-                                  Positioned(
-                                    top: 0,
-                                    right: 0,
-                                    child: Container(
-                                      width: 8,
-                                      height: 8,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFFF6B6B),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              onPressed: () =>
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Notifications opened (demo)',
-                                      ),
-                                    ),
-                                  ),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                        ],
-                      ),
-                    ),
+                    const DashboardHeader(title: 'Reports'),
 
                     const SizedBox(height: 16),
 
-                    // controls + KPIs (hidden on mobile)
+                    // Date controls (hidden on mobile)
                     if (!isMobile)
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 24),
                         child: Row(
                           children: [
-                            // single date selector
+                            // report date selector
                             Card(
                               elevation: 1,
                               shape: RoundedRectangleBorder(
@@ -1176,41 +1367,66 @@ class _ReportsPageState extends State<ReportsPage> {
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Row(
-                                children: [
-                                  _kpiCard(
-                                    'Total Hours',
-                                    '${_totalHours.toStringAsFixed(1)}',
-                                    icon: Icons.access_time,
-                                    color: accent,
+                            const SizedBox(width: 10),
+                            Card(
+                              elevation: 1,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                child: TextButton.icon(
+                                  onPressed: _pickSalaryDate,
+                                  icon: const Icon(
+                                    Icons.payments_outlined,
+                                    size: 18,
                                   ),
-                                  const SizedBox(width: 12),
-                                  _kpiCard(
-                                    'SSS',
-                                    _money.format(_totalSSS),
-                                    icon: Icons.shield,
-                                    color: Colors.blue,
+                                  label: Text(
+                                    'Salary: ${_dateFmt.format(_salaryDate)}',
                                   ),
-                                  const SizedBox(width: 12),
-                                  _kpiCard(
-                                    'PhilHealth',
-                                    _money.format(_totalPhilhealth),
-                                    icon: Icons.health_and_safety,
-                                    color: Colors.green,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  _kpiCard(
-                                    'Pag-IBIG',
-                                    _money.format(_totalPagibig),
-                                    icon: Icons.home,
-                                    color: Colors.lightBlue,
-                                  ),
-                                ],
+                                ),
                               ),
                             ),
+                            if (_isSalaryDayMode) const SizedBox(width: 10),
+                            if (_isSalaryDayMode)
+                              ElevatedButton.icon(
+                                onPressed: _submitToPM,
+                                icon: const Icon(Icons.send, size: 18),
+                                label: const Text('Submit'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.accent,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 12,
+                                  ),
+                                ),
+                              ),
                           ],
+                        ),
+                      ),
+                    if (!isMobile && _isSalaryDayMode)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceMuted,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.borderSubtle),
+                          ),
+                          child: Text(
+                            'Salary Day Summary (Day 1 to ${_dateFmt.format(_weekEnd)}): Total Hours ${_totalHours.toStringAsFixed(1)} | Total OT ${_totalOvertime.toStringAsFixed(1)} | Total Salary ${_money.format(_totalComputedSalary)}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
                         ),
                       ),
                     if (!isMobile) const SizedBox(height: 16),
@@ -1225,6 +1441,68 @@ class _ReportsPageState extends State<ReportsPage> {
                         child: isMobile
                             ? Column(
                                 children: [
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(8),
+                                    margin: const EdgeInsets.only(bottom: 8),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.surfaceCard,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: AppColors.borderSubtle,
+                                      ),
+                                    ),
+                                    child: Column(
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: _mobileDatePickerButton(
+                                                label: 'Report Date',
+                                                value: _dateFmt.format(_weekEnd),
+                                                icon: Icons.calendar_today,
+                                                onTap: _pickReportDate,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Expanded(
+                                              child: _mobileDatePickerButton(
+                                                label: 'Salary Date',
+                                                value: _dateFmt.format(_salaryDate),
+                                                icon: Icons.payments_outlined,
+                                                onTap: _pickSalaryDate,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        if (_isSalaryDayMode)
+                                          const SizedBox(height: 6),
+                                        if (_isSalaryDayMode)
+                                          SizedBox(
+                                            width: double.infinity,
+                                            child: ElevatedButton.icon(
+                                              onPressed: _submitToPM,
+                                              icon: const Icon(
+                                                Icons.send,
+                                                size: 16,
+                                              ),
+                                              label: const Text('Submit Report'),
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor:
+                                                    AppColors.accent,
+                                                foregroundColor: Colors.white,
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      vertical: 10,
+                                                    ),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
                                   // Mobile compact list
                                   Expanded(
                                     child: _isLoading
@@ -1250,15 +1528,108 @@ class _ReportsPageState extends State<ReportsPage> {
                                         : _rows.isEmpty
                                         ? Center(
                                             child: Text(
-                                              'No attendance data up to selected date',
+                                              'No attendance data for selected date',
                                               style: TextStyle(
                                                 color: Colors.grey[700],
                                               ),
                                             ),
                                           )
                                         : ListView.builder(
-                                            itemCount: _rows.length,
+                                            itemCount: _rows.length + 1,
                                             itemBuilder: (context, i) {
+                                              if (i == _rows.length) {
+                                                return Container(
+                                                  margin: const EdgeInsets.only(
+                                                    top: 4,
+                                                    bottom: 6,
+                                                  ),
+                                                  padding: const EdgeInsets.all(12),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.white,
+                                                    borderRadius:
+                                                        BorderRadius.circular(12),
+                                                    boxShadow: [
+                                                      BoxShadow(
+                                                        color: Colors.black
+                                                            .withOpacity(0.05),
+                                                        blurRadius: 8,
+                                                        offset: const Offset(0, -2),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  child: Column(
+                                                    children: [
+                                                      Row(
+                                                        mainAxisAlignment:
+                                                            MainAxisAlignment
+                                                                .spaceBetween,
+                                                        children: [
+                                                          Text(
+                                                            'Total Deductions',
+                                                            style: TextStyle(
+                                                              color: Colors
+                                                                  .grey[700],
+                                                              fontSize: 12,
+                                                              fontWeight:
+                                                                  FontWeight.w600,
+                                                            ),
+                                                          ),
+                                                          Text(
+                                                            _money.format(
+                                                              _totalDeductions,
+                                                            ),
+                                                            style:
+                                                                const TextStyle(
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w700,
+                                                                  fontSize: 13,
+                                                                  color: Colors
+                                                                      .redAccent,
+                                                                ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                      const SizedBox(height: 8),
+                                                      Divider(
+                                                        height: 1,
+                                                        color: Colors.grey[300],
+                                                      ),
+                                                      const SizedBox(height: 8),
+                                                      Row(
+                                                        mainAxisAlignment:
+                                                            MainAxisAlignment
+                                                                .spaceBetween,
+                                                        children: [
+                                                          const Text(
+                                                            'Total Net Salary',
+                                                            style: TextStyle(
+                                                              fontSize: 14,
+                                                              fontWeight:
+                                                                  FontWeight.w700,
+                                                            ),
+                                                          ),
+                                                          Text(
+                                                            _money.format(
+                                                              _totalComputedSalary,
+                                                            ),
+                                                            style:
+                                                                const TextStyle(
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w900,
+                                                                  fontSize: 16,
+                                                                  color:
+                                                                      Colors.green,
+                                                                ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ],
+                                                  ),
+                                                );
+                                              }
+
                                               final r = _rows[i];
                                               final initials = r.name
                                                   .split(' ')
@@ -1272,7 +1643,7 @@ class _ReportsPageState extends State<ReportsPage> {
 
                                               return Card(
                                                 margin: const EdgeInsets.only(
-                                                  bottom: 12,
+                                                  bottom: 8,
                                                 ),
                                                 elevation: 1,
                                                 shape: RoundedRectangleBorder(
@@ -1287,14 +1658,14 @@ class _ReportsPageState extends State<ReportsPage> {
                                                   child: Padding(
                                                     padding:
                                                         const EdgeInsets.all(
-                                                          12,
+                                                          10,
                                                         ),
                                                     child: Row(
                                                       children: [
                                                         // Avatar
                                                         Container(
-                                                          width: 48,
-                                                          height: 48,
+                                                          width: 42,
+                                                          height: 42,
                                                           decoration: BoxDecoration(
                                                             color: accent
                                                                 .withOpacity(
@@ -1313,13 +1684,13 @@ class _ReportsPageState extends State<ReportsPage> {
                                                                 fontWeight:
                                                                     FontWeight
                                                                         .w700,
-                                                                fontSize: 16,
+                                                                fontSize: 14,
                                                               ),
                                                             ),
                                                           ),
                                                         ),
                                                         const SizedBox(
-                                                          width: 12,
+                                                          width: 10,
                                                         ),
                                                         // Worker info
                                                         Expanded(
@@ -1334,68 +1705,72 @@ class _ReportsPageState extends State<ReportsPage> {
                                                                   fontWeight:
                                                                       FontWeight
                                                                           .w700,
-                                                                  fontSize: 15,
+                                                                  fontSize: 14,
                                                                 ),
                                                               ),
                                                               const SizedBox(
-                                                                height: 4,
+                                                                height: 3,
                                                               ),
-                                                              Row(
+                                                              Wrap(
+                                                                spacing: 6,
+                                                                runSpacing: 3,
                                                                 children: [
                                                                   Container(
                                                                     padding: const EdgeInsets.symmetric(
                                                                       horizontal:
-                                                                          8,
+                                                                          6,
                                                                       vertical:
-                                                                          3,
+                                                                          2,
                                                                     ),
                                                                     decoration: BoxDecoration(
-                                                                      color: Colors
-                                                                          .grey
-                                                                          .shade100,
+                                                                      color: AppColors
+                                                                          .surfaceMuted,
                                                                       borderRadius:
                                                                           BorderRadius.circular(
                                                                             6,
                                                                           ),
                                                                     ),
-                                                                    child: Text(
-                                                                      r.role,
-                                                                      style: const TextStyle(
-                                                                        fontSize:
-                                                                            11,
-                                                                        color: Colors
-                                                                            .grey,
+                                                                    child: ConstrainedBox(
+                                                                      constraints: const BoxConstraints(
+                                                                        maxWidth:
+                                                                            100,
+                                                                      ),
+                                                                      child: Text(
+                                                                        r.role,
+                                                                        maxLines: 1,
+                                                                        overflow:
+                                                                            TextOverflow.ellipsis,
+                                                                        style: const TextStyle(
+                                                                          fontSize:
+                                                                              10,
+                                                                          color: AppColors
+                                                                              .textMuted,
+                                                                        ),
                                                                       ),
                                                                     ),
-                                                                  ),
-                                                                  const SizedBox(
-                                                                    width: 8,
                                                                   ),
                                                                   Text(
                                                                     '${r.totalHours.toStringAsFixed(1)} hrs',
                                                                     style: TextStyle(
                                                                       fontSize:
-                                                                          11,
-                                                                      color: Colors
-                                                                          .grey[600],
+                                                                          10,
+                                                                      color: AppColors
+                                                                          .textMuted,
                                                                     ),
                                                                   ),
                                                                   if (r.overtimeHours >
-                                                                      0) ...[
-                                                                    const SizedBox(
-                                                                      width: 6,
-                                                                    ),
+                                                                      0)
                                                                     Container(
                                                                       padding: const EdgeInsets.symmetric(
                                                                         horizontal:
-                                                                            6,
+                                                                          5,
                                                                         vertical:
                                                                             2,
                                                                       ),
                                                                       decoration: BoxDecoration(
-                                                                        color: const Color(
-                                                                          0xFFFF8F00,
-                                                                        ).withOpacity(0.1),
+                                                                        color: AppColors
+                                                                            .accent
+                                                                            .withOpacity(0.12),
                                                                         borderRadius:
                                                                             BorderRadius.circular(
                                                                               4,
@@ -1405,16 +1780,14 @@ class _ReportsPageState extends State<ReportsPage> {
                                                                         '+${r.overtimeHours.toStringAsFixed(0)} OT',
                                                                         style: const TextStyle(
                                                                           fontSize:
-                                                                              10,
-                                                                          color: Color(
-                                                                            0xFFFF6F00,
-                                                                          ),
+                                                                              9,
+                                                                          color: AppColors
+                                                                              .accent,
                                                                           fontWeight:
                                                                               FontWeight.w600,
                                                                         ),
                                                                       ),
                                                                     ),
-                                                                  ],
                                                                 ],
                                                               ),
                                                             ],
@@ -1434,7 +1807,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                                                 fontWeight:
                                                                     FontWeight
                                                                         .w800,
-                                                                fontSize: 16,
+                                                                fontSize: 14,
                                                                 color: Colors
                                                                     .green,
                                                               ),
@@ -1445,7 +1818,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                                             Text(
                                                               'Net Salary',
                                                               style: TextStyle(
-                                                                fontSize: 10,
+                                                                fontSize: 9,
                                                                 color: Colors
                                                                     .grey[600],
                                                               ),
@@ -1453,38 +1826,24 @@ class _ReportsPageState extends State<ReportsPage> {
                                                           ],
                                                         ),
                                                         const SizedBox(
-                                                          width: 10,
+                                                          width: 6,
                                                         ),
-                                                        TextButton.icon(
+                                                        IconButton(
                                                           onPressed: () =>
                                                               _showWorkerDetails(
                                                                 r,
                                                               ),
                                                           icon: const Icon(
                                                             Icons.visibility,
-                                                            size: 16,
+                                                            size: 18,
                                                           ),
-                                                          label: const Text(
-                                                            'Summary',
-                                                            style: TextStyle(
-                                                              fontSize: 11,
-                                                            ),
-                                                          ),
-                                                          style:
-                                                              TextButton.styleFrom(
-                                                                padding:
-                                                                    const EdgeInsets.symmetric(
-                                                                      horizontal:
-                                                                          8,
-                                                                      vertical:
-                                                                          4,
-                                                                    ),
-                                                                minimumSize:
-                                                                    Size.zero,
-                                                                tapTargetSize:
-                                                                    MaterialTapTargetSize
-                                                                        .shrinkWrap,
+                                                          padding:
+                                                              const EdgeInsets.all(
+                                                                4,
                                                               ),
+                                                          constraints:
+                                                              const BoxConstraints(),
+                                                          tooltip: 'Summary',
                                                         ),
                                                       ],
                                                     ),
@@ -1494,77 +1853,6 @@ class _ReportsPageState extends State<ReportsPage> {
                                             },
                                           ),
                                   ),
-                                  // Mobile summary footer
-                                  Container(
-                                    padding: const EdgeInsets.all(16),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(12),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withOpacity(0.05),
-                                          blurRadius: 8,
-                                          offset: const Offset(0, -2),
-                                        ),
-                                      ],
-                                    ),
-                                    child: Column(
-                                      children: [
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Text(
-                                              'Total Deductions',
-                                              style: TextStyle(
-                                                color: Colors.grey[700],
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                            Text(
-                                              _money.format(_totalDeductions),
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w700,
-                                                fontSize: 14,
-                                                color: Colors.redAccent,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Divider(
-                                          height: 1,
-                                          color: Colors.grey[300],
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            const Text(
-                                              'Total Net Salary',
-                                              style: TextStyle(
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                            ),
-                                            Text(
-                                              _money.format(
-                                                _totalComputedSalary,
-                                              ),
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w900,
-                                                fontSize: 18,
-                                                color: Colors.green,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
                                 ],
                               )
                             : Card(
@@ -1583,7 +1871,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                         vertical: 14,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: accent.withOpacity(0.05),
+                                        color: Colors.white,
                                         borderRadius: const BorderRadius.only(
                                           topLeft: Radius.circular(12),
                                           topRight: Radius.circular(12),
@@ -1739,7 +2027,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                           : _rows.isEmpty
                                           ? Center(
                                               child: Text(
-                                                'No attendance data up to selected date',
+                                                'No attendance data for selected date',
                                                 style: TextStyle(
                                                   color: Colors.grey[700],
                                                 ),
@@ -2064,12 +2352,6 @@ class _ReportsPageState extends State<ReportsPage> {
                                                                     vertical:
                                                                         6,
                                                                   ),
-                                                              side: BorderSide(
-                                                                color: accent
-                                                                    .withOpacity(
-                                                                      0.5,
-                                                                    ),
-                                                              ),
                                                             ),
                                                           ),
                                                         ),
@@ -2085,7 +2367,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                     Container(
                                       padding: const EdgeInsets.all(16),
                                       decoration: BoxDecoration(
-                                        color: accent.withOpacity(0.05),
+                                        color: Colors.white,
                                         borderRadius: const BorderRadius.only(
                                           bottomLeft: Radius.circular(12),
                                           bottomRight: Radius.circular(12),
@@ -2240,48 +2522,15 @@ class _ReportsPageState extends State<ReportsPage> {
   }
 
   Widget _buildBottomNavBar() {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF0C1935),
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 16,
-            offset: const Offset(0, -4),
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavItem(Icons.dashboard, 'Dashboard', false),
-                _buildNavItem(Icons.people, 'Workers', false),
-                _buildNavItem(Icons.check_circle, 'Attendance', false),
-                _buildNavItem(Icons.list_alt, 'Logs', false),
-                _buildNavItem(Icons.more_horiz, 'More', false),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return SupervisorMobileBottomNav(
+      activeTab: SupervisorMobileTab.more,
+      activeMorePage: 'Reports',
+      onSelect: _navigateToPage,
     );
   }
 
   Widget _buildNavItem(IconData icon, String label, bool isActive) {
-    final color = isActive ? const Color(0xFFFF6F00) : Colors.white70;
+    final color = isActive ? AppColors.accent : Colors.white70;
 
     return InkWell(
       onTap: () {
@@ -2294,26 +2543,19 @@ class _ReportsPageState extends State<ReportsPage> {
       borderRadius: BorderRadius.circular(12),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: AppSpacing.sm),
         decoration: BoxDecoration(
-          color: isActive
-              ? const Color(0xFFFF6F00).withOpacity(0.15)
-              : Colors.transparent,
+          color: isActive ? AppColors.accent.withOpacity(0.15) : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, color: color, size: 24),
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               label,
-              style: TextStyle(
-                color: color,
-                fontSize: 11,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                letterSpacing: 0.3,
-              ),
+              style: AppTypography.mobileNavLabel(color, isActive: isActive),
             ),
           ],
         ),
@@ -2327,7 +2569,7 @@ class _ReportsPageState extends State<ReportsPage> {
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         decoration: const BoxDecoration(
-          color: Color(0xFF0C1935),
+          color: AppColors.navSurface,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: SafeArea(
@@ -2394,14 +2636,14 @@ class _ReportsPageState extends State<ReportsPage> {
 
   // Show detailed worker salary breakdown in a modal
   void _showWorkerDetails(AttendanceReport r) {
-    final cashAdvanceController = TextEditingController(
-      text: r.cashAdvance.toStringAsFixed(2),
-    );
+    final isSalaryDay = _isSalaryDayMode;
+    final cashAdvanceController = TextEditingController(text: '0.00');
     final deductionController = TextEditingController(
-      text: r.deduction.toStringAsFixed(2),
+      text: (isSalaryDay ? r.deduction : 0).toStringAsFixed(2),
     );
     double editableCashAdvance = r.cashAdvance;
-    double editableDeduction = r.deduction;
+    double cashAdvanceRequest = 0;
+    double editableDeduction = isSalaryDay ? r.deduction : 0;
     bool isSaving = false;
 
     showModalBottomSheet(
@@ -2410,8 +2652,9 @@ class _ReportsPageState extends State<ReportsPage> {
       backgroundColor: Colors.transparent,
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) {
+          final effectiveDeduction = isSalaryDay ? editableDeduction : 0.0;
           final liveTotalDeductions =
-              r.totalGovernmentDeductions + editableDeduction;
+            r.totalGovernmentDeductions + effectiveDeduction;
           final liveNetSalary = r.grossPay - liveTotalDeductions;
 
           return Container(
@@ -2509,7 +2752,7 @@ class _ReportsPageState extends State<ReportsPage> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: accent.withOpacity(0.05),
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
@@ -2548,7 +2791,7 @@ class _ReportsPageState extends State<ReportsPage> {
                     border: Border.all(color: const Color(0xFFE5E7EB)),
                   ),
                   child: Text(
-                    'Summary period: ${_dateFmt.format(_weekStart)} to ${_dateFmt.format(_weekEnd)} (as of selected date)',
+                    'Summary period: ${_dateFmt.format(_effectiveReportStart)} to ${_dateFmt.format(_weekEnd)} | Salary date: ${_dateFmt.format(_salaryDate)}',
                     style: TextStyle(
                       color: Colors.grey[700],
                       fontSize: 12,
@@ -2574,13 +2817,25 @@ class _ReportsPageState extends State<ReportsPage> {
                   ),
                   child: Column(
                     children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Current Balance: ${_money.format(editableCashAdvance)}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: Colors.grey[800],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      if (!isSalaryDay)
                       TextField(
                         controller: cashAdvanceController,
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
                         decoration: InputDecoration(
-                          labelText: 'Cash Advance Balance (PHP)',
+                          labelText: 'Cash Advance Request (PHP)',
                           prefixText: '₱ ',
                           isDense: true,
                           border: OutlineInputBorder(
@@ -2590,11 +2845,12 @@ class _ReportsPageState extends State<ReportsPage> {
                         onChanged: (val) {
                           final parsed = _toDouble(val);
                           setModalState(() {
-                            editableCashAdvance = parsed < 0 ? 0 : parsed;
+                            cashAdvanceRequest = parsed < 0 ? 0 : parsed;
                           });
                         },
                       ),
-                      const SizedBox(height: 10),
+                      if (!isSalaryDay) const SizedBox(height: 10),
+                      if (isSalaryDay)
                       TextField(
                         controller: deductionController,
                         keyboardType: const TextInputType.numberWithOptions(
@@ -2611,10 +2867,41 @@ class _ReportsPageState extends State<ReportsPage> {
                         onChanged: (val) {
                           final parsed = _toDouble(val);
                           setModalState(() {
-                            editableDeduction = parsed < 0 ? 0 : parsed;
+                            final normalized = parsed < 0 ? 0.0 : parsed;
+                            editableDeduction = normalized > editableCashAdvance
+                                ? editableCashAdvance
+                                : normalized;
                           });
                         },
                       ),
+                      if (isSalaryDay)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'Deduction is available only on salary day and cannot exceed current balance.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (!isSalaryDay)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'Deduction will be available on salary day.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                          ),
+                        ),
                       const SizedBox(height: 10),
                       Align(
                         alignment: Alignment.centerRight,
@@ -2626,17 +2913,35 @@ class _ReportsPageState extends State<ReportsPage> {
                                     isSaving = true;
                                   });
                                   try {
+                                    final nextBalance = isSalaryDay
+                                        ? (editableCashAdvance - effectiveDeduction)
+                                        : (editableCashAdvance + cashAdvanceRequest);
+                                    if (!isSalaryDay && cashAdvanceRequest <= 0) {
+                                      throw Exception(
+                                        'Enter a cash advance request amount greater than zero.',
+                                      );
+                                    }
+
                                     await _updateWorkerCashAdvanceSettings(
                                       workerId: r.fieldWorkerId,
-                                      cashAdvanceBalance: editableCashAdvance,
-                                      deductionPerSalary: editableDeduction,
+                                      cashAdvanceBalance: nextBalance < 0 ? 0 : nextBalance,
+                                      deductionPerSalary: effectiveDeduction,
                                     );
+                                    setModalState(() {
+                                      editableCashAdvance = nextBalance < 0 ? 0 : nextBalance;
+                                      if (!isSalaryDay) {
+                                        cashAdvanceRequest = 0;
+                                        cashAdvanceController.text = '0.00';
+                                      }
+                                    });
                                     await _refreshReports();
                                     if (!mounted) return;
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
+                                      SnackBar(
                                         content: Text(
-                                          'Cash advance settings updated',
+                                          isSalaryDay
+                                              ? 'Salary-day deduction saved'
+                                              : 'Cash advance request added to balance',
                                         ),
                                       ),
                                     );
@@ -2724,7 +3029,7 @@ class _ReportsPageState extends State<ReportsPage> {
                 ),
                 _salaryRow(
                   'Deduction Per Salary',
-                  '- ${_money.format(editableDeduction)}',
+                  '- ${_money.format(effectiveDeduction)}',
                   Colors.redAccent,
                 ),
 

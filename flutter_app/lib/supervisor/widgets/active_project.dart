@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 import '../../services/auth_service.dart';
 import '../../services/app_config.dart';
+import '../../services/app_theme_tokens.dart';
 import '../project_infos.dart';
 
 class ActiveProject extends StatefulWidget {
@@ -12,6 +13,8 @@ class ActiveProject extends StatefulWidget {
   final bool enableSelection;
   final bool scrollOnlyCards;
   final double? cardsViewportHeight;
+  final bool compactCards;
+  final bool carouselWhenMultiple;
 
   const ActiveProject({
     super.key,
@@ -19,6 +22,8 @@ class ActiveProject extends StatefulWidget {
     this.enableSelection = true,
     this.scrollOnlyCards = false,
     this.cardsViewportHeight,
+    this.compactCards = false,
+    this.carouselWhenMultiple = false,
   });
 
   @override
@@ -32,9 +37,13 @@ class _ActiveProjectState extends State<ActiveProject> {
   bool _isLoading = true;
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _cardsScrollController = ScrollController();
+  final PageController _carouselController = PageController(
+    viewportFraction: 0.88,
+  );
   String _searchQuery = '';
   _ProjectSortOrder _sortOrder = _ProjectSortOrder.oldestToNewest;
   String? _projectTypeFilter;
+  int _carouselIndex = 0;
 
   @override
   void initState() {
@@ -53,6 +62,7 @@ class _ActiveProjectState extends State<ActiveProject> {
   void dispose() {
     _searchController.dispose();
     _cardsScrollController.dispose();
+    _carouselController.dispose();
     super.dispose();
   }
 
@@ -102,20 +112,20 @@ class _ActiveProjectState extends State<ActiveProject> {
     return origin.resolve('/media/$value').toString();
   }
 
-  Widget _buildProjectImage(Map<String, dynamic> project) {
+  Widget _buildProjectImage(Map<String, dynamic> project, {double height = 138}) {
     final imagePath = (project['project_image'] ?? '').toString().trim();
 
     if (imagePath.isEmpty || imagePath == 'null') {
-      return _buildPlaceholderImage();
+      return _buildPlaceholderImage(height: height);
     }
 
     if (imagePath.startsWith('assets/')) {
       return Image.asset(
         imagePath,
-        height: 138,
+        height: height,
         width: double.infinity,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _buildPlaceholderImage(),
+        errorBuilder: (_, __, ___) => _buildPlaceholderImage(height: height),
       );
     }
 
@@ -123,10 +133,10 @@ class _ActiveProjectState extends State<ActiveProject> {
     if (mediaUrl != null) {
       return Image.network(
         mediaUrl,
-        height: 138,
+        height: height,
         width: double.infinity,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _buildPlaceholderImage(),
+        errorBuilder: (_, __, ___) => _buildPlaceholderImage(height: height),
       );
     }
 
@@ -135,22 +145,22 @@ class _ActiveProjectState extends State<ActiveProject> {
       if (file.existsSync()) {
         return Image.file(
           file,
-          height: 138,
+          height: height,
           width: double.infinity,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _buildPlaceholderImage(),
+          errorBuilder: (_, __, ___) => _buildPlaceholderImage(height: height),
         );
       }
     } catch (_) {
       // Ignore local file path parsing errors and use fallback.
     }
 
-    return _buildPlaceholderImage();
+    return _buildPlaceholderImage(height: height);
   }
 
-  Widget _buildPlaceholderImage() {
+  Widget _buildPlaceholderImage({double height = 138}) {
     return Container(
-      height: 138,
+      height: height,
       width: double.infinity,
       color: const Color(0xFFF3F4F6),
       child: const Center(
@@ -446,6 +456,8 @@ class _ActiveProjectState extends State<ActiveProject> {
     }
 
     final visibleProjects = _visibleProjects;
+  final useCarousel = widget.carouselWhenMultiple && visibleProjects.length >= 2;
+  final compact = widget.compactCards;
 
     final projectsContent = visibleProjects.isEmpty
         ? const Padding(
@@ -463,24 +475,21 @@ class _ActiveProjectState extends State<ActiveProject> {
           )
         : LayoutBuilder(
             builder: (context, constraints) {
-              final columnCount = constraints.maxWidth >= 1200
-                  ? 3
-                  : constraints.maxWidth >= 760
-                  ? 2
-                  : 1;
+            final columnCount = constraints.maxWidth >= 1200
+              ? 3
+              : constraints.maxWidth >= 760
+              ? 2
+              : 1;
               const spacing = 16.0;
               final cardWidth =
                   (constraints.maxWidth - ((columnCount - 1) * spacing)) /
                   columnCount;
 
-              return Wrap(
-                spacing: spacing,
-                runSpacing: spacing,
-                children: visibleProjects.map((project) {
+            Widget buildProjectCard(Map<String, dynamic> project, {double? width}) {
                   final projectName =
                       project['project_name'] ?? 'Unknown Project';
                   final projectIdRaw = project['project_id'];
-                  if (projectIdRaw == null) return const SizedBox.shrink();
+              if (projectIdRaw == null) return const SizedBox.shrink();
 
                   final int projectId = projectIdRaw is int
                       ? projectIdRaw
@@ -497,8 +506,15 @@ class _ActiveProjectState extends State<ActiveProject> {
                   final bool isSelected =
                       widget.enableSelection && _selectedProjectId == projectId;
 
+                  final imageHeight = compact ? (isMobile ? 102.0 : 112.0) : 138.0;
+                  final contentPadding = compact ? 12.0 : 18.0;
+                  final titleSize = compact ? 15.0 : 18.0;
+                  final metaSize = compact ? 12.0 : 13.0;
+                  final chipFont = compact ? 11.0 : 12.0;
+                  final progressHeight = compact ? 6.0 : 8.0;
+
                   return SizedBox(
-                    width: cardWidth,
+                    width: width ?? cardWidth,
                     child: GestureDetector(
                       onTap: widget.enableSelection
                           ? () => _selectProject(projectId)
@@ -506,10 +522,10 @@ class _ActiveProjectState extends State<ActiveProject> {
                       child: Container(
                         decoration: BoxDecoration(
                           color: Colors.white,
-                          borderRadius: BorderRadius.circular(18),
+                          borderRadius: BorderRadius.circular(compact ? 14 : 18),
                           border: Border.all(
                             color: isSelected
-                                ? const Color(0xFFFF7A18)
+                                ? AppColors.accent
                                 : const Color(0xFFE5E7EB),
                             width: 2,
                           ),
@@ -523,64 +539,72 @@ class _ActiveProjectState extends State<ActiveProject> {
                             ),
                           ],
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            ClipRRect(
-                              borderRadius: const BorderRadius.vertical(
-                                top: Radius.circular(16),
+                        child: SingleChildScrollView(
+                          physics: useCarousel
+                              ? const ClampingScrollPhysics()
+                              : const NeverScrollableScrollPhysics(),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.vertical(
+                                  top: Radius.circular(compact ? 12 : 16),
+                                ),
+                                child: _buildProjectImage(
+                                  project,
+                                  height: imageHeight,
+                                ),
                               ),
-                              child: _buildProjectImage(project),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.all(18),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 4,
+                              Padding(
+                                padding: EdgeInsets.all(contentPadding),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: compact ? 8 : 10,
+                                      vertical: compact ? 3 : 4,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: progress >= 1
-                                          ? const Color(0xFFE5F8ED)
-                                          : const Color(0xFFFFF2E8),
+                                      color: Colors.white,
+                                      border: Border.all(
+                                        color: const Color(0xFFE5E7EB),
+                                      ),
                                       borderRadius: BorderRadius.circular(20),
                                     ),
                                     child: Text(
                                       label,
                                       style: TextStyle(
-                                        fontSize: 12,
+                                        fontSize: chipFont,
                                         fontWeight: FontWeight.w600,
                                         color: progress >= 1
                                             ? const Color(0xFF10B981)
-                                            : const Color(0xFFFF7A18),
+                                            : AppColors.accent,
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(height: 12),
+                                  SizedBox(height: compact ? 8 : 12),
                                   Text(
                                     projectName,
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 18,
+                                    style: TextStyle(
+                                      fontSize: titleSize,
                                       fontWeight: FontWeight.w700,
-                                      color: Color(0xFF0C1935),
+                                      color: const Color(0xFF0C1935),
                                     ),
                                   ),
-                                  const SizedBox(height: 6),
+                                  SizedBox(height: compact ? 4 : 6),
                                   Text(
                                     location,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      color: Color(0xFF6B7280),
+                                    style: TextStyle(
+                                      fontSize: metaSize,
+                                      color: const Color(0xFF6B7280),
                                     ),
                                   ),
-                                  const SizedBox(height: 14),
+                                  SizedBox(height: compact ? 10 : 14),
                                   Row(
                                     children: [
                                       const Icon(
@@ -588,34 +612,34 @@ class _ActiveProjectState extends State<ActiveProject> {
                                         size: 14,
                                         color: Color(0xFFA0AEC0),
                                       ),
-                                      const SizedBox(width: 6),
+                                      const SizedBox(width: 5),
                                       Expanded(
                                         child: Text(
                                           '$startDate   •   $endDate',
                                           overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Color(0xFF6B7280),
+                                          style: TextStyle(
+                                            fontSize: compact ? 11 : 12,
+                                            color: const Color(0xFF6B7280),
                                           ),
                                         ),
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 14),
+                                  SizedBox(height: compact ? 10 : 14),
                                   ClipRRect(
                                     borderRadius: BorderRadius.circular(8),
                                     child: LinearProgressIndicator(
                                       value: progress,
-                                      minHeight: 8,
+                                      minHeight: progressHeight,
                                       backgroundColor: const Color(0xFFF3F4F6),
                                       valueColor: AlwaysStoppedAnimation<Color>(
                                         progress >= 1
                                             ? const Color(0xFF22C55E)
-                                            : const Color(0xFFFF7A18),
+                                            : AppColors.accent,
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(height: 8),
+                                  SizedBox(height: compact ? 6 : 8),
                                   Row(
                                     mainAxisAlignment: widget.enableSelection
                                         ? MainAxisAlignment.spaceBetween
@@ -623,10 +647,10 @@ class _ActiveProjectState extends State<ActiveProject> {
                                     children: [
                                       Text(
                                         '$progressPercentage%',
-                                        style: const TextStyle(
-                                          fontSize: 13,
+                                        style: TextStyle(
+                                          fontSize: compact ? 12 : 13,
                                           fontWeight: FontWeight.w600,
-                                          color: Color(0xFF0C1935),
+                                          color: const Color(0xFF0C1935),
                                         ),
                                       ),
                                       if (widget.enableSelection)
@@ -635,16 +659,16 @@ class _ActiveProjectState extends State<ActiveProject> {
                                               ? 'Selected'
                                               : 'Tap to select',
                                           style: TextStyle(
-                                            fontSize: 12,
+                                            fontSize: compact ? 11 : 12,
                                             fontWeight: FontWeight.w600,
                                             color: isSelected
-                                                ? const Color(0xFFFF7A18)
+                                                ? AppColors.accent
                                                 : const Color(0xFF9CA3AF),
                                           ),
                                         ),
                                     ],
                                   ),
-                                  const SizedBox(height: 14),
+                                  SizedBox(height: compact ? 10 : 14),
                                   SizedBox(
                                     width: double.infinity,
                                     child: OutlinedButton(
@@ -677,34 +701,117 @@ class _ActiveProjectState extends State<ActiveProject> {
                                         side: BorderSide(
                                           color: progress >= 1
                                               ? const Color(0xFF22C55E)
-                                              : const Color(0xFFFF7A18),
+                                              : AppColors.accent,
                                         ),
                                         shape: RoundedRectangleBorder(
                                           borderRadius: BorderRadius.circular(
                                             10,
                                           ),
                                         ),
+                                        visualDensity: compact
+                                            ? VisualDensity.compact
+                                            : VisualDensity.standard,
                                       ),
                                       child: Text(
                                         'View more',
                                         style: TextStyle(
                                           color: progress >= 1
                                               ? const Color(0xFF22C55E)
-                                              : const Color(0xFFFF7A18),
+                                              : AppColors.accent,
                                           fontWeight: FontWeight.w600,
+                                          fontSize: compact ? 12 : 13,
                                         ),
                                       ),
                                     ),
                                   ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   );
-                }).toList(),
+              }
+
+              if (useCarousel) {
+                final targetViewport = widget.cardsViewportHeight ??
+                  (compact
+                    ? (isMobile ? 312.0 : 328.0)
+                    : (isMobile ? 352.0 : 372.0));
+                return SizedBox(
+                  height: targetViewport,
+                  child: LayoutBuilder(
+                    builder: (context, viewportConstraints) {
+                      final showDots = viewportConstraints.maxHeight >= 260;
+
+                      return Column(
+                        children: [
+                          Expanded(
+                            child: PageView.builder(
+                              controller: _carouselController,
+                              itemCount: visibleProjects.length,
+                              onPageChanged: (index) {
+                                setState(() {
+                                  _carouselIndex = index;
+                                });
+
+                                final rawId =
+                                    visibleProjects[index]['project_id'];
+                                final projectId = rawId is int
+                                    ? rawId
+                                    : int.tryParse(rawId.toString());
+                                if (projectId != null && widget.enableSelection) {
+                                  _selectProject(projectId);
+                                }
+                              },
+                              itemBuilder: (context, index) {
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                                  child: buildProjectCard(
+                                    visibleProjects[index],
+                                    width: double.infinity,
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                          if (showDots) const SizedBox(height: 8),
+                          if (showDots)
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: List.generate(visibleProjects.length, (
+                                index,
+                              ) {
+                                final isActive = index == _carouselIndex;
+                                return AnimatedContainer(
+                                  duration: const Duration(milliseconds: 180),
+                                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                                  width: isActive ? 16 : 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    color: isActive
+                                      ? AppColors.accent
+                                        : const Color(0xFFD1D5DB),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                );
+                              }),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                );
+              }
+
+              return Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: visibleProjects
+                    .map((project) => buildProjectCard(project))
+                    .toList(),
               );
             },
           );
@@ -735,16 +842,18 @@ class _ActiveProjectState extends State<ActiveProject> {
         if (shouldScrollCards)
           SizedBox(
             height: widget.cardsViewportHeight!,
-            child: Scrollbar(
-              controller: _cardsScrollController,
-              thumbVisibility: true,
-              child: SingleChildScrollView(
-                controller: _cardsScrollController,
-                primary: false,
-                physics: const ClampingScrollPhysics(),
-                child: projectsContent,
+            child: useCarousel
+                ? projectsContent
+                : Scrollbar(
+                    controller: _cardsScrollController,
+                    thumbVisibility: true,
+                    child: SingleChildScrollView(
+                      controller: _cardsScrollController,
+                      primary: false,
+                      physics: const ClampingScrollPhysics(),
+                      child: projectsContent,
+                    ),
               ),
-            ),
           )
         else
           projectsContent,
@@ -788,7 +897,7 @@ class _ProjectsHeader extends StatelessWidget {
               fontSize: 12,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.8,
-              color: Color(0xFFFF7A18),
+              color: AppColors.accent,
             ),
           ),
           const SizedBox(height: 4),
@@ -847,7 +956,7 @@ class _ProjectsHeader extends StatelessWidget {
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.8,
-                  color: Color(0xFFFF7A18),
+                  color: AppColors.accent,
                 ),
               ),
               SizedBox(height: 4),

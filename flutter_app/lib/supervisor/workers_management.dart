@@ -10,13 +10,10 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../services/auth_service.dart';
 import '../services/app_config.dart';
 import '../services/file_download/file_download.dart';
+import '../services/app_theme_tokens.dart';
 import 'widgets/sidebar.dart';
-import 'dashboard_page.dart';
-import 'attendance_page.dart';
-import 'daily_logs.dart';
-import 'task_progress.dart';
-import 'reports.dart';
-import 'inventory.dart';
+import 'widgets/mobile_bottom_nav.dart';
+import 'widgets/dashboard_header.dart';
 import 'widgets/supervisor_user_badge.dart';
 
 class WorkerManagementPage extends StatefulWidget {
@@ -209,40 +206,29 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
   }
 
   void _navigateToPage(String page) {
-    Widget destination;
     switch (page) {
       case 'Dashboard':
-        destination = const SupervisorDashboardPage(
-          initialSidebarVisible: false,
-        );
+        context.go('/supervisor');
         break;
       case 'Workers':
       case 'Worker Management':
         return; // Already on workers page
       case 'Attendance':
-        destination = const AttendancePage(initialSidebarVisible: false);
-        break;
-      case 'Logs':
-      case 'Daily Logs':
-        destination = const DailyLogsPage(initialSidebarVisible: false);
+        context.go('/supervisor/attendance');
         break;
       case 'Tasks':
       case 'Task Progress':
-        destination = const TaskProgressPage(initialSidebarVisible: false);
+        context.go('/supervisor/task-progress');
         break;
       case 'Reports':
-        destination = const ReportsPage(initialSidebarVisible: false);
+        context.go('/supervisor/reports');
         break;
       case 'Inventory':
-        destination = const InventoryPage(initialSidebarVisible: false);
+        context.go('/supervisor/inventory');
         break;
       default:
         return;
     }
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => destination),
-    );
   }
 
   String searchQuery = '';
@@ -379,7 +365,7 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
 
     return CircleAvatar(
       radius: radius,
-      backgroundColor: roleColor.withOpacity(0.12),
+      backgroundColor: Colors.white,
       foregroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
       child: Text(
         _getWorkerInitial(worker),
@@ -551,7 +537,8 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                             width: 110,
                             height: 110,
                             decoration: BoxDecoration(
-                              color: roleColor.withOpacity(0.12),
+                              color: Colors.white,
+                              border: Border.all(color: const Color(0xFFE5E7EB)),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: workerPhotoUrl == null
@@ -591,7 +578,8 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: roleColor.withOpacity(0.12),
+                              color: Colors.white,
+                              border: Border.all(color: const Color(0xFFE5E7EB)),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
@@ -892,7 +880,8 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.12),
+              color: Colors.white,
+              border: Border.all(color: const Color(0xFFE5E7EB)),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
@@ -933,7 +922,7 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
     final isMobile = screenWidth <= 600;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F9),
+      backgroundColor: AppColors.surface,
       body: Stack(
         children: [
           Row(
@@ -943,8 +932,7 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
               Expanded(
                 child: Column(
                   children: [
-                    // White header with blue left accent (keeps Notification bell & AESTRA)
-                    WorkersHeader(onMenuPressed: () {}, isMobile: isMobile),
+                    const DashboardHeader(title: 'Workers'),
 
                     // Scrollable content area
                     Expanded(
@@ -1384,48 +1372,14 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
   }
 
   Widget _buildBottomNavBar() {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF0C1935),
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 16,
-            offset: const Offset(0, -4),
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavItem(Icons.dashboard, 'Dashboard', false),
-                _buildNavItem(Icons.people, 'Workers', true),
-                _buildNavItem(Icons.check_circle, 'Attendance', false),
-                _buildNavItem(Icons.list_alt, 'Logs', false),
-                _buildNavItem(Icons.more_horiz, 'More', false),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return SupervisorMobileBottomNav(
+      activeTab: SupervisorMobileTab.workers,
+      onSelect: _navigateToPage,
     );
   }
 
   Widget _buildNavItem(IconData icon, String label, bool isActive) {
-    final color = isActive ? const Color(0xFFFF6F00) : Colors.white70;
+    final color = isActive ? AppColors.accent : Colors.white70;
 
     return InkWell(
       onTap: () {
@@ -1438,26 +1392,19 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
       borderRadius: BorderRadius.circular(12),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: AppSpacing.sm),
         decoration: BoxDecoration(
-          color: isActive
-              ? const Color(0xFFFF6F00).withOpacity(0.15)
-              : Colors.transparent,
+          color: isActive ? AppColors.accent.withOpacity(0.15) : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, color: color, size: 24),
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               label,
-              style: TextStyle(
-                color: color,
-                fontSize: 11,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                letterSpacing: 0.3,
-              ),
+              style: AppTypography.mobileNavLabel(color, isActive: isActive),
             ),
           ],
         ),
@@ -1471,7 +1418,7 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         decoration: const BoxDecoration(
-          color: Color(0xFF0C1935),
+          color: AppColors.navSurface,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: SafeArea(
@@ -1568,7 +1515,8 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: roleColor.withOpacity(0.1),
+                                color: Colors.white,
+                                border: Border.all(color: const Color(0xFFE5E7EB)),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
@@ -1589,7 +1537,8 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: getStatusColor('Active').withOpacity(0.12),
+                          color: Colors.white,
+                          border: Border.all(color: const Color(0xFFE5E7EB)),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
@@ -1638,11 +1587,6 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                       onPressed: () => _showWorkerDetailModal(context, worker),
                       icon: const Icon(Icons.remove_red_eye_outlined, size: 18),
                       label: const Text('View Details'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFFFF6F00),
-                        side: const BorderSide(color: Color(0xFFFF6F00)),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                      ),
                     ),
                   ),
                 ],
@@ -1685,7 +1629,7 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
           // Table header
           Container(
             decoration: BoxDecoration(
-              color: const Color(0xFFFF6F00).withOpacity(0.05),
+              color: Colors.white,
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(12),
               ),
@@ -1771,7 +1715,8 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                             vertical: isTablet ? 4 : 6,
                           ),
                           decoration: BoxDecoration(
-                            color: roleColor.withOpacity(0.1),
+                            color: Colors.white,
+                            border: Border.all(color: const Color(0xFFE5E7EB)),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
@@ -1818,7 +1763,8 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                             vertical: isTablet ? 4 : 6,
                           ),
                           decoration: BoxDecoration(
-                            color: getStatusColor('Active').withOpacity(0.12),
+                            color: Colors.white,
+                            border: Border.all(color: const Color(0xFFE5E7EB)),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Row(
@@ -2074,15 +2020,15 @@ class _WorkersHeaderState extends State<WorkersHeader> {
                   child: MouseRegion(
                     cursor: SystemMouseCursors.click,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
+                      padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
                         color: Colors.grey[100],
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(999),
                       ),
-                      child: const SupervisorUserBadge(),
+                      child: const SupervisorUserBadge(
+                        showName: false,
+                        avatarSize: 34,
+                      ),
                     ),
                   ),
                 ),

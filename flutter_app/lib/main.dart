@@ -18,7 +18,6 @@ import 'supervisor/dashboard_page.dart' as supervisor;
 import 'supervisor/all_projects.dart' as supervisor;
 import 'supervisor/workers_management.dart' as supervisor;
 import 'supervisor/attendance_page.dart' as supervisor;
-import 'supervisor/daily_logs.dart' as supervisor;
 import 'supervisor/task_progress.dart' as supervisor;
 import 'supervisor/reports.dart' as supervisor;
 import 'supervisor/inventory.dart' as supervisor;
@@ -26,6 +25,7 @@ import 'client/cl_dashboard.dart' as client;
 import 'license/plan.dart';
 import 'services/auth_service.dart';
 import 'services/app_time_service.dart';
+import 'services/app_theme_tokens.dart';
 import 'services/url_strategy/url_strategy.dart';
 
 void main() async {
@@ -60,6 +60,36 @@ void main() async {
 
 class StructuraApp extends StatelessWidget {
   const StructuraApp({super.key});
+
+  CustomTransitionPage<void> _buildSmoothPage({
+    required GoRouterState state,
+    required Widget child,
+  }) {
+    return CustomTransitionPage<void>(
+      key: state.pageKey,
+      child: child,
+      transitionDuration: const Duration(milliseconds: 220),
+      reverseTransitionDuration: const Duration(milliseconds: 180),
+      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+
+        return FadeTransition(
+          opacity: curved,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0.015, 0),
+              end: Offset.zero,
+            ).animate(curved),
+            child: child,
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -154,44 +184,58 @@ class StructuraApp extends StatelessWidget {
         ),
         GoRoute(
           path: '/supervisor',
-          builder: (context, state) =>
-              const supervisor.SupervisorDashboardPage(),
+          pageBuilder: (context, state) => _buildSmoothPage(
+            state: state,
+            child: const supervisor.SupervisorDashboardPage(),
+          ),
           name: 'supervisor',
           routes: [
             GoRoute(
               path: 'projects',
-              builder: (context, state) => const supervisor.AllProjectsPage(),
+              pageBuilder: (context, state) => _buildSmoothPage(
+                state: state,
+                child: const supervisor.AllProjectsPage(),
+              ),
               name: 'supervisor-projects',
             ),
             GoRoute(
               path: 'workers',
-              builder: (context, state) =>
-                  const supervisor.WorkerManagementPage(),
+              pageBuilder: (context, state) => _buildSmoothPage(
+                state: state,
+                child: const supervisor.WorkerManagementPage(),
+              ),
               name: 'supervisor-workers',
             ),
             GoRoute(
               path: 'attendance',
-              builder: (context, state) => const supervisor.AttendancePage(),
+              pageBuilder: (context, state) => _buildSmoothPage(
+                state: state,
+                child: const supervisor.AttendancePage(),
+              ),
               name: 'supervisor-attendance',
             ),
             GoRoute(
-              path: 'daily-logs',
-              builder: (context, state) => const supervisor.DailyLogsPage(),
-              name: 'supervisor-daily-logs',
-            ),
-            GoRoute(
               path: 'task-progress',
-              builder: (context, state) => const supervisor.TaskProgressPage(),
+              pageBuilder: (context, state) => _buildSmoothPage(
+                state: state,
+                child: const supervisor.TaskProgressPage(),
+              ),
               name: 'supervisor-task-progress',
             ),
             GoRoute(
               path: 'reports',
-              builder: (context, state) => const supervisor.ReportsPage(),
+              pageBuilder: (context, state) => _buildSmoothPage(
+                state: state,
+                child: const supervisor.ReportsPage(),
+              ),
               name: 'supervisor-reports',
             ),
             GoRoute(
               path: 'inventory',
-              builder: (context, state) => const supervisor.InventoryPage(),
+              pageBuilder: (context, state) => _buildSmoothPage(
+                state: state,
+                child: const supervisor.InventoryPage(),
+              ),
               name: 'supervisor-inventory',
             ),
           ],
@@ -213,6 +257,7 @@ class StructuraApp extends StatelessWidget {
       child: MaterialApp.router(
         title: 'Structura',
         debugShowCheckedModeBanner: false,
+        theme: AppTheme.light(),
         routerConfig: router,
       ),
     );
