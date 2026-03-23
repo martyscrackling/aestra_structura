@@ -393,6 +393,7 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
 
         if (response.statusCode == 201 || response.statusCode == 200) {
           int? createdFieldWorkerId;
+          bool photoRejected = false;
           try {
             final decoded = jsonDecode(response.body);
             if (decoded is Map) {
@@ -413,14 +414,47 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
               );
             } catch (e) {
               if (mounted) {
+                final msg = e.toString();
+                final isFaceReject = msg.contains('No human face detected');
+
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Photo upload failed: $e')),
+                  SnackBar(content: Text(msg)),
                 );
+
+                if (isFaceReject) {
+                  photoRejected = true;
+
+                  // Delete the created record so nonhuman photos don't create usable profiles.
+                  try {
+                    final deleteHeaders = currentUserId != null
+                        ? {'X-User-Id': currentUserId.toString()}
+                        : <String, String>{};
+
+                    final baseDeleteUri = AppConfig.apiUri(
+                      'field-workers/$createdFieldWorkerId/',
+                    );
+
+                    final deleteUri = (currentUserId == null &&
+                            widget.projectId != null)
+                        ? AppConfig.apiUri(
+                            'field-workers/$createdFieldWorkerId/?project_id=${widget.projectId}',
+                          )
+                        : baseDeleteUri;
+
+                    await http.delete(
+                      deleteUri,
+                      headers:
+                          deleteHeaders.isEmpty ? null : deleteHeaders,
+                    );
+                  } catch (_) {
+                    // Ignore delete failures; user still sees the rejection message.
+                  }
+                }
               }
             }
           }
 
-          if (mounted) {
+          if (mounted && !photoRejected) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Field worker added successfully!')),
             );

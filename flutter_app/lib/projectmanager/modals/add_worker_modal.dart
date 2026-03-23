@@ -295,20 +295,47 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
           }
 
           if (_selectedImage != null && supervisorId != null) {
+            final bool Function(String?) isFaceReject =
+                (String? msg) =>
+                    msg != null && msg.contains('No human face detected');
+
             final uploadResult = await _uploadSupervisorPhoto(
               supervisorId: supervisorId,
               currentUserId: currentUserId,
             );
+
             if (!uploadResult.ok && mounted) {
+              final msg =
+                  uploadResult.message ??
+                  'Supervisor created, but photo upload failed (HTTP ${uploadResult.statusCode ?? "?"}).';
+
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text(
-                    'Supervisor created, but photo upload failed (HTTP ${uploadResult.statusCode ?? "?"}).',
-                  ),
+                  content: Text(msg),
                   backgroundColor: Colors.red,
                   duration: const Duration(seconds: 5),
                 ),
               );
+
+              final shouldReject =
+                  uploadResult.imageVerification == 'REJECT' ||
+                  isFaceReject(uploadResult.message);
+
+              if (shouldReject) {
+                // Prevent cat/nonhuman photos from creating a usable supervisor record.
+                try {
+                  final headers = currentUserId != null
+                      ? {'X-User-Id': currentUserId.toString()}
+                      : <String, String>{};
+                  await http.delete(
+                    AppConfig.apiUri('supervisors/$supervisorId/'),
+                    headers: headers.isEmpty ? null : headers,
+                  );
+                } catch (_) {
+                  // Ignore delete failures; user will still see the rejection message.
+                }
+                return;
+              }
             }
           }
 
@@ -414,10 +441,28 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
       debugPrint('Photo upload status: ${response.statusCode}');
       debugPrint('Photo upload body: ${response.body}');
       final ok = response.statusCode >= 200 && response.statusCode < 300;
-      return _UploadResult(ok: ok, statusCode: response.statusCode);
+
+      String? message;
+      String? imageVerification;
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map<String, dynamic>) {
+          message = decoded['detail']?.toString() ?? decoded['error']?.toString();
+          imageVerification = decoded['image_verification']?.toString();
+        }
+      } catch (_) {
+        // ignore parsing issues
+      }
+
+      return _UploadResult(
+        ok: ok,
+        statusCode: response.statusCode,
+        message: message,
+        imageVerification: imageVerification,
+      );
     } catch (e) {
       debugPrint('Photo upload error: $e');
-      return const _UploadResult(ok: false);
+      return _UploadResult(ok: false, message: e.toString());
     }
   }
 
@@ -1037,6 +1082,13 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
 class _UploadResult {
   final bool ok;
   final int? statusCode;
+  final String? message;
+  final String? imageVerification;
 
-  const _UploadResult({required this.ok, this.statusCode});
+  const _UploadResult({
+    required this.ok,
+    this.statusCode,
+    this.message,
+    this.imageVerification,
+  });
 }

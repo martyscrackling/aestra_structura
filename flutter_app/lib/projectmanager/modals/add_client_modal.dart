@@ -375,8 +375,29 @@ class _AddClientModalState extends State<AddClientModal> {
             try {
               await _uploadClientPhoto(clientId: clientId, pmUserId: pmUserId);
             } catch (e) {
-              successMessage =
-                  'Client added, but photo upload failed: ${e.toString()}';
+              final msg = e.toString();
+              final isFaceReject = msg.contains('No human face detected');
+
+              if (isFaceReject) {
+                // Prevent cat/nonhuman photos from creating a usable client record.
+                try {
+                  await http.delete(
+                    AppConfig.apiUri('clients/$clientId/'),
+                    headers: {'X-User-Id': pmUserId.toString()},
+                  );
+                } catch (_) {
+                  // If delete fails, still keep the user informed.
+                }
+
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(
+                  SnackBar(content: Text(msg)),
+                );
+                return;
+              }
+
+              successMessage = 'Client added, but photo upload failed: $msg';
             }
           }
 
