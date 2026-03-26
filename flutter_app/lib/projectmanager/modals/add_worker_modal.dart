@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import '../../services/app_config.dart';
 import '../../services/auth_service.dart';
 import '../../services/subscription_helper.dart';
+import '../../services/photo_verifier.dart';
 
 class AddWorkerModal extends StatefulWidget {
   final String workerType;
@@ -45,6 +46,8 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
   XFile? _selectedImage;
   Uint8List? _selectedImageBytes;
   bool _isLoading = false;
+  bool _isPhotoVerifying = false;
+  bool _photoVerified = false;
 
   @override
   void initState() {
@@ -72,14 +75,60 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
   Future<void> _pickImage() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
-      final bytes = await image.readAsBytes();
-      if (!mounted) return;
+    if (image == null) return;
+
+    final bytes = await image.readAsBytes();
+    final verified = await _verifyPhotoSelection(bytes, image.name);
+    if (!mounted) return;
+
+    if (verified) {
       setState(() {
         _selectedImage = image;
         _selectedImageBytes = bytes;
       });
+    } else {
+      setState(() {
+        _selectedImage = null;
+        _selectedImageBytes = null;
+      });
     }
+  }
+
+  int? _currentUserId() {
+    final raw = AuthService().currentUser?['user_id'];
+    if (raw is int) return raw;
+    return int.tryParse(raw?.toString() ?? '');
+  }
+
+  Future<bool> _verifyPhotoSelection(Uint8List bytes, String filename) async {
+    if (!mounted) return false;
+    setState(() {
+      _isPhotoVerifying = true;
+      _photoVerified = false;
+    });
+
+    final result = await PhotoVerifier.verify(
+      bytes: bytes,
+      filename: filename,
+      userId: _currentUserId(),
+    );
+
+    if (!mounted) {
+      return result.accepted;
+    }
+
+    setState(() {
+      _isPhotoVerifying = false;
+      _photoVerified = result.accepted;
+    });
+
+    if (!result.accepted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(result.message)));
+    }
+
+    return result.accepted;
   }
 
   Future<void> _selectDate(
@@ -97,6 +146,90 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
         controller.text = picked.toIso8601String().split('T')[0];
       });
     }
+  }
+
+  Widget _buildPhotoPicker({
+    required double width,
+    required double height,
+    required String prompt,
+    double iconSize = 40,
+  }) {
+    final hasImage = _selectedImageBytes != null;
+    return GestureDetector(
+      onTap: _isPhotoVerifying ? null : _pickImage,
+      child: Column(
+        children: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                width: width,
+                height: height,
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  borderRadius: BorderRadius.circular(12),
+                  image: hasImage
+                      ? DecorationImage(
+                          image: MemoryImage(_selectedImageBytes!),
+                          fit: BoxFit.cover,
+                        )
+                      : null,
+                ),
+                child: hasImage
+                    ? null
+                    : Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.person_outline,
+                            size: iconSize,
+                            color: Colors.grey[400],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            prompt,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+              if (_isPhotoVerifying)
+                Container(
+                  width: width,
+                  height: height,
+                  decoration: BoxDecoration(
+                    color: Colors.black45,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_photoVerified)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Icon(Icons.check_circle, color: Colors.green, size: 16),
+                SizedBox(width: 4),
+                Text(
+                  'Photo verified',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.green,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
   }
 
   Future<void> _fetchRegions() async {
@@ -141,8 +274,9 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
         final provinces = data.cast<Map<String, dynamic>>();
 
         // Default to Zamboanga del Sur (id: 50).
-        final defaultProvince =
-            provinces.where((p) => p['id'] == 50).firstOrNull;
+        final defaultProvince = provinces
+            .where((p) => p['id'] == 50)
+            .firstOrNull;
         final selectedProvinceId =
             (defaultProvince?['id'] as int?) ??
             (provinces.isNotEmpty ? provinces.first['id'] as int? : null);
@@ -239,10 +373,10 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
           'birthdate': _birthdateController.text.trim().isEmpty
               ? null
               : _birthdateController.text.trim(),
-            'region': _selectedRegionId,
-            'province': _selectedProvinceId,
-            'city': _selectedCityId,
-            'barangay': _selectedBarangayId,
+          'region': _selectedRegionId,
+          'province': _selectedProvinceId,
+          'city': _selectedCityId,
+          'barangay': _selectedBarangayId,
           'sss_id': _sssIdController.text.trim().isEmpty
               ? null
               : _sssIdController.text.trim(),
@@ -295,9 +429,8 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
           }
 
           if (_selectedImage != null && supervisorId != null) {
-            final bool Function(String?) isFaceReject =
-                (String? msg) =>
-                    msg != null && msg.contains('No human face detected');
+            final bool Function(String?) isFaceReject = (String? msg) =>
+                msg != null && msg.contains('No human face detected');
 
             final uploadResult = await _uploadSupervisorPhoto(
               supervisorId: supervisorId,
@@ -447,7 +580,8 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
       try {
         final decoded = jsonDecode(response.body);
         if (decoded is Map<String, dynamic>) {
-          message = decoded['detail']?.toString() ?? decoded['error']?.toString();
+          message =
+              decoded['detail']?.toString() ?? decoded['error']?.toString();
           imageVerification = decoded['image_verification']?.toString();
         }
       } catch (_) {
@@ -526,45 +660,11 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
                       child: Column(
                         children: [
                           // Image on top for mobile
-                          GestureDetector(
-                            onTap: _pickImage,
-                            child: Container(
-                              width: 120,
-                              height: 120,
-                              decoration: BoxDecoration(
-                                color: Colors.grey[200],
-                                borderRadius: BorderRadius.circular(12),
-                                image: _selectedImageBytes != null
-                                    ? DecorationImage(
-                                        image: MemoryImage(
-                                          _selectedImageBytes!,
-                                        ),
-                                        fit: BoxFit.cover,
-                                      )
-                                    : null,
-                              ),
-                              child: _selectedImageBytes == null
-                                  ? Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.person_outline,
-                                          size: 40,
-                                          color: Colors.grey[400],
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          'Upload photo',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            color: Colors.grey[600],
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                  : null,
-                            ),
+                          _buildPhotoPicker(
+                            width: 120,
+                            height: 120,
+                            prompt: 'Upload photo',
+                            iconSize: 40,
                           ),
                           const SizedBox(height: 20),
                           // Form for mobile
@@ -587,45 +687,11 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
                           padding: const EdgeInsets.all(24),
                           child: Column(
                             children: [
-                              GestureDetector(
-                                onTap: _pickImage,
-                                child: Container(
-                                  width: 200,
-                                  height: 280,
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[200],
-                                    borderRadius: BorderRadius.circular(12),
-                                    image: _selectedImageBytes != null
-                                        ? DecorationImage(
-                                            image: MemoryImage(
-                                              _selectedImageBytes!,
-                                            ),
-                                            fit: BoxFit.cover,
-                                          )
-                                        : null,
-                                  ),
-                                  child: _selectedImageBytes == null
-                                      ? Column(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Icon(
-                                              Icons.person_outline,
-                                              size: 60,
-                                              color: Colors.grey[400],
-                                            ),
-                                            const SizedBox(height: 8),
-                                            Text(
-                                              'Click to upload photo',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey[600],
-                                              ),
-                                            ),
-                                          ],
-                                        )
-                                      : null,
-                                ),
+                              _buildPhotoPicker(
+                                width: 200,
+                                height: 280,
+                                prompt: 'Click to upload photo',
+                                iconSize: 60,
                               ),
                             ],
                           ),
@@ -663,7 +729,9 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed: _isLoading ? null : _handleSubmit,
+                            onPressed: (_isLoading || _isPhotoVerifying)
+                                ? null
+                                : _handleSubmit,
                             style: ElevatedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               backgroundColor: const Color(0xFFFF7A18),
@@ -741,7 +809,9 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: ElevatedButton(
-                            onPressed: _isLoading ? null : _handleSubmit,
+                            onPressed: (_isLoading || _isPhotoVerifying)
+                                ? null
+                                : _handleSubmit,
                             style: ElevatedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               backgroundColor: const Color(0xFFFF7A18),
@@ -982,10 +1052,7 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
         ),
       ),
       SizedBox(height: spacing),
-      _buildTextField(
-        controller: _sssIdController,
-        hintText: 'SSS ID',
-      ),
+      _buildTextField(controller: _sssIdController, hintText: 'SSS ID'),
       SizedBox(height: spacing),
 
       // PhilHealth ID
@@ -996,10 +1063,7 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
       SizedBox(height: spacing),
 
       // PagIbig ID
-      _buildTextField(
-        controller: _pagIbigIdController,
-        hintText: 'PagIbig ID',
-      ),
+      _buildTextField(controller: _pagIbigIdController, hintText: 'PagIbig ID'),
       SizedBox(height: spacing),
 
       // Payrate

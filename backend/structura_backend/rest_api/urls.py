@@ -2,6 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
     health_check,
+    verify_profile_photo,
     ListUser, 
     DetailUser, 
     login_user,
@@ -54,6 +55,7 @@ urlpatterns = [
     path('subscription/check/', check_subscription_status, name='check_subscription_status'),
     path('subscription/activate/', activate_subscription, name='activate_subscription'),
     path('pm/dashboard/', pm_dashboard_summary, name='pm_dashboard_summary'),
+    path('image-verification/', verify_profile_photo, name='verify_profile_photo'),
     path('debug/projects/', debug_projects, name='debug_projects'),
     path('debug/all/', debug_all_data, name='debug_all_data'),
 ]

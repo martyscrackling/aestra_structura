@@ -7,6 +7,7 @@ import 'dart:convert';
 import '../../services/app_config.dart';
 import '../../services/auth_service.dart';
 import '../../services/subscription_helper.dart';
+import '../../services/photo_verifier.dart';
 
 class AddFieldWorkerModal extends StatefulWidget {
   final String workerType;
@@ -42,6 +43,8 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
   XFile? _selectedImage;
   Uint8List? _selectedImageBytes;
   bool _isLoading = false;
+  bool _isPhotoVerifying = false;
+  bool _photoVerified = false;
 
   // Address hierarchy state
   int? _selectedRegionId;
@@ -111,32 +114,84 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
   double get _hourlyPayrate => math.max(0, _readMoney(_payrateController));
   double get _weeklySalary => _round2(_hourlyPayrate * _standardHoursPerWeek);
   double get _sssTopup => math.max(0, _readMoney(_sssTopupController));
-  double get _philHealthTopup => math.max(0, _readMoney(_philHealthTopupController));
+  double get _philHealthTopup =>
+      math.max(0, _readMoney(_philHealthTopupController));
   double get _pagIbigTopup => math.max(0, _readMoney(_pagIbigTopupController));
 
-  double get _sssMinDeduction => _weeklySalary > 0 ? _sssWeeklyMin(_weeklySalary) : 0;
+  double get _sssMinDeduction =>
+      _weeklySalary > 0 ? _sssWeeklyMin(_weeklySalary) : 0;
   double get _philHealthMinDeduction =>
       _weeklySalary > 0 ? _philHealthWeeklyMin(_weeklySalary) : 0;
-  double get _pagIbigMinDeduction => _weeklySalary > 0 ? _pagIbigWeeklyMin(_weeklySalary) : 0;
+  double get _pagIbigMinDeduction =>
+      _weeklySalary > 0 ? _pagIbigWeeklyMin(_weeklySalary) : 0;
 
   double get _sssTotalDeduction => _round2(_sssMinDeduction + _sssTopup);
   double get _philHealthTotalDeduction =>
       _round2(_philHealthMinDeduction + _philHealthTopup);
-  double get _pagIbigTotalDeduction => _round2(_pagIbigMinDeduction + _pagIbigTopup);
-  double get _totalWeeklyDeduction =>
-      _round2(_sssTotalDeduction + _philHealthTotalDeduction + _pagIbigTotalDeduction);
+  double get _pagIbigTotalDeduction =>
+      _round2(_pagIbigMinDeduction + _pagIbigTopup);
+  double get _totalWeeklyDeduction => _round2(
+    _sssTotalDeduction + _philHealthTotalDeduction + _pagIbigTotalDeduction,
+  );
   double get _netWeeklyPay => _round2(_weeklySalary - _totalWeeklyDeduction);
 
   Future<void> _pickImage() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
-      final bytes = await image.readAsBytes();
+    if (image == null) return;
+
+    final bytes = await image.readAsBytes();
+    final verified = await _verifyPhotoSelection(bytes, image.name);
+    if (!mounted) return;
+
+    if (verified) {
       setState(() {
         _selectedImage = image;
         _selectedImageBytes = bytes;
       });
+    } else {
+      setState(() {
+        _selectedImage = null;
+        _selectedImageBytes = null;
+      });
     }
+  }
+
+  int? _parsedCurrentUserId() {
+    final raw = AuthService().currentUser?['user_id'];
+    if (raw is int) return raw;
+    return int.tryParse(raw?.toString() ?? '');
+  }
+
+  Future<bool> _verifyPhotoSelection(Uint8List bytes, String filename) async {
+    if (!mounted) return false;
+    setState(() {
+      _isPhotoVerifying = true;
+      _photoVerified = false;
+    });
+
+    final result = await PhotoVerifier.verify(
+      bytes: bytes,
+      filename: filename,
+      userId: _parsedCurrentUserId(),
+    );
+
+    if (!mounted) {
+      return result.accepted;
+    }
+
+    setState(() {
+      _isPhotoVerifying = false;
+      _photoVerified = result.accepted;
+    });
+
+    if (!result.accepted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(result.message)));
+    }
+
+    return result.accepted;
   }
 
   Future<void> _uploadFieldWorkerPhoto({
@@ -202,6 +257,90 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
         controller.text = picked.toIso8601String().split('T')[0];
       });
     }
+  }
+
+  Widget _buildPhotoPicker({
+    required double width,
+    required double height,
+    required String prompt,
+    double iconSize = 40,
+  }) {
+    final hasImage = _selectedImageBytes != null;
+    return GestureDetector(
+      onTap: _isPhotoVerifying ? null : _pickImage,
+      child: Column(
+        children: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                width: width,
+                height: height,
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  borderRadius: BorderRadius.circular(12),
+                  image: hasImage
+                      ? DecorationImage(
+                          image: MemoryImage(_selectedImageBytes!),
+                          fit: BoxFit.cover,
+                        )
+                      : null,
+                ),
+                child: hasImage
+                    ? null
+                    : Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.person_outline,
+                            size: iconSize,
+                            color: Colors.grey[400],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            prompt,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+              if (_isPhotoVerifying)
+                Container(
+                  width: width,
+                  height: height,
+                  decoration: BoxDecoration(
+                    color: Colors.black45,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_photoVerified)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Icon(Icons.check_circle, color: Colors.green, size: 16),
+                SizedBox(width: 4),
+                Text(
+                  'Photo verified',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.green,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
   }
 
   Future<void> _fetchRegions() async {
@@ -351,19 +490,19 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
           'role': _isCustomRole
               ? _customRoleController.text.trim()
               : _selectedRole,
-            'payrate': _hourlyPayrate > 0 ? _hourlyPayrate : null,
-            'weekly_salary': _weeklySalary > 0 ? _weeklySalary : null,
-            'sss_weekly_topup': _sssTopup,
-            'philhealth_weekly_topup': _philHealthTopup,
-            'pagibig_weekly_topup': _pagIbigTopup,
-            'sss_weekly_min': _sssMinDeduction,
-            'philhealth_weekly_min': _philHealthMinDeduction,
-            'pagibig_weekly_min': _pagIbigMinDeduction,
-            'sss_weekly_total': _sssTotalDeduction,
-            'philhealth_weekly_total': _philHealthTotalDeduction,
-            'pagibig_weekly_total': _pagIbigTotalDeduction,
-            'total_weekly_deduction': _totalWeeklyDeduction,
-            'net_weekly_pay': _netWeeklyPay,
+          'payrate': _hourlyPayrate > 0 ? _hourlyPayrate : null,
+          'weekly_salary': _weeklySalary > 0 ? _weeklySalary : null,
+          'sss_weekly_topup': _sssTopup,
+          'philhealth_weekly_topup': _philHealthTopup,
+          'pagibig_weekly_topup': _pagIbigTopup,
+          'sss_weekly_min': _sssMinDeduction,
+          'philhealth_weekly_min': _philHealthMinDeduction,
+          'pagibig_weekly_min': _pagIbigMinDeduction,
+          'sss_weekly_total': _sssTotalDeduction,
+          'philhealth_weekly_total': _philHealthTotalDeduction,
+          'pagibig_weekly_total': _pagIbigTotalDeduction,
+          'total_weekly_deduction': _totalWeeklyDeduction,
+          'net_weekly_pay': _netWeeklyPay,
           'region': _selectedRegionId,
           'province': _selectedProvinceId,
           'city': _selectedCityId,
@@ -417,9 +556,9 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
                 final msg = e.toString();
                 final isFaceReject = msg.contains('No human face detected');
 
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(msg)),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(msg)));
 
                 if (isFaceReject) {
                   photoRejected = true;
@@ -434,8 +573,8 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
                       'field-workers/$createdFieldWorkerId/',
                     );
 
-                    final deleteUri = (currentUserId == null &&
-                            widget.projectId != null)
+                    final deleteUri =
+                        (currentUserId == null && widget.projectId != null)
                         ? AppConfig.apiUri(
                             'field-workers/$createdFieldWorkerId/?project_id=${widget.projectId}',
                           )
@@ -443,8 +582,7 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
 
                     await http.delete(
                       deleteUri,
-                      headers:
-                          deleteHeaders.isEmpty ? null : deleteHeaders,
+                      headers: deleteHeaders.isEmpty ? null : deleteHeaders,
                     );
                   } catch (_) {
                     // Ignore delete failures; user still sees the rejection message.
@@ -554,45 +692,11 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
                       child: Column(
                         children: [
                           // Image on top for mobile
-                          GestureDetector(
-                            onTap: _pickImage,
-                            child: Container(
-                              width: 120,
-                              height: 120,
-                              decoration: BoxDecoration(
-                                color: Colors.grey[200],
-                                borderRadius: BorderRadius.circular(12),
-                                image: _selectedImageBytes != null
-                                    ? DecorationImage(
-                                        image: MemoryImage(
-                                          _selectedImageBytes!,
-                                        ),
-                                        fit: BoxFit.cover,
-                                      )
-                                    : null,
-                              ),
-                              child: _selectedImage == null
-                                  ? Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.person_outline,
-                                          size: 40,
-                                          color: Colors.grey[400],
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          'Upload photo',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            color: Colors.grey[600],
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                  : null,
-                            ),
+                          _buildPhotoPicker(
+                            width: 120,
+                            height: 120,
+                            prompt: 'Upload photo',
+                            iconSize: 40,
                           ),
                           const SizedBox(height: 20),
                           // Form for mobile
@@ -614,45 +718,11 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
                           padding: const EdgeInsets.all(24),
                           child: Column(
                             children: [
-                              GestureDetector(
-                                onTap: _pickImage,
-                                child: Container(
-                                  width: 200,
-                                  height: 280,
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[200],
-                                    borderRadius: BorderRadius.circular(12),
-                                    image: _selectedImageBytes != null
-                                        ? DecorationImage(
-                                            image: MemoryImage(
-                                              _selectedImageBytes!,
-                                            ),
-                                            fit: BoxFit.cover,
-                                          )
-                                        : null,
-                                  ),
-                                  child: _selectedImage == null
-                                      ? Column(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Icon(
-                                              Icons.person_outline,
-                                              size: 60,
-                                              color: Colors.grey[400],
-                                            ),
-                                            const SizedBox(height: 8),
-                                            Text(
-                                              'Click to upload photo',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey[600],
-                                              ),
-                                            ),
-                                          ],
-                                        )
-                                      : null,
-                                ),
+                              _buildPhotoPicker(
+                                width: 200,
+                                height: 280,
+                                prompt: 'Click to upload photo',
+                                iconSize: 60,
                               ),
                             ],
                           ),
@@ -686,7 +756,9 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed: _isLoading ? null : _handleSubmit,
+                            onPressed: (_isLoading || _isPhotoVerifying)
+                                ? null
+                                : _handleSubmit,
                             style: ElevatedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               backgroundColor: const Color(0xFFFF7A18),
@@ -764,7 +836,9 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: ElevatedButton(
-                            onPressed: _isLoading ? null : _handleSubmit,
+                            onPressed: (_isLoading || _isPhotoVerifying)
+                                ? null
+                                : _handleSubmit,
                             style: ElevatedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               backgroundColor: const Color(0xFFFF7A18),
@@ -905,18 +979,17 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
                   ),
                 );
               }).toList(),
-              selectedItemBuilder: (context) =>
-                  _regions.map((region) {
-                    final name = region['name'] as String;
-                    return Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    );
-                  }).toList(),
+              selectedItemBuilder: (context) => _regions.map((region) {
+                final name = region['name'] as String;
+                return Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              }).toList(),
               onChanged: (int? value) async {
                 if (value == null) return;
                 setState(() {
@@ -961,25 +1034,16 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
           final name = province['name'] as String;
           return DropdownMenuItem<int>(
             value: province['id'] as int,
-            child: Text(
-              name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
           );
         }).toList(),
-        selectedItemBuilder: (context) =>
-            _provinces.map((province) {
-              final name = province['name'] as String;
-              return Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              );
-            }).toList(),
+        selectedItemBuilder: (context) => _provinces.map((province) {
+          final name = province['name'] as String;
+          return Align(
+            alignment: Alignment.centerLeft,
+            child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
+          );
+        }).toList(),
         onChanged: (int? value) async {
           if (value == null) return;
           setState(() {
@@ -1022,25 +1086,16 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
           final name = city['name'] as String;
           return DropdownMenuItem<int>(
             value: city['id'] as int,
-            child: Text(
-              name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
           );
         }).toList(),
-        selectedItemBuilder: (context) =>
-            _cities.map((city) {
-              final name = city['name'] as String;
-              return Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              );
-            }).toList(),
+        selectedItemBuilder: (context) => _cities.map((city) {
+          final name = city['name'] as String;
+          return Align(
+            alignment: Alignment.centerLeft,
+            child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
+          );
+        }).toList(),
         onChanged: (int? value) async {
           if (value == null) return;
           setState(() {
@@ -1081,25 +1136,16 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
           final name = barangay['name'] as String;
           return DropdownMenuItem<int>(
             value: barangay['id'] as int,
-            child: Text(
-              name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
           );
         }).toList(),
-        selectedItemBuilder: (context) =>
-            _barangays.map((barangay) {
-              final name = barangay['name'] as String;
-              return Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              );
-            }).toList(),
+        selectedItemBuilder: (context) => _barangays.map((barangay) {
+          final name = barangay['name'] as String;
+          return Align(
+            alignment: Alignment.centerLeft,
+            child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
+          );
+        }).toList(),
         onChanged: (int? value) {
           setState(() {
             _selectedBarangayId = value;
@@ -1119,7 +1165,9 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
         keyboardType: TextInputType.number,
         onChanged: (_) => setState(() {}),
         validator: (value) {
-          final amount = double.tryParse((value ?? '').trim().replaceAll(',', ''));
+          final amount = double.tryParse(
+            (value ?? '').trim().replaceAll(',', ''),
+          );
           if (amount == null || amount <= 0) {
             return 'Hourly payrate is required';
           }
@@ -1165,7 +1213,9 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
         keyboardType: TextInputType.number,
         onChanged: (_) => setState(() {}),
         validator: (value) {
-          final amount = double.tryParse((value ?? '').trim().replaceAll(',', ''));
+          final amount = double.tryParse(
+            (value ?? '').trim().replaceAll(',', ''),
+          );
           if (amount == null && (value ?? '').trim().isNotEmpty) {
             return 'Invalid amount';
           }
@@ -1180,7 +1230,9 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
         keyboardType: TextInputType.number,
         onChanged: (_) => setState(() {}),
         validator: (value) {
-          final amount = double.tryParse((value ?? '').trim().replaceAll(',', ''));
+          final amount = double.tryParse(
+            (value ?? '').trim().replaceAll(',', ''),
+          );
           if (amount == null && (value ?? '').trim().isNotEmpty) {
             return 'Invalid amount';
           }
@@ -1195,7 +1247,9 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
         keyboardType: TextInputType.number,
         onChanged: (_) => setState(() {}),
         validator: (value) {
-          final amount = double.tryParse((value ?? '').trim().replaceAll(',', ''));
+          final amount = double.tryParse(
+            (value ?? '').trim().replaceAll(',', ''),
+          );
           if (amount == null && (value ?? '').trim().isNotEmpty) {
             return 'Invalid amount';
           }

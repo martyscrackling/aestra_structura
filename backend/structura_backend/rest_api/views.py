@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from rest_framework import generics, status, viewsets
-from rest_framework.decorators import api_view, action
+from rest_framework.decorators import api_view, action, parser_classes
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.contrib.auth.hashers import check_password
@@ -74,6 +74,54 @@ def health_check(request):
         },
         'version': '1.0',
     })
+
+
+@csrf_exempt
+@api_view(['POST'])
+@parser_classes([MultiPartParser, FormParser])
+def verify_profile_photo(request):
+    """Return ACCEPT/REJECT after running the face detector on a raw upload."""
+    uploaded = request.FILES.get('image') or request.FILES.get('photo')
+    if uploaded is None:
+        return Response(
+            {
+                'image_verification': 'REJECT',
+                'detail': 'No file provided. Use multipart field "image".',
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    image_bytes = uploaded.read()
+    try:
+        uploaded.seek(0)
+    except Exception:
+        pass
+
+    if not image_bytes:
+        return Response(
+            {
+                'image_verification': 'REJECT',
+                'detail': 'Uploaded image appears to be empty.',
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if verify_image_has_human_face(image_bytes):
+        return Response(
+            {
+                'image_verification': 'ACCEPT',
+                'detail': 'Human face detected in the uploaded image.',
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    return Response(
+        {
+            'image_verification': 'REJECT',
+            'detail': 'No human face detected in the uploaded image.',
+        },
+        status=status.HTTP_400_BAD_REQUEST,
+    )
 
 # Create your views here.
 from app import models
