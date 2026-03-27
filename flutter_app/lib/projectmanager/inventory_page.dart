@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'widgets/responsive_page_layout.dart';
-import 'modals/tool_details_modal.dart';
 import 'modals/add_inventory_item_modal.dart';
+import 'modals/assign_inventory_item_modal.dart';
 import 'modals/manage_usage_modal.dart';
 import '../services/inventory_service.dart';
 import '../services/auth_service.dart';
@@ -11,11 +11,14 @@ class ToolItem {
   final String name;
   final String category;
   final String status;
+  final String? projectName;
   final String? photoUrl;
   final String? serialNumber;
   final int quantity;
+  final int assignedProjectsCount;
   final String? location;
   final String? notes;
+  final List<Map<String, dynamic>> units;
   final List<Map<String, dynamic>> activeUsages;
 
   ToolItem({
@@ -23,11 +26,14 @@ class ToolItem {
     required this.name,
     required this.category,
     required this.status,
+    this.projectName,
     this.photoUrl,
     this.serialNumber,
     this.quantity = 1,
+    this.assignedProjectsCount = 0,
     this.location,
     this.notes,
+    this.units = const [],
     this.activeUsages = const [],
   });
 
@@ -37,11 +43,18 @@ class ToolItem {
       name: json['name'] ?? '',
       category: json['category'] ?? '',
       status: json['status'] ?? 'Available',
+      projectName: json['project_name'],
       photoUrl: json['photo_url'],
       serialNumber: json['serial_number'],
       quantity: json['quantity'] ?? 1,
+      assignedProjectsCount: json['assigned_projects_count'] ?? 0,
       location: json['location'],
       notes: json['notes'],
+      units:
+          (json['units'] as List<dynamic>?)
+              ?.map((e) => e as Map<String, dynamic>)
+              .toList() ??
+          [],
       activeUsages:
           (json['active_usages'] as List<dynamic>?)
               ?.map((e) => e as Map<String, dynamic>)
@@ -53,13 +66,21 @@ class ToolItem {
 
 class ActiveUsage {
   final ToolItem tool;
+  final String unitCode;
+  final String projectName;
+  final String usedBy;
   final List<String> users;
   final String usageStatus;
+  final String expectedReturnDate;
 
   ActiveUsage({
     required this.tool,
-    required this.users,
+    required this.unitCode,
+    required this.projectName,
+    required this.usedBy,
+    this.users = const [],
     required this.usageStatus,
+    required this.expectedReturnDate,
   });
 }
 
@@ -97,12 +118,38 @@ class _InventoryPageState extends State<InventoryPage> {
       // Build active usage list from items that have active_usages
       final active = <ActiveUsage>[];
       for (final item in items) {
-        if (item.activeUsages.isNotEmpty) {
-          final users = item.activeUsages
-              .map((u) => u['supervisor_name']?.toString() ?? 'Unknown')
-              .toList();
+        for (final usage in item.activeUsages) {
+          final status = (usage['status'] ?? '').toString().trim();
+          if (status.toLowerCase() != 'checked out') {
+            continue;
+          }
+
+          final supervisor = (usage['supervisor_name'] ?? '').toString().trim();
+          final fieldWorker = (usage['field_worker_name'] ?? '')
+              .toString()
+              .trim();
+          final usedBy = fieldWorker.isNotEmpty
+              ? '$supervisor / $fieldWorker'
+              : (supervisor.isNotEmpty ? supervisor : 'Unknown');
+
+          final unitCode = (usage['unit_code'] ?? '').toString().trim();
+          final projectName = (usage['project_name'] ?? '').toString().trim();
+          final expectedReturnDate = (usage['expected_return_date'] ?? '')
+              .toString()
+              .trim();
+
           active.add(
-            ActiveUsage(tool: item, users: users, usageStatus: 'Checked Out'),
+            ActiveUsage(
+              tool: item,
+              unitCode: unitCode.isNotEmpty ? unitCode : 'No Unit Code',
+              projectName: projectName.isNotEmpty ? projectName : 'Unassigned',
+              usedBy: usedBy,
+              users: [usedBy],
+              usageStatus: status.isNotEmpty ? status : 'Checked Out',
+              expectedReturnDate: expectedReturnDate.isNotEmpty
+                  ? expectedReturnDate
+                  : 'Not set',
+            ),
           );
         }
       }
@@ -124,8 +171,7 @@ class _InventoryPageState extends State<InventoryPage> {
     final q = _query.trim().toLowerCase();
     if (q.isEmpty) return true;
     return t.name.toLowerCase().contains(q) ||
-        t.category.toLowerCase().contains(q) ||
-        t.status.toLowerCase().contains(q);
+        t.category.toLowerCase().contains(q);
   }).toList();
 
   @override
@@ -359,19 +405,31 @@ class _InventoryPageState extends State<InventoryPage> {
                                         ),
                                       ),
                                     ),
-                                  Expanded(
-                                    flex: isMobile ? 1 : 2,
-                                    child: Text(
-                                      'Status',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: isMobile ? 12 : 13,
+                                  if (!isMobile)
+                                    const Expanded(
+                                      flex: 1,
+                                      child: Text(
+                                        'Unit',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 13,
+                                        ),
                                       ),
                                     ),
-                                  ),
+                                  if (!isMobile)
+                                    const Expanded(
+                                      flex: 2,
+                                      child: Text(
+                                        'Project',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
                                   SizedBox(
-                                    width: isMobile ? 70 : 90,
-                                  ), // for manage button
+                                    width: isMobile ? 120 : 160,
+                                  ), // for assign/manage actions
                                 ],
                               ),
                             ),
@@ -460,7 +518,7 @@ class _InventoryPageState extends State<InventoryPage> {
                                         Expanded(
                                           flex: 4,
                                           child: Text(
-                                            'Tool/Machine',
+                                            'Unit',
                                             style: TextStyle(
                                               fontWeight: FontWeight.w700,
                                               fontSize: isMobile ? 12 : 13,
@@ -491,16 +549,23 @@ class _InventoryPageState extends State<InventoryPage> {
                                         Expanded(
                                           flex: isMobile ? 2 : 3,
                                           child: Text(
-                                            'Status',
+                                            'Project',
                                             style: TextStyle(
                                               fontWeight: FontWeight.w700,
                                               fontSize: isMobile ? 12 : 13,
                                             ),
                                           ),
                                         ),
-                                        SizedBox(
-                                          width: isMobile ? 70 : 110,
-                                        ), // for manage button
+                                        Expanded(
+                                          flex: isMobile ? 2 : 3,
+                                          child: Text(
+                                            'Expected Return Date',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: isMobile ? 12 : 13,
+                                            ),
+                                          ),
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -535,7 +600,10 @@ class _InventoryPageState extends State<InventoryPage> {
 
   void _showManageStatusDialog(ToolItem? tool) {
     if (tool == null) return;
-    final statuses = ['Available', 'Maintenance', 'Checked Out', 'Returned'];
+    final hasAssignedUnits = tool.units.any(
+      (u) => (u['current_project_name'] ?? '').toString().trim().isNotEmpty,
+    );
+
     showDialog(
       context: context,
       builder: (ctx) {
@@ -544,64 +612,238 @@ class _InventoryPageState extends State<InventoryPage> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              ...statuses.map((s) {
-                return ListTile(
-                  title: Text(s),
-                  leading: Radio<String>(
-                    value: s,
-                    groupValue: tool.status,
-                    onChanged: null,
-                  ),
-                  trailing: tool.status == s
-                      ? const Icon(Icons.check, color: Colors.green)
-                      : null,
-                  onTap: () async {
-                    Navigator.of(ctx).pop();
-                    try {
-                      final userId = AuthService().currentUser?['user_id'];
-                      await InventoryService.updateItemStatus(
-                        itemId: int.parse(tool.id),
-                        status: s,
-                        userId: userId,
-                      );
-                      _loadItems();
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('${tool.name} status changed to $s'),
-                          ),
-                        );
-                      }
-                    } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(
-                          context,
-                        ).showSnackBar(SnackBar(content: Text('Error: $e')));
-                      }
-                    }
-                  },
-                );
-              }),
-              const Divider(),
               ListTile(
-                leading: const Icon(Icons.delete_forever, color: Colors.red),
+                leading: const Icon(
+                  Icons.add_circle_outline,
+                  color: Color(0xFF0C1935),
+                ),
                 title: const Text(
-                  'Delete Item',
-                  style: TextStyle(
-                    color: Colors.red,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  'Increase Units',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: const Text(
+                  'Add more unit records to this item profile',
                 ),
                 onTap: () {
                   Navigator.of(ctx).pop();
-                  _confirmDeleteItem(tool);
+                  _showAdjustUnitsDialog(tool: tool, isIncrease: true);
                 },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.remove_circle_outline,
+                  color: Colors.orange,
+                ),
+                title: const Text(
+                  'Decrease Units',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: const Text(
+                  'Removes only unassigned removable units from this profile',
+                ),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _showAdjustUnitsDialog(tool: tool, isIncrease: false);
+                },
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.delete_forever, color: Colors.red),
+                title: Text(
+                  'Delete Item',
+                  style: TextStyle(
+                    color: hasAssignedUnits
+                        ? const Color(0xFF9CA3AF)
+                        : Colors.red,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                subtitle: hasAssignedUnits
+                    ? const Text(
+                        'Disabled while one or more units are assigned to projects',
+                      )
+                    : null,
+                onTap: hasAssignedUnits
+                    ? null
+                    : () {
+                        Navigator.of(ctx).pop();
+                        _confirmDeleteItem(tool);
+                      },
               ),
             ],
           ),
         );
       },
     );
+  }
+
+  Future<void> _showAdjustUnitsDialog({
+    required ToolItem tool,
+    required bool isIncrease,
+  }) async {
+    final countController = TextEditingController(text: '1');
+    final serialControllers = <TextEditingController>[TextEditingController()];
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) {
+        void syncSerialControllers() {
+          final target = int.tryParse(countController.text.trim()) ?? 1;
+          final safeTarget = target < 1 ? 1 : target;
+          while (serialControllers.length < safeTarget) {
+            serialControllers.add(TextEditingController());
+          }
+          while (serialControllers.length > safeTarget) {
+            serialControllers.removeLast().dispose();
+          }
+        }
+
+        if (isIncrease) {
+          syncSerialControllers();
+        }
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return AlertDialog(
+              title: Text(isIncrease ? 'Increase Units' : 'Decrease Units'),
+              content: SizedBox(
+                width: 460,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextField(
+                        controller: countController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Unit count',
+                          hintText: 'Enter number of units',
+                        ),
+                        onChanged: (_) {
+                          if (!isIncrease) return;
+                          setModalState(() {
+                            syncSerialControllers();
+                          });
+                        },
+                      ),
+                      if (isIncrease) ...[
+                        const SizedBox(height: 14),
+                        const Text(
+                          'Serial Numbers (optional)',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF111827),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        ...List.generate(serialControllers.length, (index) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: TextField(
+                              controller: serialControllers[index],
+                              decoration: InputDecoration(
+                                labelText: 'Unit ${index + 1} serial',
+                                hintText: 'Enter serial number',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final parsed = int.tryParse(countController.text.trim());
+                    if (parsed == null || parsed < 1) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Please enter a valid unit count.'),
+                        ),
+                      );
+                      return;
+                    }
+
+                    final serialNumbers = serialControllers
+                        .map((c) => c.text.trim())
+                        .where((s) => s.isNotEmpty)
+                        .toList();
+
+                    Navigator.of(
+                      ctx,
+                    ).pop({'count': parsed, 'serial_numbers': serialNumbers});
+                  },
+                  child: const Text('Confirm'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    countController.dispose();
+    for (final controller in serialControllers) {
+      controller.dispose();
+    }
+
+    final count = result?['count'] as int?;
+    final serialNumbers = (result?['serial_numbers'] as List<dynamic>? ?? [])
+        .map((e) => e.toString())
+        .toList();
+
+    if (count == null || count < 1) return;
+
+    try {
+      final userId = AuthService().currentUser?['user_id'];
+      final itemId = int.parse(tool.id);
+
+      if (isIncrease) {
+        await InventoryService.addUnitsToItem(
+          itemId: itemId,
+          userId: userId,
+          count: count,
+          serialNumbers: serialNumbers,
+        );
+      } else {
+        await InventoryService.removeUnitsFromItem(
+          itemId: itemId,
+          userId: userId,
+          count: count,
+        );
+      }
+
+      await _loadItems();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isIncrease
+                ? 'Added $count unit(s) to ${tool.name}'
+                : 'Removed $count unit(s) from ${tool.name}',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
   }
 
   Future<void> _confirmDeleteItem(ToolItem tool) async {
@@ -651,144 +893,222 @@ class _InventoryPageState extends State<InventoryPage> {
     }
   }
 
-  Widget _tableRow(ToolItem t, bool isEven, bool isMobile) {
-    return InkWell(
-      onTap: () => _showToolDetails(t),
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: isMobile ? 12 : 16,
-          vertical: isMobile ? 10 : 12,
-        ),
-        decoration: BoxDecoration(
-          color: isEven ? Colors.grey.shade50 : Colors.white,
-          border: Border(
-            bottom: BorderSide(color: Colors.grey.shade200, width: 1),
-          ),
-        ),
-        child: Row(
-          children: [
-            // Tool name with icon
-            Expanded(
-              flex: 3,
-              child: Row(
-                children: [
-                  if (!isMobile) ...[
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: primary.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: t.photoUrl != null && t.photoUrl!.isNotEmpty
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.network(
-                                t.photoUrl!,
-                                width: 40,
-                                height: 40,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Icon(
-                                  Icons.construction,
-                                  color: primary,
-                                  size: 20,
-                                ),
-                              ),
-                            )
-                          : Icon(Icons.construction, color: primary, size: 20),
-                    ),
-                    const SizedBox(width: 12),
-                  ],
-                  Expanded(
-                    child: Text(
-                      t.name,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: isMobile ? 13 : 14,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+  Future<void> _showAssignProjectDialog(ToolItem tool) async {
+    final itemId = int.tryParse(tool.id);
+    if (itemId == null) return;
 
-            // Category (hidden on mobile)
-            if (!isMobile)
-              Expanded(
-                flex: 2,
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) =>
+          AssignInventoryItemModal(itemId: itemId, itemName: tool.name),
+    );
+
+    if (result == null) return;
+
+    await _loadItems();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Updated unit assignments for ${tool.name}')),
+    );
+  }
+
+  Widget _tableRow(ToolItem t, bool isEven, bool isMobile) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 12 : 16,
+        vertical: isMobile ? 10 : 12,
+      ),
+      decoration: BoxDecoration(
+        color: isEven ? Colors.grey.shade50 : Colors.white,
+        border: Border(
+          bottom: BorderSide(color: Colors.grey.shade200, width: 1),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Tool name with icon
+          Expanded(
+            flex: 3,
+            child: Row(
+              children: [
+                if (!isMobile) ...[
+                  Container(
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(6),
+                      color: primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Text(
-                      t.category,
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    child: t.photoUrl != null && t.photoUrl!.isNotEmpty
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.network(
+                              t.photoUrl!,
+                              width: 40,
+                              height: 40,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Icon(
+                                Icons.construction,
+                                color: primary,
+                                size: 20,
+                              ),
+                            ),
+                          )
+                        : Icon(Icons.construction, color: primary, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        t.name,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: isMobile ? 13 : 14,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (isMobile) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Units: ${t.quantity} • Projects: ${_projectsSummary(t)}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF6B7280),
+                            fontWeight: FontWeight.w600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-              ),
+              ],
+            ),
+          ),
 
-            // Status
+          // Category (hidden on mobile)
+          if (!isMobile)
             Expanded(
-              flex: isMobile ? 1 : 2,
+              flex: 2,
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: _statusChip(t.status),
-              ),
-            ),
-
-            // View details icon + Manage button
-            SizedBox(
-              width: isMobile ? 70 : 90,
-              child: TextButton(
-                onPressed: () => _showManageStatusDialog(t),
-                child: Text(
-                  'Manage',
-                  style: TextStyle(
-                    fontSize: isMobile ? 10 : 12,
-                    fontWeight: FontWeight.w600,
-                    color: primary,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    t.category,
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
             ),
-          ],
-        ),
+
+          // Units (desktop)
+          if (!isMobile)
+            Expanded(
+              flex: 1,
+              child: Text(
+                _unitsDisplayText(t),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF374151),
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+
+          // Projects summary (desktop)
+          if (!isMobile)
+            Expanded(
+              flex: 2,
+              child: Text(
+                _projectsSummary(t),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF374151),
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+
+          // View details icon + Manage button
+          SizedBox(
+            width: isMobile ? 120 : 160,
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => _showAssignProjectDialog(t),
+                    child: Text(
+                      'Assign',
+                      style: TextStyle(
+                        fontSize: isMobile ? 10 : 12,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF0C1935),
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => _showManageStatusDialog(t),
+                    child: Text(
+                      'Manage',
+                      style: TextStyle(
+                        fontSize: isMobile ? 10 : 12,
+                        fontWeight: FontWeight.w600,
+                        color: primary,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _statusChip(String status) {
-    final color = status.toLowerCase() == 'available'
-        ? Colors.green
-        : (status.toLowerCase() == 'maintenance'
-              ? Colors.orange
-              : Colors.redAccent);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        status,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w700,
-          fontSize: 11,
-        ),
-        overflow: TextOverflow.ellipsis,
-      ),
-    );
+  String _projectsSummary(ToolItem item) {
+    final projectNames = item.units
+        .map((u) => (u['current_project_name'] ?? '').toString().trim())
+        .where((name) => name.isNotEmpty)
+        .toSet();
+
+    return projectNames.isEmpty
+        ? 'Unassigned'
+        : projectNames.length == 1
+        ? projectNames.first
+        : '${projectNames.length} projects';
+  }
+
+  int _assignedUnitsCount(ToolItem item) {
+    return item.units
+        .where(
+          (u) => (u['current_project_name'] ?? '').toString().trim().isNotEmpty,
+        )
+        .length;
+  }
+
+  String _unitsDisplayText(ToolItem item) {
+    final assignedCount = _assignedUnitsCount(item);
+    if (assignedCount <= 0) {
+      return item.quantity.toString();
+    }
+    return '${item.quantity} ($assignedCount assigned)';
   }
 
   Widget _activeUsageRow(ActiveUsage a, bool isEven, bool isMobile) {
@@ -805,7 +1125,7 @@ class _InventoryPageState extends State<InventoryPage> {
       ),
       child: Row(
         children: [
-          // Tool name with icon
+          // Unit with parent item name
           Expanded(
             flex: 4,
             child: Row(
@@ -836,13 +1156,27 @@ class _InventoryPageState extends State<InventoryPage> {
                   const SizedBox(width: 12),
                 ],
                 Expanded(
-                  child: Text(
-                    a.tool.name,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: isMobile ? 13 : 14,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        a.unitCode,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: isMobile ? 13 : 14,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        a.tool.name,
+                        style: TextStyle(
+                          fontSize: isMobile ? 11 : 12,
+                          color: const Color(0xFF6B7280),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -879,7 +1213,7 @@ class _InventoryPageState extends State<InventoryPage> {
           Expanded(
             flex: 3,
             child: Text(
-              a.users.join(', '),
+              a.usedBy,
               style: TextStyle(
                 fontSize: isMobile ? 11 : 12,
                 color: Colors.grey[700],
@@ -890,37 +1224,36 @@ class _InventoryPageState extends State<InventoryPage> {
 
           const SizedBox(width: 8),
 
-          // Status
+          // Project
           Expanded(
             flex: isMobile ? 2 : 3,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: _statusChip(a.usageStatus),
+            child: Text(
+              a.projectName,
+              style: TextStyle(
+                fontSize: isMobile ? 11 : 12,
+                color: Colors.grey[700],
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
 
           const SizedBox(width: 8),
 
-          // View button
-          SizedBox(
-            width: isMobile ? 70 : 110,
-            child: TextButton(
-              onPressed: () => _showToolDetails(a.tool),
-              child: Text(
-                'View',
-                style: TextStyle(fontSize: isMobile ? 11 : 12),
+          // Return Date
+          Expanded(
+            flex: isMobile ? 2 : 3,
+            child: Text(
+              a.expectedReturnDate,
+              style: TextStyle(
+                fontSize: isMobile ? 11 : 12,
+                color: Colors.grey[700],
+                fontWeight: FontWeight.w600,
               ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
       ),
-    );
-  }
-
-  void _showToolDetails(ToolItem t) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => ToolDetailsModal(tool: t),
     );
   }
 }

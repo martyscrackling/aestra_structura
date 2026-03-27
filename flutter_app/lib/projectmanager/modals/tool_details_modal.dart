@@ -72,35 +72,13 @@ class ToolDetailsModal extends StatelessWidget {
                 ),
               ),
             const SizedBox(height: 24),
+            _buildInfoRow('Item name', tool.name),
+            const SizedBox(height: 12),
             _buildInfoRow('Category', tool.category),
             const SizedBox(height: 12),
-            if (tool.serialNumber != null && tool.serialNumber!.isNotEmpty) ...[
-              _buildInfoRow('Serial Number', tool.serialNumber!),
-              const SizedBox(height: 12),
-            ],
             _buildInfoRow('Quantity', tool.quantity.toString()),
             const SizedBox(height: 12),
-            if (tool.location != null && tool.location!.isNotEmpty) ...[
-              _buildInfoRow('Location', tool.location!),
-              const SizedBox(height: 12),
-            ],
-            if (tool.notes != null && tool.notes!.isNotEmpty) ...[
-              _buildInfoRow('Notes', tool.notes!),
-              const SizedBox(height: 12),
-            ],
-            Row(
-              children: [
-                const Text(
-                  'Status: ',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF0C1935),
-                  ),
-                ),
-                _statusChip(tool.status),
-              ],
-            ),
+            _buildInfoRow('Projects', _projectsSummary()),
             const SizedBox(height: 24),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
@@ -145,29 +123,21 @@ class ToolDetailsModal extends StatelessWidget {
     );
   }
 
-  Widget _statusChip(String status) {
-    final lower = status.toLowerCase();
-    final color = lower == 'available'
-        ? Colors.green
-        : lower == 'maintenance'
-        ? Colors.orange
-        : lower == 'returned'
-        ? Colors.blue
-        : Colors.redAccent;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        status,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w700,
-          fontSize: 12,
-        ),
-      ),
-    );
+  String _projectsSummary() {
+    final projectNames = tool.units
+        .map((u) => (u['current_project_name'] ?? '').toString().trim())
+        .where((name) => name.isNotEmpty)
+        .toSet();
+
+    if (projectNames.isNotEmpty) {
+      return projectNames.join(', ');
+    }
+
+    final fallback = (tool.projectName ?? '').trim();
+    if (fallback.isNotEmpty) {
+      return fallback;
+    }
+
+    return 'None assigned';
   }
 }

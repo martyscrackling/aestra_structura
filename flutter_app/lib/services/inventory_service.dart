@@ -38,10 +38,10 @@ class InventoryService {
     required String name,
     required String category,
     String? serialNumber,
+    List<String>? serialNumbers,
     int quantity = 1,
     String? location,
     String? notes,
-    int? projectId,
   }) async {
     final uri = AppConfig.apiUri('inventory-items/?user_id=$userId');
     final body = <String, dynamic>{
@@ -53,9 +53,11 @@ class InventoryService {
     if (serialNumber != null && serialNumber.isNotEmpty) {
       body['serial_number'] = serialNumber;
     }
+    if (serialNumbers != null && serialNumbers.isNotEmpty) {
+      body['serial_numbers'] = serialNumbers;
+    }
     if (location != null && location.isNotEmpty) body['location'] = location;
     if (notes != null && notes.isNotEmpty) body['notes'] = notes;
-    if (projectId != null) body['project_id'] = projectId;
 
     final response = await http
         .post(
@@ -70,6 +72,154 @@ class InventoryService {
     }
     throw Exception(
       'Failed to add item (${response.statusCode}): ${response.body}',
+    );
+  }
+
+  // ── List units under a profile ─────────────────────────────────────────
+  static Future<List<Map<String, dynamic>>> getInventoryUnits({
+    required int itemId,
+    required dynamic userId,
+  }) async {
+    final uri = AppConfig.apiUri(
+      'inventory-items/$itemId/units/?user_id=$userId',
+    );
+    final response = await http.get(uri).timeout(const Duration(seconds: 30));
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.cast<Map<String, dynamic>>();
+    }
+    throw Exception(
+      'Failed to load units (${response.statusCode}): ${response.body}',
+    );
+  }
+
+  // ── Assign specific unit to a project ──────────────────────────────────
+  static Future<Map<String, dynamic>> assignInventoryUnitToProject({
+    required int itemId,
+    required int unitId,
+    required dynamic userId,
+    int? projectId,
+  }) async {
+    final uri = AppConfig.apiUri(
+      'inventory-items/$itemId/assign_unit/?user_id=$userId',
+    );
+    final response = await http
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'unit_id': unitId, 'project_id': projectId}),
+        )
+        .timeout(const Duration(seconds: 30));
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+    throw Exception(
+      'Failed to assign unit (${response.statusCode}): ${response.body}',
+    );
+  }
+
+  // ── Update specific unit status ───────────────────────────────────────
+  static Future<Map<String, dynamic>> setInventoryUnitStatus({
+    required int itemId,
+    required int unitId,
+    required dynamic userId,
+    required String status,
+  }) async {
+    final uri = AppConfig.apiUri(
+      'inventory-items/$itemId/set_unit_status/?user_id=$userId',
+    );
+    final response = await http
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'unit_id': unitId, 'status': status}),
+        )
+        .timeout(const Duration(seconds: 30));
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+    throw Exception(
+      'Failed to update unit status (${response.statusCode}): ${response.body}',
+    );
+  }
+
+  // ── Increase units for a profile ───────────────────────────────────────
+  static Future<Map<String, dynamic>> addUnitsToItem({
+    required int itemId,
+    required dynamic userId,
+    required int count,
+    List<String>? serialNumbers,
+  }) async {
+    final uri = AppConfig.apiUri(
+      'inventory-items/$itemId/add_units/?user_id=$userId',
+    );
+    final body = <String, dynamic>{'count': count};
+    if (serialNumbers != null && serialNumbers.isNotEmpty) {
+      body['serial_numbers'] = serialNumbers;
+    }
+
+    final response = await http
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(body),
+        )
+        .timeout(const Duration(seconds: 30));
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+    throw Exception(
+      'Failed to add units (${response.statusCode}): ${response.body}',
+    );
+  }
+
+  // ── Decrease units for a profile ───────────────────────────────────────
+  static Future<Map<String, dynamic>> removeUnitsFromItem({
+    required int itemId,
+    required dynamic userId,
+    required int count,
+  }) async {
+    final uri = AppConfig.apiUri(
+      'inventory-items/$itemId/remove_units/?user_id=$userId',
+    );
+
+    final response = await http
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'count': count}),
+        )
+        .timeout(const Duration(seconds: 30));
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+    throw Exception(
+      'Failed to remove units (${response.statusCode}): ${response.body}',
+    );
+  }
+
+  // ── Fetch movement history for one unit ────────────────────────────────
+  static Future<List<Map<String, dynamic>>> getInventoryUnitMovements({
+    required int itemId,
+    required int unitId,
+    required dynamic userId,
+  }) async {
+    final uri = AppConfig.apiUri(
+      'inventory-items/$itemId/unit_movements/?user_id=$userId&unit_id=$unitId',
+    );
+    final response = await http.get(uri).timeout(const Duration(seconds: 30));
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.cast<Map<String, dynamic>>();
+    }
+    throw Exception(
+      'Failed to load unit history (${response.statusCode}): ${response.body}',
     );
   }
 
@@ -123,6 +273,7 @@ class InventoryService {
     required int supervisorId,
     required dynamic userId,
     int? fieldWorkerId,
+    int? unitId,
     int? projectId,
     String? expectedReturnDate,
     String? notes,
@@ -132,6 +283,7 @@ class InventoryService {
     );
     final body = <String, dynamic>{'supervisor_id': supervisorId};
     if (fieldWorkerId != null) body['field_worker_id'] = fieldWorkerId;
+    if (unitId != null) body['unit_id'] = unitId;
     if (projectId != null) body['project_id'] = projectId;
     if (expectedReturnDate != null) {
       body['expected_return_date'] = expectedReturnDate;
@@ -149,9 +301,19 @@ class InventoryService {
     if (response.statusCode == 200) {
       return jsonDecode(response.body) as Map<String, dynamic>;
     }
-    throw Exception(
-      'Checkout failed (${response.statusCode}): ${response.body}',
-    );
+
+    // Try to parse error response
+    try {
+      final errorData = jsonDecode(response.body) as Map<String, dynamic>;
+      final error = errorData['error'] ?? 'Unknown error';
+      final details = errorData['details'] ?? '';
+      final fullError = details.isNotEmpty ? '$error\n$details' : error;
+      throw Exception('Checkout failed: $fullError (${response.statusCode})');
+    } catch (e) {
+      throw Exception(
+        'Checkout failed (${response.statusCode}): ${response.body}',
+      );
+    }
   }
 
   // ── Get field workers for a supervisor ──────────────────────────────────
@@ -201,13 +363,20 @@ class InventoryService {
     required int itemId,
     dynamic userId,
     dynamic supervisorId,
+    int? unitId,
   }) async {
     final qp = userId != null
         ? 'user_id=$userId'
         : 'supervisor_id=$supervisorId';
     final uri = AppConfig.apiUri('inventory-items/$itemId/return_item/?$qp');
+    final body = <String, dynamic>{};
+    if (unitId != null) body['unit_id'] = unitId;
     final response = await http
-        .post(uri, headers: {'Content-Type': 'application/json'})
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(body),
+        )
         .timeout(const Duration(seconds: 30));
 
     if (response.statusCode == 200) {

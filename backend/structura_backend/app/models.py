@@ -538,6 +538,7 @@ class InventoryItem(models.Model):
         ('Checked Out', 'Checked Out'),
         ('Returned', 'Returned'),
         ('Maintenance', 'Maintenance'),
+        ('Unavailable', 'Unavailable'),
     ]
 
     item_id = models.AutoField(primary_key=True)
@@ -557,8 +558,110 @@ class InventoryItem(models.Model):
     class Meta:
         ordering = ['-created_at']
 
+    def sync_quantity_from_units(self):
+        """Keep profile quantity aligned with the number of unit records."""
+        units_count = self.units.count()
+        if self.quantity != units_count:
+            self.quantity = units_count
+            self.save(update_fields=['quantity', 'updated_at'])
+
     def __str__(self):
         return f"{self.name} ({self.status})"
+
+
+class InventoryUnit(models.Model):
+    STATUS_CHOICES = [
+        ('Available', 'Available'),
+        ('Checked Out', 'Checked Out'),
+        ('Returned', 'Returned'),
+        ('Maintenance', 'Maintenance'),
+        ('Unavailable', 'Unavailable'),
+    ]
+
+    unit_id = models.AutoField(primary_key=True)
+    inventory_item = models.ForeignKey(
+        InventoryItem,
+        on_delete=models.CASCADE,
+        related_name='units',
+        db_column='item_id',
+    )
+    unit_code = models.CharField(max_length=120, unique=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Available')
+    current_project = models.ForeignKey(
+        'Project',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='inventory_units',
+        db_column='project_id',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['unit_code']
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new:
+            self.inventory_item.sync_quantity_from_units()
+
+    def delete(self, *args, **kwargs):
+        parent = self.inventory_item
+        super().delete(*args, **kwargs)
+        parent.sync_quantity_from_units()
+
+    def __str__(self):
+        return f"{self.unit_code} ({self.status})"
+
+
+class InventoryUnitMovement(models.Model):
+    ACTION_CHOICES = [
+        ('Assigned', 'Assigned'),
+        ('Transferred', 'Transferred'),
+        ('Checked Out', 'Checked Out'),
+        ('Returned', 'Returned'),
+        ('Status Updated', 'Status Updated'),
+    ]
+
+    movement_id = models.AutoField(primary_key=True)
+    unit = models.ForeignKey(
+        InventoryUnit,
+        on_delete=models.CASCADE,
+        related_name='movements',
+        db_column='unit_id',
+    )
+    from_project = models.ForeignKey(
+        'Project',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='unit_movements_from',
+    )
+    to_project = models.ForeignKey(
+        'Project',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='unit_movements_to',
+    )
+    action = models.CharField(max_length=30, choices=ACTION_CHOICES)
+    moved_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='inventory_unit_movements',
+    )
+    notes = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.unit.unit_code} - {self.action}"
 
 
 # Inventory Usage Model (tracks checkout/return by supervisors)
@@ -570,6 +673,14 @@ class InventoryUsage(models.Model):
 
     usage_id = models.AutoField(primary_key=True)
     inventory_item = models.ForeignKey(InventoryItem, on_delete=models.CASCADE, related_name='usages', db_column='item_id')
+    inventory_unit = models.ForeignKey(
+        InventoryUnit,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='usages',
+        db_column='unit_id',
+    )
     checked_out_by = models.ForeignKey(Supervisors, on_delete=models.CASCADE, related_name='inventory_usages', db_column='supervisor_id')
     field_worker = models.ForeignKey(FieldWorker, on_delete=models.SET_NULL, null=True, blank=True, related_name='inventory_usages')
     checkout_date = models.DateTimeField(auto_now_add=True)

@@ -927,12 +927,15 @@ class InventoryUsageSerializer(serializers.ModelSerializer):
     supervisor_name = serializers.SerializerMethodField()
     field_worker_name = serializers.SerializerMethodField()
     project_name = serializers.SerializerMethodField()
+    unit_code = serializers.SerializerMethodField()
 
     class Meta:
         model = models.InventoryUsage
         fields = [
             'usage_id',
             'inventory_item',
+            'inventory_unit',
+            'unit_code',
             'checked_out_by',
             'supervisor_name',
             'field_worker',
@@ -963,12 +966,79 @@ class InventoryUsageSerializer(serializers.ModelSerializer):
     def get_project_name(self, obj):
         return obj.project.project_name if obj.project else ''
 
+    def get_unit_code(self, obj):
+        return obj.inventory_unit.unit_code if obj.inventory_unit else ''
+
+
+class InventoryUnitMovementSerializer(serializers.ModelSerializer):
+    from_project_name = serializers.SerializerMethodField()
+    to_project_name = serializers.SerializerMethodField()
+    moved_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = models.InventoryUnitMovement
+        fields = [
+            'movement_id',
+            'unit',
+            'from_project',
+            'from_project_name',
+            'to_project',
+            'to_project_name',
+            'action',
+            'moved_by',
+            'moved_by_name',
+            'notes',
+            'created_at',
+        ]
+
+    def get_from_project_name(self, obj):
+        return obj.from_project.project_name if obj.from_project else ''
+
+    def get_to_project_name(self, obj):
+        return obj.to_project.project_name if obj.to_project else ''
+
+    def get_moved_by_name(self, obj):
+        if not obj.moved_by:
+            return ''
+        return f"{obj.moved_by.first_name or ''} {obj.moved_by.last_name or ''}".strip()
+
+
+class InventoryUnitSerializer(serializers.ModelSerializer):
+    current_project_name = serializers.SerializerMethodField()
+    active_usage = serializers.SerializerMethodField()
+
+    class Meta:
+        model = models.InventoryUnit
+        fields = [
+            'unit_id',
+            'inventory_item',
+            'unit_code',
+            'status',
+            'current_project',
+            'current_project_name',
+            'active_usage',
+            'created_at',
+            'updated_at',
+        ]
+
+    def get_current_project_name(self, obj):
+        return obj.current_project.project_name if obj.current_project else ''
+
+    def get_active_usage(self, obj):
+        usage = obj.usages.filter(status='Checked Out').order_by('-checkout_date').first()
+        if not usage:
+            return None
+        return InventoryUsageSerializer(usage).data
+
 
 class InventoryItemSerializer(serializers.ModelSerializer):
+    quantity = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
     active_usages = serializers.SerializerMethodField()
     photo_url = serializers.SerializerMethodField()
     project_name = serializers.SerializerMethodField()
+    units = serializers.SerializerMethodField()
+    assigned_projects_count = serializers.SerializerMethodField()
 
     class Meta:
         model = models.InventoryItem
@@ -987,6 +1057,8 @@ class InventoryItemSerializer(serializers.ModelSerializer):
             'created_by_name',
             'project',
             'project_name',
+            'assigned_projects_count',
+            'units',
             'active_usages',
             'created_at',
             'updated_at',
@@ -1002,12 +1074,64 @@ class InventoryItemSerializer(serializers.ModelSerializer):
         u = obj.created_by
         return f"{u.first_name} {u.last_name}".strip() if u else ''
 
+    def _get_supervisor_project_ids(self):
+        request = self.context.get('request')
+        if not request:
+            return None
+        supervisor_id = request.query_params.get('supervisor_id')
+        if not supervisor_id:
+            return None
+        try:
+            sv = models.Supervisors.objects.get(supervisor_id=int(supervisor_id))
+        except (models.Supervisors.DoesNotExist, ValueError, TypeError):
+            return []
+        return list(
+            models.Project.objects
+            .filter(supervisor_id=sv.supervisor_id)
+            .values_list('project_id', flat=True)
+        )
+
+    def _get_visible_units_queryset(self, obj):
+        units_qs = obj.units.select_related('current_project').all()
+        project_ids = self._get_supervisor_project_ids()
+        if project_ids is None:
+            return units_qs
+        return units_qs.filter(current_project_id__in=project_ids)
+
+    def get_quantity(self, obj):
+        return self._get_visible_units_queryset(obj).count()
+
+    def get_units(self, obj):
+        units_qs = self._get_visible_units_queryset(obj)
+        return InventoryUnitSerializer(units_qs, many=True).data
+
     def get_active_usages(self, obj):
         active = obj.usages.filter(status='Checked Out')
+        project_ids = self._get_supervisor_project_ids()
+        if project_ids is not None:
+            active = active.filter(inventory_unit__current_project_id__in=project_ids)
         return InventoryUsageSerializer(active, many=True).data
 
     def get_project_name(self, obj):
-        return obj.project.project_name if obj.project else ''
+        project_names = {
+            u.current_project.project_name
+            for u in self._get_visible_units_queryset(obj)
+            if u.current_project
+        }
+        if len(project_names) == 1:
+            return next(iter(project_names))
+        if len(project_names) > 1:
+            return 'Multiple Projects'
+        return ''
+
+    def get_assigned_projects_count(self, obj):
+        return (
+            self._get_visible_units_queryset(obj)
+            .exclude(current_project__isnull=True)
+            .values('current_project')
+            .distinct()
+            .count()
+        )
 
     def get_photo_url(self, obj):
         if obj.photo and hasattr(obj.photo, 'url'):
