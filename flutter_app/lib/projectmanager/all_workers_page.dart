@@ -134,7 +134,9 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
             : 'supervisors/?project_id=${widget.projectId}';
 
         print('🔍 Fetching supervisors with project filter: $supervisorsUrl');
-        final supervisorsResponse = await http.get(AppConfig.apiUri(supervisorsUrl));
+        final supervisorsResponse = await http.get(
+          AppConfig.apiUri(supervisorsUrl),
+        );
 
         if (supervisorsResponse.statusCode == 200) {
           final decodedResponse = jsonDecode(supervisorsResponse.body);
@@ -142,9 +144,11 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
 
           if (decodedResponse is List) {
             supervisorsList = decodedResponse;
-          } else if (decodedResponse is Map && decodedResponse['results'] != null) {
+          } else if (decodedResponse is Map &&
+              decodedResponse['results'] != null) {
             supervisorsList = decodedResponse['results'] as List<dynamic>;
-          } else if (decodedResponse is Map && decodedResponse['data'] != null) {
+          } else if (decodedResponse is Map &&
+              decodedResponse['data'] != null) {
             supervisorsList = decodedResponse['data'] as List<dynamic>;
           }
 
@@ -152,7 +156,9 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
             setState(() {
               _supervisors = supervisorsList.cast<Map<String, dynamic>>();
             });
-            print('✅ Loaded ${_supervisors.length} supervisor(s) from project_id filter');
+            print(
+              '✅ Loaded ${_supervisors.length} supervisor(s) from project_id filter',
+            );
           }
         }
       } catch (e) {
@@ -225,7 +231,8 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
                 );
                 if (supervisorResponse.statusCode == 200) {
                   final supervisorData =
-                      jsonDecode(supervisorResponse.body) as Map<String, dynamic>;
+                      jsonDecode(supervisorResponse.body)
+                          as Map<String, dynamic>;
                   setState(() {
                     _supervisors = [supervisorData];
                   });
@@ -738,7 +745,8 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
           print('  📊 Response: ${attemptResponse.statusCode}');
           print('  📊 Response Body: ${attemptResponse.body}');
 
-          if (attemptResponse.statusCode == 200 || attemptResponse.statusCode == 201) {
+          if (attemptResponse.statusCode == 200 ||
+              attemptResponse.statusCode == 201) {
             response = attemptResponse;
             success = true;
             successUrl = url;
@@ -793,7 +801,9 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('⚠️ $supervisorName added locally (syncing with database...)'),
+              content: Text(
+                '⚠️ $supervisorName added locally (syncing with database...)',
+              ),
               backgroundColor: Colors.orange,
               duration: const Duration(seconds: 3),
             ),
@@ -828,8 +838,12 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
             ? 'supervisors/?project_id=${widget.projectId}&user_id=$userId'
             : 'supervisors/?project_id=${widget.projectId}';
 
-        print('  🔍 Trying to fetch supervisors with project filter: $supervisorsUrl');
-        final supervisorsResponse = await http.get(AppConfig.apiUri(supervisorsUrl));
+        print(
+          '  🔍 Trying to fetch supervisors with project filter: $supervisorsUrl',
+        );
+        final supervisorsResponse = await http.get(
+          AppConfig.apiUri(supervisorsUrl),
+        );
 
         if (supervisorsResponse.statusCode == 200) {
           final decodedResponse = jsonDecode(supervisorsResponse.body);
@@ -837,9 +851,11 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
 
           if (decodedResponse is List) {
             supervisorsList = decodedResponse;
-          } else if (decodedResponse is Map && decodedResponse['results'] != null) {
+          } else if (decodedResponse is Map &&
+              decodedResponse['results'] != null) {
             supervisorsList = decodedResponse['results'] as List<dynamic>;
-          } else if (decodedResponse is Map && decodedResponse['data'] != null) {
+          } else if (decodedResponse is Map &&
+              decodedResponse['data'] != null) {
             supervisorsList = decodedResponse['data'] as List<dynamic>;
           }
 
@@ -847,7 +863,9 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
             setState(() {
               _supervisors = supervisorsList.cast<Map<String, dynamic>>();
             });
-            print('✅ Found ${_supervisors.length} supervisor(s) linked to project via project_id');
+            print(
+              '✅ Found ${_supervisors.length} supervisor(s) linked to project via project_id',
+            );
             return;
           }
         }
@@ -877,16 +895,21 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
 
       if (projectResponse != null && projectResponse.statusCode == 200) {
         try {
-          final projectData = jsonDecode(projectResponse.body) as Map<String, dynamic>;
+          final projectData =
+              jsonDecode(projectResponse.body) as Map<String, dynamic>;
           List<Map<String, dynamic>> updatedSupervisors = [];
 
           // Check if supervisors are in project data as a list
           if (projectData['supervisors'] is List) {
             updatedSupervisors = (projectData['supervisors'] as List<dynamic>)
                 .cast<Map<String, dynamic>>();
-            print('✅ Found ${updatedSupervisors.length} supervisors in project.supervisors');
+            print(
+              '✅ Found ${updatedSupervisors.length} supervisors in project.supervisors',
+            );
           } else if (projectData['supervisor'] is Map) {
-            updatedSupervisors = [projectData['supervisor'] as Map<String, dynamic>];
+            updatedSupervisors = [
+              projectData['supervisor'] as Map<String, dynamic>,
+            ];
             print('✅ Found 1 supervisor in project.supervisor');
           } else if (projectData['supervisor'] is int) {
             final supervisorId = projectData['supervisor'] as int;
@@ -894,7 +917,9 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
               final supervisorUrl = userId != null
                   ? 'supervisors/$supervisorId/?user_id=$userId'
                   : 'supervisors/$supervisorId/';
-              final supervisorResponse = await http.get(AppConfig.apiUri(supervisorUrl));
+              final supervisorResponse = await http.get(
+                AppConfig.apiUri(supervisorUrl),
+              );
               if (supervisorResponse.statusCode == 200) {
                 final supervisorData =
                     jsonDecode(supervisorResponse.body) as Map<String, dynamic>;

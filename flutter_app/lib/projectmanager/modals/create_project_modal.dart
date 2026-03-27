@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'dart:io';
 import '../../services/auth_service.dart';
 import '../../services/app_config.dart';
+import '../../services/date_utils.dart' as ph_date_utils;
 
 class CreateProjectModal extends StatefulWidget {
   const CreateProjectModal({super.key});
@@ -25,6 +26,8 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
   final _budgetController = TextEditingController();
   bool _isSubmitting = false;
   String? _calculatedEndDate;
+  int _sundayCount = 0;
+  int _holidayCount = 0;
 
   // Address hierarchy state
   int? _selectedRegionId;
@@ -264,7 +267,11 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
 
   void _calculateEndDate() {
     if (_startDateController.text.isEmpty || _durationController.text.isEmpty) {
-      setState(() => _calculatedEndDate = null);
+      setState(() {
+        _calculatedEndDate = null;
+        _sundayCount = 0;
+        _holidayCount = 0;
+      });
       return;
     }
 
@@ -279,18 +286,35 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
 
         final duration = int.tryParse(_durationController.text) ?? 0;
         if (duration > 0) {
-          final endDate = startDate.add(Duration(days: duration));
+          // Calculate end date excluding Sundays and holidays (working days only)
+          final endDate = ph_date_utils.PhilippineDateUtils
+              .calculateEndDateExcludingNonWorkingDays(startDate, duration);
+          
+          // Calculate Sundays and Philippine holidays in the calendar range
+          final sundays = ph_date_utils.PhilippineDateUtils.countSundays(startDate, endDate);
+          final holidays = ph_date_utils.PhilippineDateUtils.countPhilippineHolidays(startDate, endDate);
+          
           setState(() {
             _calculatedEndDate =
                 '${endDate.month.toString().padLeft(2, '0')}/${endDate.day.toString().padLeft(2, '0')}/${endDate.year}';
+            _sundayCount = sundays;
+            _holidayCount = holidays;
           });
         } else {
-          setState(() => _calculatedEndDate = null);
+          setState(() {
+            _calculatedEndDate = null;
+            _sundayCount = 0;
+            _holidayCount = 0;
+          });
         }
       }
     } catch (e) {
       print('Error calculating end date: $e');
-      setState(() => _calculatedEndDate = null);
+      setState(() {
+        _calculatedEndDate = null;
+        _sundayCount = 0;
+        _holidayCount = 0;
+      });
     }
   }
 
@@ -1062,21 +1086,71 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
               color: const Color(0xFFE8F5E9),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(
-                  Icons.event_available,
-                  size: 18,
-                  color: Color(0xFF2E7D32),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.event_available,
+                      size: 18,
+                      color: Color(0xFF2E7D32),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Expected End Date: $_calculatedEndDate',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF2E7D32),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  'Expected End Date: $_calculatedEndDate',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF2E7D32),
-                  ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.event_note,
+                            size: 16,
+                            color: Color(0xFF2E7D32),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Sundays: $_sundayCount',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF2E7D32),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.celebration,
+                            size: 16,
+                            color: Color(0xFF2E7D32),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Holidays: $_holidayCount',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF2E7D32),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
