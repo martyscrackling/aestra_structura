@@ -388,22 +388,40 @@ class _ProfileMenu extends StatelessWidget {
   const _ProfileMenu();
 
   String _displayName(Map<String, dynamic>? user) {
-    final first = (user?['first_name'] as String?)?.trim() ?? '';
-    final last = (user?['last_name'] as String?)?.trim() ?? '';
+    if (user == null) return 'User';
+    
+    // Try first and last name
+    final first = (user['first_name'] as String?)?.trim() ?? '';
+    final last = (user['last_name'] as String?)?.trim() ?? '';
     final full = ('$first $last').trim();
     if (full.isNotEmpty) return full;
 
-    final email = (user?['email'] as String?)?.trim() ?? '';
+    // Try full_name field
+    final fullName = (user['full_name'] as String?)?.trim() ?? '';
+    if (fullName.isNotEmpty) return fullName;
+
+    // Try name field
+    final name = (user['name'] as String?)?.trim() ?? '';
+    if (name.isNotEmpty) return name;
+
+    // Try email as fallback
+    final email = (user['email'] as String?)?.trim() ?? '';
     if (email.isNotEmpty) return email;
 
-    return 'AESTRA';
+    // Try username
+    final username = (user['username'] as String?)?.trim() ?? '';
+    if (username.isNotEmpty) return username;
+
+    return 'User';
   }
 
   String _displayRole(Map<String, dynamic>? user) {
-    final role = (user?['role'] as String?)?.trim();
+    if (user == null) return 'Account';
+    
+    final role = (user['role'] as String?)?.trim();
     if (role != null && role.isNotEmpty) return role;
 
-    final type = (user?['type'] as String?)?.trim();
+    final type = (user['type'] as String?)?.trim();
     if (type != null && type.isNotEmpty) return type;
 
     return 'Account';
