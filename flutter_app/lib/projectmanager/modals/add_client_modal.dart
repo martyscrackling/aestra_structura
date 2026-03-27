@@ -6,6 +6,7 @@ import 'dart:convert';
 import '../../services/app_config.dart';
 import '../../services/auth_service.dart';
 import '../../services/subscription_helper.dart';
+import '../../services/photo_verifier.dart';
 
 class AddClientModal extends StatefulWidget {
   const AddClientModal({super.key});
@@ -39,6 +40,8 @@ class _AddClientModalState extends State<AddClientModal> {
   Uint8List? _selectedImageBytes;
   String? _selectedImageFilename;
   bool _isLoading = false;
+  bool _isPhotoVerifying = false;
+  bool _photoVerified = false;
 
   @override
   void initState() {
@@ -62,13 +65,60 @@ class _AddClientModalState extends State<AddClientModal> {
   Future<void> _pickImage() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
-      final bytes = await image.readAsBytes();
+    if (image == null) return;
+
+    final bytes = await image.readAsBytes();
+    final verified = await _verifyPhotoSelection(bytes, image.name);
+    if (!mounted) return;
+
+    if (verified) {
       setState(() {
         _selectedImageBytes = bytes;
         _selectedImageFilename = image.name;
       });
+    } else {
+      setState(() {
+        _selectedImageBytes = null;
+        _selectedImageFilename = null;
+      });
     }
+  }
+
+  int? _currentUserId() {
+    final raw = AuthService().currentUser?['user_id'];
+    if (raw is int) return raw;
+    return int.tryParse(raw?.toString() ?? '');
+  }
+
+  Future<bool> _verifyPhotoSelection(Uint8List bytes, String filename) async {
+    if (!mounted) return false;
+    setState(() {
+      _isPhotoVerifying = true;
+      _photoVerified = false;
+    });
+
+    final result = await PhotoVerifier.verify(
+      bytes: bytes,
+      filename: filename,
+      userId: _currentUserId(),
+    );
+
+    if (!mounted) {
+      return result.accepted;
+    }
+
+    setState(() {
+      _isPhotoVerifying = false;
+      _photoVerified = result.accepted;
+    });
+
+    if (!result.accepted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(result.message)));
+    }
+
+    return result.accepted;
   }
 
   Future<void> _fetchRegions() async {
@@ -239,6 +289,90 @@ class _AddClientModalState extends State<AddClientModal> {
     }
   }
 
+  Widget _buildPhotoPicker({
+    required double width,
+    required double height,
+    required String prompt,
+    double iconSize = 40,
+  }) {
+    final hasImage = _selectedImageBytes != null;
+    return GestureDetector(
+      onTap: _isPhotoVerifying ? null : _pickImage,
+      child: Column(
+        children: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                width: width,
+                height: height,
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  borderRadius: BorderRadius.circular(12),
+                  image: hasImage
+                      ? DecorationImage(
+                          image: MemoryImage(_selectedImageBytes!),
+                          fit: BoxFit.cover,
+                        )
+                      : null,
+                ),
+                child: hasImage
+                    ? null
+                    : Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.person_outline,
+                            size: iconSize,
+                            color: Colors.grey[400],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            prompt,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+              if (_isPhotoVerifying)
+                Container(
+                  width: width,
+                  height: height,
+                  decoration: BoxDecoration(
+                    color: Colors.black45,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_photoVerified)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Icon(Icons.check_circle, color: Colors.green, size: 16),
+                SizedBox(width: 4),
+                Text(
+                  'Photo verified',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.green,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTextField({
     required TextEditingController controller,
     required String hintText,
@@ -375,8 +509,27 @@ class _AddClientModalState extends State<AddClientModal> {
             try {
               await _uploadClientPhoto(clientId: clientId, pmUserId: pmUserId);
             } catch (e) {
-              successMessage =
-                  'Client added, but photo upload failed: ${e.toString()}';
+              final msg = e.toString();
+              final isFaceReject = msg.contains('No human face detected');
+
+              if (isFaceReject) {
+                // Prevent cat/nonhuman photos from creating a usable client record.
+                try {
+                  await http.delete(
+                    AppConfig.apiUri('clients/$clientId/'),
+                    headers: {'X-User-Id': pmUserId.toString()},
+                  );
+                } catch (_) {
+                  // If delete fails, still keep the user informed.
+                }
+
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(msg)));
+                return;
+              }
+
+              successMessage = 'Client added, but photo upload failed: $msg';
             }
           }
 
@@ -477,45 +630,11 @@ class _AddClientModalState extends State<AddClientModal> {
                       child: Column(
                         children: [
                           // Image on top for mobile
-                          GestureDetector(
-                            onTap: _pickImage,
-                            child: Container(
-                              width: 120,
-                              height: 120,
-                              decoration: BoxDecoration(
-                                color: Colors.grey[200],
-                                borderRadius: BorderRadius.circular(12),
-                                image: _selectedImageBytes != null
-                                    ? DecorationImage(
-                                        image: MemoryImage(
-                                          _selectedImageBytes!,
-                                        ),
-                                        fit: BoxFit.cover,
-                                      )
-                                    : null,
-                              ),
-                              child: _selectedImageBytes == null
-                                  ? Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.person_outline,
-                                          size: 40,
-                                          color: Colors.grey[400],
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          'Upload photo',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            color: Colors.grey[600],
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                  : null,
-                            ),
+                          _buildPhotoPicker(
+                            width: 120,
+                            height: 120,
+                            prompt: 'Upload photo',
+                            iconSize: 40,
                           ),
                           const SizedBox(height: 20),
                           // Form for mobile
@@ -631,7 +750,7 @@ class _AddClientModalState extends State<AddClientModal> {
                                       )
                                     : DropdownButtonFormField<int>(
                                         value: _selectedRegionId,
-                                      isExpanded: true,
+                                        isExpanded: true,
                                         decoration: InputDecoration(
                                           labelText: 'Region',
                                           labelStyle: TextStyle(
@@ -840,45 +959,11 @@ class _AddClientModalState extends State<AddClientModal> {
                           padding: const EdgeInsets.all(24),
                           child: Column(
                             children: [
-                              GestureDetector(
-                                onTap: _pickImage,
-                                child: Container(
-                                  width: 200,
-                                  height: 280,
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[200],
-                                    borderRadius: BorderRadius.circular(12),
-                                    image: _selectedImageBytes != null
-                                        ? DecorationImage(
-                                            image: MemoryImage(
-                                              _selectedImageBytes!,
-                                            ),
-                                            fit: BoxFit.cover,
-                                          )
-                                        : null,
-                                  ),
-                                  child: _selectedImageBytes == null
-                                      ? Column(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Icon(
-                                              Icons.person_outline,
-                                              size: 60,
-                                              color: Colors.grey[400],
-                                            ),
-                                            const SizedBox(height: 8),
-                                            Text(
-                                              'Click to upload photo',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey[600],
-                                              ),
-                                            ),
-                                          ],
-                                        )
-                                      : null,
-                                ),
+                              _buildPhotoPicker(
+                                width: 200,
+                                height: 280,
+                                prompt: 'Click to upload photo',
+                                iconSize: 60,
                               ),
                             ],
                           ),
@@ -1217,7 +1302,9 @@ class _AddClientModalState extends State<AddClientModal> {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed: _isLoading ? null : _handleSubmit,
+                            onPressed: (_isLoading || _isPhotoVerifying)
+                                ? null
+                                : _handleSubmit,
                             style: ElevatedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               backgroundColor: const Color(0xFFFF7A18),
@@ -1295,7 +1382,9 @@ class _AddClientModalState extends State<AddClientModal> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: ElevatedButton(
-                            onPressed: _isLoading ? null : _handleSubmit,
+                            onPressed: (_isLoading || _isPhotoVerifying)
+                                ? null
+                                : _handleSubmit,
                             style: ElevatedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               backgroundColor: const Color(0xFFFF7A18),

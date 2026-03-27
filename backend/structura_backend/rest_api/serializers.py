@@ -3,6 +3,7 @@ from django.db import IntegrityError, transaction
 from decimal import Decimal, ROUND_HALF_UP
 from .email_utils import send_invitation_email, send_project_assignment_email
 from app import models
+from app.image_verification import verify_image_has_human_face
 
 
 _TWO_DP = Decimal('0.01')
@@ -345,6 +346,25 @@ class SupervisorsSerializer(serializers.ModelSerializer):
         )
         return supervisor
 
+    def validate_photo(self, value):
+        if value is None:
+            return value
+
+        # Verify face presence before allowing any non-human photo.
+        try:
+            image_bytes = value.read()
+            if hasattr(value, "seek"):
+                value.seek(0)
+        except Exception:
+            return value  # Let model/save handle file errors; don't block unexpectedly.
+
+        if not verify_image_has_human_face(image_bytes):
+            raise serializers.ValidationError({
+                'image_verification': 'REJECT',
+                'detail': 'No human face detected. Please upload another photo containing the face of a human.',
+            })
+        return value
+
 
 class SupervisorSerializer(serializers.ModelSerializer):
     invited_by_email = serializers.EmailField(
@@ -432,6 +452,24 @@ class SupervisorSerializer(serializers.ModelSerializer):
             project_name=project_name,
         )
         return supervisor
+
+    def validate_photo(self, value):
+        if value is None:
+            return value
+
+        try:
+            image_bytes = value.read()
+            if hasattr(value, "seek"):
+                value.seek(0)
+        except Exception:
+            return value
+
+        if not verify_image_has_human_face(image_bytes):
+            raise serializers.ValidationError({
+                'image_verification': 'REJECT',
+                'detail': 'No human face detected. Please upload another photo containing the face of a human.',
+            })
+        return value
 
 
 class FieldWorkerSerializer(serializers.ModelSerializer):
@@ -585,6 +623,24 @@ class FieldWorkerSerializer(serializers.ModelSerializer):
         attrs['total_weekly_deduction'] = total_deduction
         attrs['net_weekly_pay'] = net_weekly
         return attrs
+
+    def validate_photo(self, value):
+        if value is None:
+            return value
+
+        try:
+            image_bytes = value.read()
+            if hasattr(value, "seek"):
+                value.seek(0)
+        except Exception:
+            return value
+
+        if not verify_image_has_human_face(image_bytes):
+            raise serializers.ValidationError({
+                'image_verification': 'REJECT',
+                'detail': 'No human face detected. Please upload another photo containing the face of a human.',
+            })
+        return value
     
     def create(self, validated_data):
         # If the client doesn't send a user_id (common for Supervisor logins where
@@ -689,6 +745,24 @@ class ClientSerializer(serializers.ModelSerializer):
             project_name=project_name,
         )
         return client
+
+    def validate_photo(self, value):
+        if value is None:
+            return value
+
+        try:
+            image_bytes = value.read()
+            if hasattr(value, "seek"):
+                value.seek(0)
+        except Exception:
+            return value
+
+        if not verify_image_has_human_face(image_bytes):
+            raise serializers.ValidationError({
+                'image_verification': 'REJECT',
+                'detail': 'No human face detected. Please upload another photo containing the face of a human.',
+            })
+        return value
 
 
 class SubtaskSerializer(serializers.ModelSerializer):

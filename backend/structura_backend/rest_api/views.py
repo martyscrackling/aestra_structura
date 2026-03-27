@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from rest_framework import generics, status, viewsets
-from rest_framework.decorators import api_view, action
+from rest_framework.decorators import api_view, action, parser_classes
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.contrib.auth.hashers import check_password
@@ -14,6 +14,8 @@ from datetime import timedelta
 import logging
 
 logger = logging.getLogger(__name__)
+
+from app.image_verification import verify_image_has_human_face
 
 
 def _get_request_pm_user_id(request):
@@ -72,6 +74,54 @@ def health_check(request):
         },
         'version': '1.0',
     })
+
+
+@csrf_exempt
+@api_view(['POST'])
+@parser_classes([MultiPartParser, FormParser])
+def verify_profile_photo(request):
+    """Return ACCEPT/REJECT after running the face detector on a raw upload."""
+    uploaded = request.FILES.get('image') or request.FILES.get('photo')
+    if uploaded is None:
+        return Response(
+            {
+                'image_verification': 'REJECT',
+                'detail': 'No file provided. Use multipart field "image".',
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    image_bytes = uploaded.read()
+    try:
+        uploaded.seek(0)
+    except Exception:
+        pass
+
+    if not image_bytes:
+        return Response(
+            {
+                'image_verification': 'REJECT',
+                'detail': 'Uploaded image appears to be empty.',
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if verify_image_has_human_face(image_bytes):
+        return Response(
+            {
+                'image_verification': 'ACCEPT',
+                'detail': 'Human face detected in the uploaded image.',
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    return Response(
+        {
+            'image_verification': 'REJECT',
+            'detail': 'No human face detected in the uploaded image.',
+        },
+        status=status.HTTP_400_BAD_REQUEST,
+    )
 
 # Create your views here.
 from app import models
@@ -790,6 +840,22 @@ class SupervisorsViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Verify face presence before mutating existing state.
+        image_bytes = uploaded.read()
+        try:
+            uploaded.seek(0)
+        except Exception:
+            pass
+
+        if not verify_image_has_human_face(image_bytes):
+            return Response(
+                {
+                    'image_verification': 'REJECT',
+                    'detail': 'No human face detected in the uploaded image.',
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # Delete existing photo so the next save reuses the same name.
         if getattr(supervisor, 'photo', None):
             try:
@@ -806,8 +872,10 @@ class SupervisorsViewSet(viewsets.ModelViewSet):
         filename = f'sv_{pm_user_id}_{supervisor.supervisor_id}{ext}'
         supervisor.photo.save(filename, uploaded, save=True)
 
+        data = self.get_serializer(supervisor).data
+        data['image_verification'] = 'ACCEPT'
         return Response(
-            self.get_serializer(supervisor).data,
+            data,
             status=status.HTTP_200_OK,
         )
 
@@ -863,6 +931,22 @@ class SupervisorViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Verify face presence before mutating existing state.
+        image_bytes = uploaded.read()
+        try:
+            uploaded.seek(0)
+        except Exception:
+            pass
+
+        if not verify_image_has_human_face(image_bytes):
+            return Response(
+                {
+                    'image_verification': 'REJECT',
+                    'detail': 'No human face detected in the uploaded image.',
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         if getattr(supervisor, 'photo', None):
             try:
                 supervisor.photo.delete(save=False)
@@ -877,8 +961,10 @@ class SupervisorViewSet(viewsets.ModelViewSet):
         filename = f'sv_{pm_user_id}_{supervisor.supervisor_id}{ext}'
         supervisor.photo.save(filename, uploaded, save=True)
 
+        data = self.get_serializer(supervisor).data
+        data['image_verification'] = 'ACCEPT'
         return Response(
-            self.get_serializer(supervisor).data,
+            data,
             status=status.HTTP_200_OK,
         )
 
@@ -951,6 +1037,22 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Verify face presence before mutating existing state.
+        image_bytes = uploaded.read()
+        try:
+            uploaded.seek(0)
+        except Exception:
+            pass
+
+        if not verify_image_has_human_face(image_bytes):
+            return Response(
+                {
+                    'image_verification': 'REJECT',
+                    'detail': 'No human face detected in the uploaded image.',
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # Delete existing photo so the next save reuses the same name.
         if getattr(field_worker, 'photo', None):
             try:
@@ -973,8 +1075,10 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
         filename = f'fw_{owner_user_id}_{field_worker.fieldworker_id}{ext}'
         field_worker.photo.save(filename, uploaded, save=True)
 
+        data = self.get_serializer(field_worker).data
+        data['image_verification'] = 'ACCEPT'
         return Response(
-            self.get_serializer(field_worker).data,
+            data,
             status=status.HTTP_200_OK,
         )
 
@@ -1031,6 +1135,22 @@ class ClientViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Verify face presence before mutating existing state.
+        image_bytes = uploaded.read()
+        try:
+            uploaded.seek(0)
+        except Exception:
+            pass
+
+        if not verify_image_has_human_face(image_bytes):
+            return Response(
+                {
+                    'image_verification': 'REJECT',
+                    'detail': 'No human face detected in the uploaded image.',
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # Delete existing photo so the next save reuses the same name.
         if getattr(client, 'photo', None):
             try:
@@ -1047,8 +1167,10 @@ class ClientViewSet(viewsets.ModelViewSet):
         filename = f'cl_{pm_user_id}_{client.client_id}{ext}'
         client.photo.save(filename, uploaded, save=True)
 
+        data = self.get_serializer(client).data
+        data['image_verification'] = 'ACCEPT'
         return Response(
-            self.get_serializer(client).data,
+            data,
             status=status.HTTP_200_OK,
         )
 
