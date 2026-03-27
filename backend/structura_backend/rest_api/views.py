@@ -567,6 +567,63 @@ class ProjectViewSet(viewsets.ModelViewSet):
             url = settings.MEDIA_URL + rel_path
         return Response({'url': url})
 
+    @action(detail=True, methods=['post'], url_path='add-supervisor')
+    def add_supervisor(self, request, pk=None):
+        """
+        Assign a supervisor to this project.
+        Expected request body: {'supervisor_id': <int>, 'project_id': <int> (optional)}
+        """
+        project = self.get_object()
+        supervisor_id = request.data.get('supervisor_id')
+        
+        if not supervisor_id:
+            return Response(
+                {'error': 'supervisor_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            supervisor = models.Supervisors.objects.get(supervisor_id=supervisor_id)
+        except models.Supervisors.DoesNotExist:
+            return Response(
+                {'error': f'Supervisor with id {supervisor_id} not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Assign supervisor to project
+        supervisor.project_id = project
+        supervisor.save()
+        
+        print(f'✅ Supervisor {supervisor.first_name} {supervisor.last_name} (ID: {supervisor_id}) assigned to project {project.project_name} (ID: {project.project_id})')
+        
+        # Return updated supervisor data
+        serializer = SupervisorsSerializer(supervisor)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='supervisors')
+    def get_supervisors(self, request):
+        """
+        Get all supervisors assigned to a project.
+        Query params: project_id=<int>
+        """
+        project_id = request.query_params.get('project_id')
+        
+        if not project_id:
+            return Response(
+                {'error': 'project_id query parameter is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            supervisors = models.Supervisors.objects.filter(project_id=project_id)
+            serializer = SupervisorsSerializer(supervisors, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     def get_queryset(self):
         """
         Get projects only for the logged-in user
@@ -581,10 +638,15 @@ class ProjectViewSet(viewsets.ModelViewSet):
         print(f"🔍 Received user_id: {user_id}")
 
         if supervisor_id:
+            # Check for projects where this supervisor is assigned via two methods:
+            # 1. New method: Supervisors.project_id (multiple supervisors per project)
+            from django.db.models import Q
             queryset = models.Project.objects.filter(
-                supervisor_id=supervisor_id
-            ).order_by('-created_at')
+                Q(supervisor_id=supervisor_id) |  # Old single-supervisor FK
+                Q(supervisors__supervisor_id=supervisor_id)  # New multi-supervisor FK
+            ).distinct().order_by('-created_at')
             print(f"✅ Filtered projects by supervisor_id count: {queryset.count()}")
+            print(f"  - Checking both Project.supervisor_id and Supervisors.project_id relationships")
             return queryset
         
         if client_id:

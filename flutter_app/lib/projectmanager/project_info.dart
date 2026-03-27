@@ -6,6 +6,7 @@ import 'widgets/sidebar.dart';
 import 'widgets/dashboard_header.dart';
 import 'widgets/responsive_page_layout.dart';
 import 'project_details_page.dart' as task_details;
+import 'all_workers_page.dart';
 import '../services/app_config.dart';
 import '../services/auth_service.dart';
 import '../services/app_time_service.dart';
@@ -18,7 +19,6 @@ class ProjectDetailsPage extends StatefulWidget {
   final String? budget;
   final int projectId;
   final bool useResponsiveLayout;
-  final bool showSupervisorAssigned;
 
   const ProjectDetailsPage({
     super.key,
@@ -29,7 +29,6 @@ class ProjectDetailsPage extends StatefulWidget {
     this.budget,
     required this.projectId,
     this.useResponsiveLayout = true,
-    this.showSupervisorAssigned = true,
   });
 
   @override
@@ -150,7 +149,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     if (value is String) return int.tryParse(value);
     if (value is Map) {
       final map = value.cast<String, dynamic>();
-      return _toInt(map['id'] ?? map['client_id'] ?? map['supervisor_id']);
+      return _toInt(map['id'] ?? map['client_id']);
     }
     return int.tryParse(value.toString());
   }
@@ -189,7 +188,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
   }
 
   Map<String, dynamic>? _clientInfo;
-  Map<String, dynamic>? _supervisorInfo;
   Map<String, dynamic>? _projectInfo;
   List<dynamic>? _phases;
   bool _isLoading = true;
@@ -227,7 +225,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
       final authProjectId = authUser?['project_id'];
       final scopeSuffix = (userId != null) ? '&user_id=$userId' : '';
 
-      // First fetch project details to get client_id and supervisor_id
+      // First fetch project details to get client_id
       final candidateProjectUrls = <String>[
         if (userId != null) 'projects/${widget.projectId}/?user_id=$userId',
         if (authProjectId != null)
@@ -257,7 +255,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
 
       final projectData = jsonDecode(projectResponse.body);
       final clientId = _toInt(projectData['client']);
-      final supervisorId = _toInt(projectData['supervisor']);
 
       // Some APIs embed client details directly in project payload.
       final embeddedClient = projectData['client'];
@@ -271,7 +268,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
 
       print('🔍 Project ID: ${widget.projectId}');
       print('🔍 Client ID: $clientId');
-      print('🔍 Supervisor ID: $supervisorId');
 
       // Fetch client information
       if (clientId != null) {
@@ -345,72 +341,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         }
       }
 
-      // Fetch supervisor information
-      if (supervisorId != null) {
-        try {
-          print('🔍 Attempting to fetch supervisor with ID: $supervisorId');
-          final supervisorResponse = await http.get(
-            (userId != null)
-                ? AppConfig.apiUri('supervisors/$supervisorId/?user_id=$userId')
-                : AppConfig.apiUri(
-                    'supervisors/$supervisorId/?project_id=${widget.projectId}',
-                  ),
-          );
-          print(
-            '📡 Supervisor response status: ${supervisorResponse.statusCode}',
-          );
-          print('📡 Supervisor response body: ${supervisorResponse.body}');
 
-          if (supervisorResponse.statusCode == 200) {
-            setState(() {
-              _supervisorInfo = jsonDecode(supervisorResponse.body);
-              print('✅ Supervisor info fetched: ${_supervisorInfo?['email']}');
-            });
-          } else {
-            print(
-              '❌ Failed to fetch supervisor: ${supervisorResponse.statusCode}',
-            );
-            // Fallback: fetch by project_id in case the FK is only set on the Supervisor side
-            final listResponse = await http.get(
-              AppConfig.apiUri(
-                'supervisors/?project_id=${widget.projectId}$scopeSuffix',
-              ),
-            );
-            if (listResponse.statusCode == 200) {
-              final decoded = jsonDecode(listResponse.body);
-              if (decoded is List &&
-                  decoded.isNotEmpty &&
-                  decoded.first is Map) {
-                setState(() {
-                  _supervisorInfo = Map<String, dynamic>.from(decoded.first);
-                });
-              }
-            }
-          }
-        } catch (e) {
-          print('Error fetching supervisor: $e');
-        }
-      } else {
-        print('⚠️ No supervisor_id found in project data');
-        // Fallback: project has no supervisor FK set, but a Supervisor may still be linked via Supervisors.project_id
-        try {
-          final listResponse = await http.get(
-            AppConfig.apiUri(
-              'supervisors/?project_id=${widget.projectId}$scopeSuffix',
-            ),
-          );
-          if (listResponse.statusCode == 200) {
-            final decoded = jsonDecode(listResponse.body);
-            if (decoded is List && decoded.isNotEmpty && decoded.first is Map) {
-              setState(() {
-                _supervisorInfo = Map<String, dynamic>.from(decoded.first);
-              });
-            }
-          }
-        } catch (e) {
-          print('⚠️ Error fetching supervisor list fallback: $e');
-        }
-      }
 
       // Fetch phases for accurate progress calculation
       try {
@@ -574,12 +505,12 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
 
           const SizedBox(height: 24),
 
-          // Project Title + Edit icon
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Text(
+          // Project Title + Client Card
+          if (isMobile)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
                   widget.projectTitle,
                   style: const TextStyle(
                     fontSize: 28,
@@ -587,34 +518,145 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                     color: Colors.black87,
                   ),
                 ),
-              ),
-              const Icon(Icons.edit, size: 20),
-            ],
-          ),
-
-          const SizedBox(height: 6),
-
-          // Location
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Padding(
-                padding: EdgeInsets.only(top: 1),
-                child: Icon(
-                  Icons.location_on_outlined,
-                  size: 18,
-                  color: Colors.grey,
+                const SizedBox(height: 6),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 1),
+                      child: Icon(
+                        Icons.location_on_outlined,
+                        size: 18,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        widget.projectLocation,
+                        style:
+                            const TextStyle(fontSize: 15, color: Colors.grey),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  widget.projectLocation,
-                  style: const TextStyle(fontSize: 15, color: Colors.grey),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _clientInfo != null
+                          ? _infoCard(
+                              title: "Client:",
+                              name:
+                                  '${_clientInfo!['first_name']} ${_clientInfo!['last_name']}',
+                              email: _clientInfo!['email'] ?? 'N/A',
+                              phone: _clientInfo!['phone_number'] ?? 'N/A',
+                              photoUrl: _resolveMediaUrl(_clientInfo!['photo']),
+                              isMobile: true,
+                            )
+                          : Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                border:
+                                    Border.all(color: Colors.grey.shade300),
+                              ),
+                              child: const Center(
+                                  child: Text('No client assigned')),
+                            ),
+                    ),
+                    const SizedBox(width: 12),
+                    IconButton(
+                      onPressed: () {},
+                      icon: const Icon(Icons.edit, size: 20),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
+              ],
+            )
+          else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.projectTitle,
+                        style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Padding(
+                            padding: EdgeInsets.only(top: 1),
+                            child: Icon(
+                              Icons.location_on_outlined,
+                              size: 18,
+                              color: Colors.grey,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              widget.projectLocation,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                SizedBox(
+                  width: 280,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _clientInfo != null
+                            ? _infoCard(
+                                title: "Client:",
+                                name:
+                              '${_clientInfo!['first_name']} ${_clientInfo!['last_name']}',
+                          email: _clientInfo!['email'] ?? 'N/A',
+                          phone: _clientInfo!['phone_number'] ?? 'N/A',
+                          photoUrl: _resolveMediaUrl(_clientInfo!['photo']),
+                          isMobile: false,
+                        )
+                            : Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.grey.shade300),
+                                ),
+                                child:
+                                    const Center(child: Text('No client assigned')),
+                              ),
+                      ),
+                      IconButton(
+                        onPressed: () {},
+                        icon: const Icon(Icons.edit, size: 20),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
 
           if (projectDescription != null) ...[
             const SizedBox(height: 8),
@@ -747,111 +789,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
 
           const SizedBox(height: 24),
 
-          // Client & Supervisor Cards
-          if (isMobile)
-            Column(
-              children: [
-                if (_clientInfo != null)
-                  _infoCard(
-                    title: "Client:",
-                    name:
-                        '${_clientInfo!['first_name']} ${_clientInfo!['last_name']}',
-                    email: _clientInfo!['email'] ?? 'N/A',
-                    phone: _clientInfo!['phone_number'] ?? 'N/A',
-                    photoUrl: _resolveMediaUrl(_clientInfo!['photo']),
-                    isMobile: true,
-                  )
-                else
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: const Center(child: Text('No client assigned')),
-                  ),
-                if (widget.showSupervisorAssigned) ...[
-                  const SizedBox(height: 12),
-                  if (_supervisorInfo != null)
-                    _infoCard(
-                      title: "Supervisor-in charge:",
-                      name:
-                          '${_supervisorInfo!['first_name']} ${_supervisorInfo!['last_name']}',
-                      email: _supervisorInfo!['email'] ?? 'N/A',
-                      phone: _supervisorInfo!['phone_number'] ?? 'N/A',
-                      photoUrl: _resolveMediaUrl(_supervisorInfo!['photo']),
-                      isMobile: true,
-                    )
-                  else
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
-                      child: const Center(
-                        child: Text('No supervisor assigned'),
-                      ),
-                    ),
-                ],
-              ],
-            )
-          else
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                if (_clientInfo != null)
-                  _infoCard(
-                    title: "Client:",
-                    name:
-                        '${_clientInfo!['first_name']} ${_clientInfo!['last_name']}',
-                    email: _clientInfo!['email'] ?? 'N/A',
-                    phone: _clientInfo!['phone_number'] ?? 'N/A',
-                    photoUrl: _resolveMediaUrl(_clientInfo!['photo']),
-                    isMobile: false,
-                  )
-                else
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      margin: const EdgeInsets.only(right: 12),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
-                      child: const Center(child: Text('No client assigned')),
-                    ),
-                  ),
-                if (widget.showSupervisorAssigned)
-                  if (_supervisorInfo != null)
-                    _infoCard(
-                      title: "Supervisor-in charge:",
-                      name:
-                          '${_supervisorInfo!['first_name']} ${_supervisorInfo!['last_name']}',
-                      email: _supervisorInfo!['email'] ?? 'N/A',
-                      phone: _supervisorInfo!['phone_number'] ?? 'N/A',
-                      photoUrl: _resolveMediaUrl(_supervisorInfo!['photo']),
-                      isMobile: false,
-                    )
-                  else
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        margin: const EdgeInsets.only(right: 12),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.shade300),
-                        ),
-                        child: const Center(
-                          child: Text('No supervisor assigned'),
-                        ),
-                      ),
-                    ),
-              ],
-            ),
-
-          const SizedBox(height: 12),
-
           // Manage Workforce Button
           
 
@@ -860,63 +797,208 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
 
           const SizedBox(height: 24),
 
-          // Project Plan Title
-          const Text(
-            "Project Plan",
-            style: TextStyle(
-              fontSize: 23,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
+          // Project Plan Title + View Button
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                "Project Plan",
+                style: TextStyle(
+                  fontSize: 23,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              Row(
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => AllWorkersPage(
+                            projectId: widget.projectId,
+                            projectTitle: widget.projectTitle,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.people_outlined, size: 16),
+                    label: const Text("View Workforce"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF7A18),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              task_details.ProjectTaskDetailsPage(
+                                projectTitle: widget.projectTitle,
+                                projectLocation: widget.projectLocation,
+                                projectImage: widget.projectImage,
+                                progress: widget.progress,
+                                budget: widget.budget,
+                                projectId: widget.projectId,
+                                projectStartDate: _projectInfo?['start_date'],
+                              ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.arrow_forward, size: 16),
+                    label: const Text("Manage Project Plan"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
 
           const SizedBox(height: 16),
 
-          // No plans message
-          Center(
-            child: Column(
+          // Phases Display
+          if (_phases != null && _phases!.isNotEmpty)
+            Column(
               children: [
-                Text(
-                  "",
-                  style: TextStyle(fontSize: 15, color: Colors.grey.shade700),
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            task_details.ProjectTaskDetailsPage(
-                              projectTitle: widget.projectTitle,
-                              projectLocation: widget.projectLocation,
-                              projectImage: widget.projectImage,
-                              progress: widget.progress,
-                              budget: widget.budget,
-                              projectId: widget.projectId,
-                              projectStartDate: _projectInfo?['start_date'],
+                ..._phases!.take(3).map((phase) {
+                  final phaseMap = phase as Map<String, dynamic>;
+                  final subtasks = phaseMap['subtasks'] as List<dynamic>? ?? [];
+                  final completedCount = subtasks
+                      .where((s) =>
+                          (s as Map<String, dynamic>)['status'] == 'completed')
+                      .length;
+                  final progress = subtasks.isEmpty
+                      ? 0.0
+                      : completedCount / subtasks.length;
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                phaseMap['phase_name'] ?? 'Phase',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black87,
+                                ),
+                              ),
                             ),
-                      ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 26,
-                      vertical: 14,
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFF7A18).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '${(progress * 100).toStringAsFixed(0)}%',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFFFF7A18),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            const Icon(Icons.assignment_outlined,
+                                size: 14, color: Colors.grey),
+                            const SizedBox(width: 6),
+                            Text(
+                              '$completedCount / ${subtasks.length} subtasks completed',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: Color(0xFF757575),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: progress,
+                            minHeight: 6,
+                            backgroundColor: Colors.grey.shade300,
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                              Color(0xFFFF7A18),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                  );
+                }),
+                if (_phases!.length > 3)
+                  Center(
+                    child: Text(
+                      '+${_phases!.length - 3} more phases',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade600,
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
                   ),
-                  child: const Text(
-                    "View Project Plan",
-                    style: TextStyle(color: Colors.white),
+              ],
+            )
+          else
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Center(
+                child: Text(
+                  'No phases available',
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: Colors.grey.shade700,
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
+
           SizedBox(height: isMobile ? 80 : 32), // Space for bottom nav
         ],
       ),
@@ -1061,161 +1143,61 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     required bool isMobile,
   }) {
     return isMobile
-        ? Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade300),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(fontSize: 14, color: Colors.grey.shade800),
-                ),
-                const SizedBox(height: 8),
-                Row(
+        ? Row(
+            children: [
+              _buildProfileAvatar(radius: 24, photoUrl: photoUrl),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildProfileAvatar(radius: 26, photoUrl: photoUrl),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            name,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            email,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey,
-                            ),
-                          ),
-                          Text(
-                            phone,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ],
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      email,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 14),
-                Align(
-                  alignment: Alignment.bottomRight,
-                  child: OutlinedButton(
-                    onPressed: () {},
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 10,
-                      ),
-                      side: const BorderSide(color: Colors.orangeAccent),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    child: const Text(
-                      "View Profile",
-                      style: TextStyle(
-                        color: Colors.orangeAccent,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           )
-        : Expanded(
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              margin: const EdgeInsets.only(right: 12),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(fontSize: 14, color: Colors.grey.shade800),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      _buildProfileAvatar(radius: 26, photoUrl: photoUrl),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              name,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              email,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: Colors.grey,
-                              ),
-                            ),
-                            Text(
-                              phone,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  Align(
-                    alignment: Alignment.bottomRight,
-                    child: OutlinedButton(
-                      onPressed: () {},
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 18,
-                          vertical: 10,
-                        ),
-                        side: const BorderSide(color: Colors.orangeAccent),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      child: const Text(
-                        "View Profile",
-                        style: TextStyle(
-                          color: Colors.orangeAccent,
-                          fontSize: 13,
-                        ),
+        : Row(
+            children: [
+              _buildProfileAvatar(radius: 24, photoUrl: photoUrl),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 2),
+                    Text(
+                      email,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
+            ],
           );
   }
 }
