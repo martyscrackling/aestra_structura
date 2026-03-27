@@ -15,39 +15,43 @@ class AddInventoryItemModal extends StatefulWidget {
 class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _categoryController = TextEditingController();
   final _quantityController = TextEditingController(text: '1');
-  final _serialNumberController = TextEditingController();
+  final List<TextEditingController> _serialNumberControllers = [
+    TextEditingController(),
+  ];
   final _locationController = TextEditingController();
   final _notesController = TextEditingController();
+  final List<String> _categoryOptions = const ['Tools', 'Machines'];
+
+  String? _selectedCategory;
 
   Uint8List? _selectedImageBytes;
   String? _selectedImageName;
   bool _isLoading = false;
 
-  List<Map<String, dynamic>> _projects = [];
-  int? _selectedProjectId;
-  bool _isLoadingProjects = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadProjects();
+  int _parsedQuantity() {
+    final parsed = int.tryParse(_quantityController.text.trim()) ?? 1;
+    return parsed < 1 ? 1 : parsed;
   }
 
-  Future<void> _loadProjects() async {
-    try {
-      final userId = AuthService().currentUser?['user_id'];
-      if (userId == null) return;
-      final projects = await InventoryService.getProjectsForPM(userId: userId);
-      if (mounted) {
-        setState(() {
-          _projects = projects;
-          _isLoadingProjects = false;
-        });
+  void _syncSerialInputsWithQuantity() {
+    final quantity = _parsedQuantity();
+    final current = _serialNumberControllers.length;
+    if (quantity == current) return;
+
+    if (quantity > current) {
+      for (int i = current; i < quantity; i++) {
+        _serialNumberControllers.add(TextEditingController());
       }
-    } catch (e) {
-      if (mounted) setState(() => _isLoadingProjects = false);
+    } else {
+      for (int i = current - 1; i >= quantity; i--) {
+        _serialNumberControllers[i].dispose();
+        _serialNumberControllers.removeAt(i);
+      }
+    }
+
+    if (mounted) {
+      setState(() {});
     }
   }
 
@@ -82,13 +86,18 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
       }
 
       // Step 1: Create the item
+      _syncSerialInputsWithQuantity();
+      final serialNumbers = _serialNumberControllers
+          .map((controller) => controller.text.trim())
+          .where((value) => value.isNotEmpty)
+          .toList();
+
       final result = await InventoryService.addInventoryItem(
         userId: userId,
         name: _nameController.text.trim(),
-        category: _categoryController.text.trim(),
-        serialNumber: _serialNumberController.text.trim().isNotEmpty
-            ? _serialNumberController.text.trim()
-            : null,
+        category: _selectedCategory!,
+        serialNumber: serialNumbers.isNotEmpty ? serialNumbers.first : null,
+        serialNumbers: serialNumbers,
         quantity: int.tryParse(_quantityController.text.trim()) ?? 1,
         location: _locationController.text.trim().isNotEmpty
             ? _locationController.text.trim()
@@ -96,7 +105,6 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
         notes: _notesController.text.trim().isNotEmpty
             ? _notesController.text.trim()
             : null,
-        projectId: _selectedProjectId,
       );
 
       // Step 2: Upload photo if selected
@@ -129,9 +137,10 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
   @override
   void dispose() {
     _nameController.dispose();
-    _categoryController.dispose();
     _quantityController.dispose();
-    _serialNumberController.dispose();
+    for (final controller in _serialNumberControllers) {
+      controller.dispose();
+    }
     _locationController.dispose();
     _notesController.dispose();
     super.dispose();
@@ -514,6 +523,7 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
     required String hintText,
     TextInputType keyboardType = TextInputType.text,
     String? Function(String?)? validator,
+    void Function(String)? onChanged,
     int maxLines = 1,
   }) {
     return Column(
@@ -547,6 +557,7 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
             ),
           ),
           validator: validator,
+          onChanged: onChanged,
         ),
       ],
     );
@@ -554,59 +565,6 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
 
   List<Widget> _buildFormFields() {
     return [
-      // Project dropdown
-      const Text(
-        'Assign to Project *',
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: Color(0xFF374151),
-        ),
-      ),
-      const SizedBox(height: 6),
-      _isLoadingProjects
-          ? const SizedBox(
-              height: 48,
-              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-            )
-          : DropdownButtonFormField<int>(
-              value: _selectedProjectId,
-              isExpanded: true,
-              decoration: InputDecoration(
-                hintText: 'Select a project',
-                hintStyle: TextStyle(fontSize: 14, color: Colors.grey[400]),
-                filled: true,
-                fillColor: const Color(0xFFF9FAFB),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Colors.grey[300]!),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Colors.grey[300]!),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 12,
-                ),
-              ),
-              items: _projects.map((p) {
-                final id = p['project_id'] as int;
-                final name = p['project_name'] ?? 'Unnamed';
-                return DropdownMenuItem<int>(
-                  value: id,
-                  child: Text(name, style: const TextStyle(fontSize: 14)),
-                );
-              }).toList(),
-              onChanged: _isLoading
-                  ? null
-                  : (v) => setState(() => _selectedProjectId = v),
-              validator: (value) {
-                if (value == null) return 'Please select a project';
-                return null;
-              },
-            ),
-      const SizedBox(height: 12),
       _buildTextField(
         controller: _nameController,
         hintText: 'Item Name *',
@@ -620,11 +578,49 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
         children: [
           Expanded(
             flex: 2,
-            child: _buildTextField(
-              controller: _categoryController,
-              hintText: 'Category *',
+            child: DropdownButtonFormField<String>(
+              value: _selectedCategory,
+              isExpanded: true,
+              decoration: InputDecoration(
+                labelText: 'Category *',
+                labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                filled: true,
+                fillColor: const Color(0xFFF9FAFB),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: Colors.grey[300]!),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: Colors.grey[300]!),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF0C1935),
+                    width: 2,
+                  ),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
+              ),
+              items: _categoryOptions
+                  .map(
+                    (category) => DropdownMenuItem<String>(
+                      value: category,
+                      child: Text(category),
+                    ),
+                  )
+                  .toList(),
+              onChanged: _isLoading
+                  ? null
+                  : (value) => setState(() => _selectedCategory = value),
               validator: (value) {
-                if (value == null || value.isEmpty) return 'Required';
+                if (value == null || value.isEmpty) {
+                  return 'Please select a category';
+                }
                 return null;
               },
             ),
@@ -633,8 +629,9 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
           Expanded(
             child: _buildTextField(
               controller: _quantityController,
-              hintText: 'Quantity',
+              hintText: 'Number of Units',
               keyboardType: TextInputType.number,
+              onChanged: (_) => _syncSerialInputsWithQuantity(),
               validator: (value) {
                 if (value != null && value.isNotEmpty) {
                   final qty = int.tryParse(value);
@@ -646,11 +643,13 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
           ),
         ],
       ),
-      const SizedBox(height: 12),
-      _buildTextField(
-        controller: _serialNumberController,
-        hintText: 'Serial Number (Optional)',
+      const SizedBox(height: 8),
+      Text(
+        'Set number of units to add serial fields for each unit.',
+        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
       ),
+      const SizedBox(height: 12),
+      ..._buildSerialNumberFields(),
       const SizedBox(height: 12),
       _buildTextField(
         controller: _locationController,
@@ -663,5 +662,21 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
         maxLines: 3,
       ),
     ];
+  }
+
+  List<Widget> _buildSerialNumberFields() {
+    final widgets = <Widget>[];
+    for (int i = 0; i < _serialNumberControllers.length; i++) {
+      widgets.add(
+        _buildTextField(
+          controller: _serialNumberControllers[i],
+          hintText: 'Unit ${i + 1} Serial Number (Optional)',
+        ),
+      );
+      if (i != _serialNumberControllers.length - 1) {
+        widgets.add(const SizedBox(height: 10));
+      }
+    }
+    return widgets;
   }
 }

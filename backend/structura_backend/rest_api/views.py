@@ -6,10 +6,12 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from django.contrib.auth.hashers import check_password
 from django.views.decorators.csrf import csrf_exempt
 from django.db.models import Count, Q
+from django.db import transaction
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 import json
 import os
+import re
 from datetime import timedelta
 import logging
 
@@ -142,7 +144,10 @@ from .serializers import (
     AttendanceSerializer,
     InventoryItemSerializer,
     InventoryUsageSerializer,
+    InventoryUnitSerializer,
+    InventoryUnitMovementSerializer,
 )
+from rest_framework.exceptions import ValidationError
 
 class ListUser(generics.ListCreateAPIView):
     queryset = models.User.objects.all()
@@ -1448,6 +1453,55 @@ def pm_dashboard_summary(request):
 class InventoryItemViewSet(viewsets.ModelViewSet):
     serializer_class = InventoryItemSerializer
 
+    def destroy(self, request, *args, **kwargs):
+        item = self.get_object()
+        assigned_count = item.units.exclude(current_project__isnull=True).count()
+        if assigned_count > 0:
+            return Response(
+                {
+                    'error': (
+                        'Cannot delete this item while units are assigned to projects. '
+                        'Unassign all units first.'
+                    ),
+                },
+                status=400,
+            )
+        return super().destroy(request, *args, **kwargs)
+
+    @staticmethod
+    def _unit_prefix(name):
+        base = re.sub(r'[^A-Z0-9]+', '-', (name or '').upper()).strip('-')
+        return base or 'ITEM'
+
+    def _next_unit_codes(self, item_name, quantity):
+        prefix = self._unit_prefix(item_name)
+        last_code = (
+            models.InventoryUnit.objects.filter(unit_code__startswith=f'{prefix}-')
+            .order_by('-unit_code')
+            .values_list('unit_code', flat=True)
+            .first()
+        )
+        start = 1
+        if last_code:
+            suffix = last_code.split('-')[-1]
+            if suffix.isdigit():
+                start = int(suffix) + 1
+        return [f'{prefix}-{str(i).zfill(3)}' for i in range(start, start + quantity)]
+
+    def _refresh_item_status_from_units(self, item):
+        if item.units.filter(status='Checked Out').exists():
+            next_status = 'Checked Out'
+        elif item.units.filter(status='Maintenance').exists():
+            next_status = 'Maintenance'
+        elif item.units.filter(status='Unavailable').exists():
+            next_status = 'Unavailable'
+        else:
+            next_status = 'Available'
+
+        if item.status != next_status:
+            item.status = next_status
+            item.save(update_fields=['status', 'updated_at'])
+
     def get_queryset(self):
         pm_user_id = _get_request_pm_user_id(self.request)
         supervisor_id = self.request.query_params.get('supervisor_id')
@@ -1465,7 +1519,10 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
                 .filter(supervisor_id=sv.supervisor_id)
                 .values_list('project_id', flat=True)
             )
-            return models.InventoryItem.objects.filter(project_id__in=project_ids)
+            return models.InventoryItem.objects.filter(
+                Q(units__current_project_id__in=project_ids)
+                | Q(project_id__in=project_ids)
+            ).distinct()
 
         # PM accessing inventory
         if pm_user_id is not None:
@@ -1478,23 +1535,386 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
         ctx['request'] = self.request
         return ctx
 
+    @transaction.atomic
     def perform_create(self, serializer):
         pm_user_id = _get_request_pm_user_id(self.request)
         pm_user = _get_pm_user_or_none(pm_user_id)
         if pm_user is None:
             from rest_framework.exceptions import ValidationError
             raise ValidationError('A valid user_id (ProjectManager) is required.')
-        # Always default to Available
-        save_kwargs = {'created_by': pm_user, 'status': 'Available'}
-        # Assign project if provided
+
+        quantity_raw = self.request.data.get('quantity')
+        try:
+            quantity = max(1, int(quantity_raw or 1))
+        except (TypeError, ValueError):
+            quantity = 1
+
+        save_kwargs = {'created_by': pm_user, 'status': 'Available', 'quantity': 0}
+
         project_id = self.request.data.get('project_id') or self.request.data.get('project')
+        project = None
         if project_id:
             try:
                 project = models.Project.objects.get(project_id=int(project_id))
                 save_kwargs['project'] = project
             except (models.Project.DoesNotExist, ValueError, TypeError):
                 pass
-        serializer.save(**save_kwargs)
+
+        item = serializer.save(**save_kwargs)
+
+        serial_number = (self.request.data.get('serial_number') or '').strip()
+        serial_numbers = self.request.data.get('serial_numbers')
+
+        provided_codes = []
+        if isinstance(serial_numbers, list):
+            provided_codes = [str(code).strip() for code in serial_numbers if str(code).strip()]
+        elif isinstance(serial_numbers, str) and serial_numbers.strip():
+            try:
+                parsed = json.loads(serial_numbers)
+                if isinstance(parsed, list):
+                    provided_codes = [str(code).strip() for code in parsed if str(code).strip()]
+            except Exception:
+                provided_codes = []
+
+        if not provided_codes and quantity == 1 and serial_number:
+            provided_codes = [serial_number]
+
+        existing_codes = set(
+            models.InventoryUnit.objects.filter(unit_code__in=provided_codes)
+            .values_list('unit_code', flat=True)
+        )
+        if existing_codes:
+            raise ValidationError(
+                f'Serial number(s) already in use: {", ".join(sorted(existing_codes))}'
+            )
+
+        if len(provided_codes) > quantity:
+            provided_codes = provided_codes[:quantity]
+
+        generated_needed = max(0, quantity - len(provided_codes))
+        generated_codes = self._next_unit_codes(item.name, generated_needed) if generated_needed else []
+        unit_codes = provided_codes + generated_codes
+
+        for code in unit_codes:
+            unit = models.InventoryUnit.objects.create(
+                inventory_item=item,
+                unit_code=code,
+                status='Available',
+                current_project=project,
+            )
+            if project:
+                models.InventoryUnitMovement.objects.create(
+                    unit=unit,
+                    from_project=None,
+                    to_project=project,
+                    action='Assigned',
+                    moved_by=pm_user,
+                    notes='Initial assignment during profile creation',
+                )
+
+        item.sync_quantity_from_units()
+
+    @action(detail=True, methods=['post'], url_path='add_units')
+    @transaction.atomic
+    def add_units(self, request, pk=None):
+        item = self.get_object()
+        pm_user_id = _get_request_pm_user_id(request)
+        pm_user = _get_pm_user_or_none(pm_user_id)
+        if pm_user is None:
+            return Response({'error': 'A valid user_id is required.'}, status=400)
+
+        count_raw = request.data.get('count', 1)
+        try:
+            count = max(1, int(count_raw))
+        except (TypeError, ValueError):
+            return Response({'error': 'count must be a positive integer.'}, status=400)
+
+        serial_numbers = request.data.get('serial_numbers')
+        provided_codes = []
+        if isinstance(serial_numbers, list):
+            provided_codes = [str(code).strip() for code in serial_numbers if str(code).strip()]
+        elif isinstance(serial_numbers, str) and serial_numbers.strip():
+            try:
+                parsed = json.loads(serial_numbers)
+                if isinstance(parsed, list):
+                    provided_codes = [str(code).strip() for code in parsed if str(code).strip()]
+            except Exception:
+                provided_codes = []
+
+        if len(provided_codes) > count:
+            provided_codes = provided_codes[:count]
+
+        existing_codes = set(
+            models.InventoryUnit.objects.filter(unit_code__in=provided_codes)
+            .values_list('unit_code', flat=True)
+        )
+        if existing_codes:
+            return Response(
+                {
+                    'error': f'Serial number(s) already in use: {", ".join(sorted(existing_codes))}',
+                },
+                status=400,
+            )
+
+        generated_needed = max(0, count - len(provided_codes))
+        generated_codes = self._next_unit_codes(item.name, generated_needed) if generated_needed else []
+        unit_codes = provided_codes + generated_codes
+
+        created_units = []
+        default_project = item.project
+        for code in unit_codes:
+            unit = models.InventoryUnit.objects.create(
+                inventory_item=item,
+                unit_code=code,
+                status='Available',
+                current_project=default_project,
+            )
+            created_units.append(unit)
+            if default_project:
+                models.InventoryUnitMovement.objects.create(
+                    unit=unit,
+                    from_project=None,
+                    to_project=default_project,
+                    action='Assigned',
+                    moved_by=pm_user,
+                    notes='Added unit from manage modal',
+                )
+
+        item.sync_quantity_from_units()
+        self._refresh_item_status_from_units(item)
+
+        return Response(
+            {
+                'message': f'Added {len(created_units)} unit(s) to {item.name}',
+                'created_units': InventoryUnitSerializer(created_units, many=True).data,
+                'item': InventoryItemSerializer(item, context={'request': request}).data,
+            }
+        )
+
+    @action(detail=True, methods=['post'], url_path='remove_units')
+    @transaction.atomic
+    def remove_units(self, request, pk=None):
+        item = self.get_object()
+
+        count_raw = request.data.get('count', 1)
+        try:
+            count = max(1, int(count_raw))
+        except (TypeError, ValueError):
+            return Response({'error': 'count must be a positive integer.'}, status=400)
+
+        removable_units = (
+            item.units.filter(
+                status__in=['Available', 'Returned'],
+                current_project__isnull=True,
+            )
+            .exclude(usages__status='Checked Out')
+            .order_by('-created_at', '-unit_id')
+            .distinct()
+        )
+
+        available_count = removable_units.count()
+        if count > available_count:
+            return Response(
+                {
+                    'error': (
+                        f'Cannot remove {count} unit(s). '
+                        f'Only {available_count} unassigned removable unit(s) are available.'
+                    ),
+                },
+                status=400,
+            )
+
+        units_to_remove = list(removable_units[:count])
+        removed_codes = [u.unit_code for u in units_to_remove]
+        for unit in units_to_remove:
+            unit.delete()
+
+        item.refresh_from_db()
+        item.sync_quantity_from_units()
+        self._refresh_item_status_from_units(item)
+
+        return Response(
+            {
+                'message': f'Removed {len(removed_codes)} unit(s) from {item.name}',
+                'removed_unit_codes': removed_codes,
+                'item': InventoryItemSerializer(item, context={'request': request}).data,
+            }
+        )
+
+    @action(detail=True, methods=['get'], url_path='units')
+    def units(self, request, pk=None):
+        item = self.get_object()
+        queryset = item.units.select_related('current_project')
+        data = InventoryUnitSerializer(queryset, many=True).data
+        return Response(data)
+
+    @action(detail=True, methods=['post'], url_path='assign_unit')
+    def assign_unit(self, request, pk=None):
+        item = self.get_object()
+        pm_user_id = _get_request_pm_user_id(request)
+        pm_user = _get_pm_user_or_none(pm_user_id)
+        if pm_user is None:
+            return Response({'error': 'A valid user_id is required.'}, status=400)
+
+        unit_id = request.data.get('unit_id')
+        project_id_raw = request.data.get('project_id')
+        if not unit_id:
+            return Response({'error': 'unit_id is required.'}, status=400)
+
+        try:
+            unit = item.units.get(unit_id=int(unit_id))
+        except (models.InventoryUnit.DoesNotExist, ValueError, TypeError):
+            return Response({'error': 'Invalid unit_id.'}, status=404)
+
+        target_project = None
+        if project_id_raw not in (None, '', 'null', 'None'):
+            try:
+                target_project = models.Project.objects.get(project_id=int(project_id_raw))
+            except (models.Project.DoesNotExist, ValueError, TypeError):
+                return Response({'error': 'Invalid project_id.'}, status=404)
+
+        previous_project = unit.current_project
+        if (previous_project is None and target_project is None) or (
+            previous_project and target_project and previous_project.project_id == target_project.project_id
+        ):
+            if target_project:
+                return Response(
+                    {
+                        'message': f'{unit.unit_code} is already assigned to {target_project.project_name}',
+                        'unit': InventoryUnitSerializer(unit).data,
+                    }
+                )
+            return Response(
+                {
+                    'message': f'{unit.unit_code} is already unassigned',
+                    'unit': InventoryUnitSerializer(unit).data,
+                }
+            )
+
+        if unit.status == 'Checked Out':
+            return Response(
+                {
+                    'error': (
+                        'This unit is currently checked out and cannot be reassigned. '
+                        'Return it first before changing project assignment.'
+                    ),
+                },
+                status=400,
+            )
+
+        unit.current_project = target_project
+        if target_project and unit.status == 'Returned':
+            unit.status = 'Available'
+        unit.save(update_fields=['current_project', 'status', 'updated_at'])
+
+        if previous_project and target_project:
+            action_name = 'Transferred'
+            notes = f'Transferred from {previous_project.project_name} to {target_project.project_name}'
+        elif previous_project and not target_project:
+            action_name = 'Transferred'
+            notes = f'Unassigned from {previous_project.project_name}'
+        else:
+            action_name = 'Assigned'
+            notes = f'Assigned to {target_project.project_name}' if target_project else 'Assigned'
+
+        models.InventoryUnitMovement.objects.create(
+            unit=unit,
+            from_project=previous_project,
+            to_project=target_project,
+            action=action_name,
+            moved_by=pm_user,
+            notes=notes,
+        )
+
+        self._refresh_item_status_from_units(item)
+        if target_project:
+            message = f'{unit.unit_code} assigned to {target_project.project_name}'
+        else:
+            message = f'{unit.unit_code} unassigned from project'
+
+        return Response(
+            {
+                'message': message,
+                'unit': InventoryUnitSerializer(unit).data,
+            }
+        )
+
+    @action(detail=True, methods=['post'], url_path='set_unit_status')
+    def set_unit_status(self, request, pk=None):
+        item = self.get_object()
+        pm_user_id = _get_request_pm_user_id(request)
+        pm_user = _get_pm_user_or_none(pm_user_id)
+        if pm_user is None:
+            return Response({'error': 'A valid user_id is required.'}, status=400)
+
+        unit_id = request.data.get('unit_id')
+        status_raw = (request.data.get('status') or '').strip().lower()
+
+        if not unit_id or not status_raw:
+            return Response({'error': 'unit_id and status are required.'}, status=400)
+
+        allowed_statuses = {
+            'available': 'Available',
+            'maintenance': 'Maintenance',
+            'unavailable': 'Unavailable',
+        }
+        next_status = allowed_statuses.get(status_raw)
+        if not next_status:
+            return Response(
+                {
+                    'error': 'Invalid status. Allowed values: available, maintenance, unavailable.',
+                },
+                status=400,
+            )
+
+        try:
+            unit = item.units.get(unit_id=int(unit_id))
+        except (models.InventoryUnit.DoesNotExist, ValueError, TypeError):
+            return Response({'error': 'Invalid unit_id.'}, status=404)
+
+        if unit.status == 'Checked Out':
+            return Response({'error': 'Cannot change status while unit is checked out.'}, status=400)
+
+        previous_status = unit.status
+        if previous_status == next_status:
+            return Response(
+                {
+                    'message': f'{unit.unit_code} status is already {next_status}.',
+                    'unit': InventoryUnitSerializer(unit).data,
+                }
+            )
+
+        unit.status = next_status
+        unit.save(update_fields=['status', 'updated_at'])
+
+        models.InventoryUnitMovement.objects.create(
+            unit=unit,
+            from_project=unit.current_project,
+            to_project=unit.current_project,
+            action='Status Updated',
+            moved_by=pm_user,
+            notes=f'Status changed from {previous_status} to {next_status}',
+        )
+
+        self._refresh_item_status_from_units(item)
+
+        return Response(
+            {
+                'message': f'{unit.unit_code} status changed to {next_status}',
+                'unit': InventoryUnitSerializer(unit).data,
+            }
+        )
+
+    @action(detail=True, methods=['get'], url_path='unit_movements')
+    def unit_movements(self, request, pk=None):
+        item = self.get_object()
+        unit_id = request.query_params.get('unit_id')
+        qs = models.InventoryUnitMovement.objects.filter(unit__inventory_item=item).select_related(
+            'unit', 'from_project', 'to_project', 'moved_by'
+        )
+        if unit_id:
+            qs = qs.filter(unit_id=unit_id)
+        return Response(InventoryUnitMovementSerializer(qs, many=True).data)
 
     @action(
         detail=True,
@@ -1528,56 +1948,145 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='checkout')
     def checkout(self, request, pk=None):
-        """Checkout this item to a supervisor, optionally assigning to a field worker."""
-        item = self.get_object()
-        supervisor_id = request.data.get('supervisor_id')
-        if not supervisor_id:
-            return Response({'error': 'supervisor_id is required.'}, status=400)
+        """Checkout one specific unit (or first available unit) of this item."""
         try:
-            supervisor = models.Supervisors.objects.get(supervisor_id=int(supervisor_id))
-        except (models.Supervisors.DoesNotExist, ValueError, TypeError):
-            return Response({'error': 'Supervisor not found.'}, status=404)
-
-        # Optional: field worker assignment
-        field_worker = None
-        field_worker_id = request.data.get('field_worker_id')
-        if field_worker_id:
+            item = self.get_object()
+            logger.info(f'Checkout request for item {pk}')
+            
+            supervisor_id = request.data.get('supervisor_id')
+            if not supervisor_id:
+                return Response({'error': 'supervisor_id is required.'}, status=400)
             try:
-                field_worker = models.FieldWorker.objects.get(fieldworker_id=int(field_worker_id))
-            except (models.FieldWorker.DoesNotExist, ValueError, TypeError):
-                return Response({'error': 'Field worker not found.'}, status=404)
+                supervisor_id_int = int(supervisor_id)
+                supervisor = models.Supervisors.objects.get(supervisor_id=supervisor_id_int)
+                logger.info(f'Found supervisor {supervisor_id_int}')
+            except ValueError:
+                logger.error(f'Invalid supervisor_id format: {supervisor_id}')
+                return Response({'error': f'Invalid supervisor_id format: {supervisor_id}'}, status=400)
+            except (models.Supervisors.DoesNotExist, TypeError) as e:
+                logger.warning(f'Supervisor not found: {e}')
+                return Response({'error': f'Supervisor {supervisor_id_int} not found.'}, status=404)
 
-        # Use the item's assigned project
-        project = item.project
+            supervisor_project_ids = list(
+                models.Project.objects
+                .filter(supervisor_id=supervisor.supervisor_id)
+                .values_list('project_id', flat=True)
+            )
+            allowed_units_qs = item.units.filter(current_project_id__in=supervisor_project_ids)
 
-        # Optional: expected return date
-        expected_return_date = request.data.get('expected_return_date')
+            # Optional: field worker assignment
+            field_worker = None
+            field_worker_id = request.data.get('field_worker_id')
+            if field_worker_id:
+                try:
+                    field_worker_id_int = int(field_worker_id)
+                    field_worker = models.FieldWorker.objects.get(fieldworker_id=field_worker_id_int)
+                    logger.info(f'Found field worker {field_worker_id_int}')
+                except ValueError:
+                    logger.error(f'Invalid field_worker_id format: {field_worker_id}')
+                    return Response({'error': f'Invalid field_worker_id format: {field_worker_id}'}, status=400)
+                except (models.FieldWorker.DoesNotExist, TypeError) as e:
+                    logger.warning(f'Field worker not found: {e}')
+                    return Response({'error': f'Field worker {field_worker_id_int} not found.'}, status=404)
 
-        # Create usage record
-        usage = models.InventoryUsage.objects.create(
-            inventory_item=item,
-            checked_out_by=supervisor,
-            field_worker=field_worker,
-            project=project,
-            expected_return_date=expected_return_date,
-            notes=request.data.get('notes', ''),
-        )
-        item.status = 'Checked Out'
-        item.save()
+            unit_id = request.data.get('unit_id')
+            if unit_id:
+                try:
+                    unit = allowed_units_qs.get(unit_id=int(unit_id))
+                except (models.InventoryUnit.DoesNotExist, ValueError, TypeError):
+                    return Response({'error': 'Unit not found or not assigned to your project.'}, status=404)
+                if unit.status == 'Checked Out':
+                    return Response({'error': 'Selected unit is already checked out.'}, status=400)
+            else:
+                unit = (
+                    allowed_units_qs.filter(status__in=['Available', 'Returned'])
+                    .order_by('unit_code')
+                    .first()
+                )
+                if not unit:
+                    logger.warning(f'No available units for item {pk}')
+                    return Response({'error': 'No available units assigned to your projects for checkout.'}, status=400)
+            
+            logger.info(f'Using unit {unit.unit_id} ({unit.unit_code})')
 
-        assigned_to = f'{field_worker.first_name} {field_worker.last_name}' if field_worker else f'{supervisor.first_name} {supervisor.last_name}'
-        return Response({
-            'message': f'{item.name} checked out to {assigned_to}',
-            'usage_id': usage.usage_id,
-            'item': InventoryItemSerializer(item, context={'request': request}).data,
-        })
+            project = unit.current_project or item.project
+
+            # Optional: expected return date - convert empty string to None
+            expected_return_date = request.data.get('expected_return_date')
+            if expected_return_date is not None and isinstance(expected_return_date, str) and not expected_return_date.strip():
+                expected_return_date = None
+            
+            logger.info(f'Expected return date: {expected_return_date}')
+            
+            # Validate date format if provided
+            from datetime import datetime
+            if expected_return_date and isinstance(expected_return_date, str):
+                try:
+                    # Try to parse the date to ensure it's valid
+                    datetime.strptime(expected_return_date, '%Y-%m-%d')
+                    logger.info(f'Date validation passed: {expected_return_date}')
+                except ValueError as de:
+                    logger.error(f'Invalid date format: {expected_return_date}, error: {de}')
+                    return Response({'error': f'Invalid date format: {expected_return_date}'}, status=400)
+
+            # Create usage record
+            usage = models.InventoryUsage.objects.create(
+                inventory_item=item,
+                inventory_unit=unit,
+                checked_out_by=supervisor,
+                field_worker=field_worker,
+                project=project,
+                expected_return_date=expected_return_date,
+                notes=request.data.get('notes', '') or '',
+            )
+            logger.info(f'Created usage record {usage.usage_id}')
+            
+            unit.status = 'Checked Out'
+            unit.save(update_fields=['status', 'updated_at'])
+            logger.info(f'Updated unit status to Checked Out')
+            
+            self._refresh_item_status_from_units(item)
+            logger.info(f'Refreshed item status')
+
+            models.InventoryUnitMovement.objects.create(
+                unit=unit,
+                from_project=unit.current_project,
+                to_project=unit.current_project,
+                action='Checked Out',
+                moved_by=_get_pm_user_or_none(_get_request_pm_user_id(request)),
+                notes=request.data.get('notes', '') or '',
+            )
+            logger.info(f'Created unit movement record')
+
+            assigned_to = f'{field_worker.first_name} {field_worker.last_name}' if field_worker else f'{supervisor.first_name} {supervisor.last_name}'
+            return Response({
+                'message': f'{unit.unit_code} checked out to {assigned_to}',
+                'usage_id': usage.usage_id,
+                'unit_id': unit.unit_id,
+                'unit_code': unit.unit_code,
+                'item': InventoryItemSerializer(item, context={'request': request}).data,
+            })
+        except Exception as e:
+            logger.error(f'Checkout error: {str(e)}', exc_info=True)
+            return Response({
+                'error': f'Checkout failed: {str(e)}',
+                'details': repr(e)
+            }, status=500)
 
     @action(detail=True, methods=['post'], url_path='return_item')
     def return_item(self, request, pk=None):
         """Return this item (called by supervisor or PM)."""
         item = self.get_object()
-        # Find the active usage for this item
-        active_usage = item.usages.filter(status='Checked Out').order_by('-checkout_date').first()
+        unit_id = request.data.get('unit_id')
+
+        if unit_id:
+            active_usage = item.usages.filter(
+                inventory_unit_id=unit_id,
+                status='Checked Out',
+            ).order_by('-checkout_date').first()
+        else:
+            active_usage = item.usages.filter(status='Checked Out').order_by('-checkout_date').first()
+
         if not active_usage:
             return Response({'error': 'No active checkout found for this item.'}, status=400)
 
@@ -1585,11 +2094,22 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
         active_usage.actual_return_date = timezone.now()
         active_usage.save()
 
-        item.status = 'Returned'
-        item.save()
+        unit = active_usage.inventory_unit
+        if unit:
+            unit.status = 'Returned'
+            unit.save(update_fields=['status', 'updated_at'])
+            models.InventoryUnitMovement.objects.create(
+                unit=unit,
+                from_project=unit.current_project,
+                to_project=unit.current_project,
+                action='Returned',
+            )
+
+        self._refresh_item_status_from_units(item)
 
         return Response({
             'message': f'{item.name} has been returned.',
+            'unit_code': unit.unit_code if unit else '',
             'item': InventoryItemSerializer(item, context={'request': request}).data,
         })
 

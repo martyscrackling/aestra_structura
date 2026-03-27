@@ -19,6 +19,8 @@ class ToolItem {
   final String? location;
   final String? notes;
   final List<Map<String, dynamic>> activeUsages;
+  final List<Map<String, dynamic>> units;
+  final List<String> unitStatuses;
 
   ToolItem({
     required this.id,
@@ -31,7 +33,29 @@ class ToolItem {
     this.location,
     this.notes,
     this.activeUsages = const [],
+    this.units = const [],
+    this.unitStatuses = const [],
   });
+
+  int get totalUnits =>
+      unitStatuses.isNotEmpty ? unitStatuses.length : quantity;
+
+  int get availableUnitsCount {
+    if (unitStatuses.isEmpty) {
+      return status == 'Available' ? quantity : 0;
+    }
+    return unitStatuses
+        .where((s) => s == 'Available' || s == 'Returned')
+        .length;
+  }
+
+  bool get hasCheckoutableUnits {
+    // Prefer unit-level availability when unit data is present.
+    if (unitStatuses.isNotEmpty) {
+      return unitStatuses.any((s) => s == 'Available' || s == 'Returned');
+    }
+    return status == 'Available';
+  }
 
   factory ToolItem.fromJson(Map<String, dynamic> json) {
     return ToolItem(
@@ -49,19 +73,34 @@ class ToolItem {
               ?.map((e) => e as Map<String, dynamic>)
               .toList() ??
           [],
+      units:
+          (json['units'] as List<dynamic>?)
+              ?.map((u) => u as Map<String, dynamic>)
+              .toList() ??
+          [],
+      unitStatuses:
+          (json['units'] as List<dynamic>?)
+              ?.map(
+                (u) => (u as Map<String, dynamic>)['status']?.toString() ?? '',
+              )
+              .where((s) => s.isNotEmpty)
+              .toList() ??
+          [],
     );
   }
 }
 
 class ActiveUsage {
   final ToolItem tool;
-  final List<String> users;
-  final String usageStatus;
+  final String user;
+  final String serial;
+  final int? unitId;
 
   ActiveUsage({
     required this.tool,
-    required this.users,
-    required this.usageStatus,
+    required this.user,
+    required this.serial,
+    this.unitId,
   });
 }
 
@@ -104,16 +143,25 @@ class _InventoryPageState extends State<InventoryPage> {
 
       final active = <ActiveUsage>[];
       for (final item in items) {
-        if (item.activeUsages.isNotEmpty) {
-          final users = item.activeUsages
-              .map(
-                (u) => u['field_worker_name']?.toString().isNotEmpty == true
-                    ? u['field_worker_name'].toString()
-                    : u['supervisor_name']?.toString() ?? 'Unknown',
-              )
-              .toList();
+        for (final usage in item.activeUsages) {
+          final user = usage['field_worker_name']?.toString().isNotEmpty == true
+              ? usage['field_worker_name'].toString()
+              : usage['supervisor_name']?.toString() ?? 'Unknown';
+          final unitCode = usage['unit_code']?.toString() ?? '';
+          final serial = unitCode.isNotEmpty
+              ? unitCode
+              : (item.serialNumber?.isNotEmpty == true
+                    ? item.serialNumber!
+                    : 'N/A');
           active.add(
-            ActiveUsage(tool: item, users: users, usageStatus: 'In Use'),
+            ActiveUsage(
+              tool: item,
+              user: user,
+              serial: serial,
+              unitId: usage['inventory_unit'] is int
+                  ? usage['inventory_unit'] as int
+                  : int.tryParse(usage['inventory_unit']?.toString() ?? ''),
+            ),
           );
         }
       }
@@ -275,419 +323,123 @@ class _InventoryPageState extends State<InventoryPage> {
                                     ),
                                     const SizedBox(height: 12),
 
-                                    // Tools table
-                                    isMobile
-                                        ? Column(
-                                            children: _filtered.map((tool) {
-                                              return Card(
-                                                elevation: 1,
-                                                margin: const EdgeInsets.only(
-                                                  bottom: 8,
-                                                ),
-                                                child: InkWell(
-                                                  onTap: () =>
-                                                      _showToolDetails(tool),
-                                                  borderRadius:
-                                                      BorderRadius.circular(12),
-                                                  child: Padding(
-                                                    padding:
-                                                        const EdgeInsets.all(
-                                                          12,
-                                                        ),
-                                                    child: Column(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .start,
-                                                      children: [
-                                                        Row(
-                                                          children: [
-                                                            Expanded(
-                                                              child: Text(
-                                                                tool.name,
-                                                                style: const TextStyle(
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w700,
-                                                                  fontSize: 14,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                            _statusChip(
-                                                              tool.status,
-                                                            ),
-                                                          ],
-                                                        ),
-                                                        const SizedBox(
-                                                          height: 6,
-                                                        ),
-                                                        Text(
-                                                          tool.category,
-                                                          style: TextStyle(
-                                                            color: Colors
-                                                                .grey[600],
-                                                            fontSize: 12,
-                                                          ),
-                                                        ),
-                                                        if (tool.status ==
-                                                            'Available') ...[
-                                                          const SizedBox(
-                                                            height: 8,
-                                                          ),
-                                                          Align(
-                                                            alignment: Alignment
-                                                                .centerRight,
-                                                            child: TextButton(
-                                                              onPressed: () =>
-                                                                  _showUseItemModal(
-                                                                    tool,
-                                                                  ),
-                                                              style: TextButton.styleFrom(
-                                                                backgroundColor:
-                                                                    accent
-                                                                        .withOpacity(
-                                                                          0.1,
-                                                                        ),
-                                                                padding:
-                                                                    const EdgeInsets.symmetric(
-                                                                      horizontal:
-                                                                          16,
-                                                                      vertical:
-                                                                          6,
-                                                                    ),
-                                                                shape: RoundedRectangleBorder(
-                                                                  borderRadius:
-                                                                      BorderRadius.circular(
-                                                                        6,
-                                                                      ),
-                                                                ),
-                                                              ),
-                                                              child: Text(
-                                                                'Use',
-                                                                style: TextStyle(
-                                                                  fontSize: 12,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w700,
-                                                                  color: accent,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ],
-                                                    ),
-                                                  ),
-                                                ),
-                                              );
-                                            }).toList(),
-                                          )
-                                        : Card(
-                                            elevation: 2,
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
+                                    // Tools table (PM-style responsive layout)
+                                    Card(
+                                      elevation: 2,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Column(
+                                        children: [
+                                          // Table Header
+                                          Container(
+                                            padding: EdgeInsets.symmetric(
+                                              horizontal: isMobile ? 12 : 16,
+                                              vertical: isMobile ? 10 : 14,
                                             ),
-                                            child: Column(
-                                              children: [
-                                                // Table header
-                                                Container(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 16,
-                                                        vertical: 14,
-                                                      ),
-                                                  decoration: BoxDecoration(
-                                                    color: primary.withOpacity(
-                                                      0.05,
+                                            decoration: BoxDecoration(
+                                              color: primary.withOpacity(0.05),
+                                              borderRadius:
+                                                  const BorderRadius.only(
+                                                    topLeft: Radius.circular(
+                                                      12,
                                                     ),
-                                                    borderRadius:
-                                                        const BorderRadius.only(
-                                                          topLeft:
-                                                              Radius.circular(
-                                                                12,
-                                                              ),
-                                                          topRight:
-                                                              Radius.circular(
-                                                                12,
-                                                              ),
-                                                        ),
+                                                    topRight: Radius.circular(
+                                                      12,
+                                                    ),
                                                   ),
-                                                  child: Row(
-                                                    children: [
-                                                      const Expanded(
-                                                        flex: 3,
-                                                        child: Text(
-                                                          'Tool/Machine Name',
-                                                          style: TextStyle(
-                                                            fontWeight:
-                                                                FontWeight.w700,
-                                                            fontSize: 13,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      const Expanded(
-                                                        flex: 2,
-                                                        child: Text(
-                                                          'Category',
-                                                          style: TextStyle(
-                                                            fontWeight:
-                                                                FontWeight.w700,
-                                                            fontSize: 13,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      const Expanded(
-                                                        flex: 2,
-                                                        child: Text(
-                                                          'Status',
-                                                          style: TextStyle(
-                                                            fontWeight:
-                                                                FontWeight.w700,
-                                                            fontSize: 13,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      const SizedBox(
-                                                        width: 40,
-                                                      ), // for icon
-                                                    ],
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                Expanded(
+                                                  flex: 3,
+                                                  child: Text(
+                                                    'Tool/Machine Name',
+                                                    style: TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                      fontSize: isMobile
+                                                          ? 12
+                                                          : 13,
+                                                    ),
                                                   ),
                                                 ),
-
-                                                // Table body
-                                                _filtered.isEmpty
-                                                    ? Padding(
-                                                        padding:
-                                                            const EdgeInsets.all(
-                                                              24,
-                                                            ),
-                                                        child: Center(
-                                                          child: Text(
-                                                            'No tools found',
-                                                            style: TextStyle(
-                                                              color: Colors
-                                                                  .grey[600],
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      )
-                                                    : ListView.builder(
-                                                        shrinkWrap: true,
-                                                        physics:
-                                                            const NeverScrollableScrollPhysics(),
-                                                        itemCount:
-                                                            _filtered.length,
-                                                        itemBuilder: (context, i) {
-                                                          final t =
-                                                              _filtered[i];
-                                                          final isEven =
-                                                              i.isEven;
-
-                                                          return InkWell(
-                                                            onTap: () =>
-                                                                _showToolDetails(
-                                                                  t,
-                                                                ),
-                                                            child: Container(
-                                                              padding:
-                                                                  const EdgeInsets.symmetric(
-                                                                    horizontal:
-                                                                        16,
-                                                                    vertical:
-                                                                        12,
-                                                                  ),
-                                                              decoration: BoxDecoration(
-                                                                color: isEven
-                                                                    ? Colors
-                                                                          .grey
-                                                                          .shade50
-                                                                    : Colors
-                                                                          .white,
-                                                                border: Border(
-                                                                  bottom:
-                                                                      i ==
-                                                                          _filtered.length -
-                                                                              1
-                                                                      ? BorderSide
-                                                                            .none
-                                                                      : BorderSide(
-                                                                          color: Colors
-                                                                              .grey
-                                                                              .shade200,
-                                                                          width:
-                                                                              1,
-                                                                        ),
-                                                                ),
-                                                              ),
-                                                              child: Row(
-                                                                children: [
-                                                                  // Tool name with icon
-                                                                  Expanded(
-                                                                    flex: 3,
-                                                                    child: Row(
-                                                                      children: [
-                                                                        Container(
-                                                                          width:
-                                                                              40,
-                                                                          height:
-                                                                              40,
-                                                                          decoration: BoxDecoration(
-                                                                            color: primary.withOpacity(
-                                                                              0.1,
-                                                                            ),
-                                                                            borderRadius: BorderRadius.circular(
-                                                                              8,
-                                                                            ),
-                                                                          ),
-                                                                          child:
-                                                                              t.photoUrl !=
-                                                                                      null &&
-                                                                                  t.photoUrl!.isNotEmpty
-                                                                              ? ClipRRect(
-                                                                                  borderRadius: BorderRadius.circular(
-                                                                                    8,
-                                                                                  ),
-                                                                                  child: Image.network(
-                                                                                    t.photoUrl!,
-                                                                                    width: 40,
-                                                                                    height: 40,
-                                                                                    fit: BoxFit.cover,
-                                                                                    errorBuilder:
-                                                                                        (
-                                                                                          _,
-                                                                                          __,
-                                                                                          ___,
-                                                                                        ) => Icon(
-                                                                                          Icons.construction,
-                                                                                          color: primary,
-                                                                                          size: 20,
-                                                                                        ),
-                                                                                  ),
-                                                                                )
-                                                                              : Icon(
-                                                                                  Icons.construction,
-                                                                                  color: primary,
-                                                                                  size: 20,
-                                                                                ),
-                                                                        ),
-                                                                        const SizedBox(
-                                                                          width:
-                                                                              12,
-                                                                        ),
-                                                                        Expanded(
-                                                                          child: Text(
-                                                                            t.name,
-                                                                            style: const TextStyle(
-                                                                              fontWeight: FontWeight.w700,
-                                                                              fontSize: 14,
-                                                                            ),
-                                                                            overflow:
-                                                                                TextOverflow.ellipsis,
-                                                                          ),
-                                                                        ),
-                                                                      ],
-                                                                    ),
-                                                                  ),
-
-                                                                  // Category
-                                                                  Expanded(
-                                                                    flex: 2,
-                                                                    child: Container(
-                                                                      padding: const EdgeInsets.symmetric(
-                                                                        horizontal:
-                                                                            10,
-                                                                        vertical:
-                                                                            6,
-                                                                      ),
-                                                                      decoration: BoxDecoration(
-                                                                        color: Colors
-                                                                            .grey[100],
-                                                                        borderRadius:
-                                                                            BorderRadius.circular(
-                                                                              6,
-                                                                            ),
-                                                                      ),
-                                                                      child: Text(
-                                                                        t.category,
-                                                                        style: const TextStyle(
-                                                                          fontSize:
-                                                                              12,
-                                                                          color:
-                                                                              Colors.grey,
-                                                                        ),
-                                                                        textAlign:
-                                                                            TextAlign.center,
-                                                                        overflow:
-                                                                            TextOverflow.ellipsis,
-                                                                      ),
-                                                                    ),
-                                                                  ),
-
-                                                                  const SizedBox(
-                                                                    width: 12,
-                                                                  ),
-
-                                                                  // Status
-                                                                  Expanded(
-                                                                    flex: 2,
-                                                                    child: _statusChip(
-                                                                      t.status,
-                                                                    ),
-                                                                  ),
-
-                                                                  // View details icon
-                                                                  const SizedBox(
-                                                                    width: 12,
-                                                                  ),
-                                                                  SizedBox(
-                                                                    width: 80,
-                                                                    child:
-                                                                        t.status ==
-                                                                            'Available'
-                                                                        ? TextButton(
-                                                                            onPressed: () => _showUseItemModal(
-                                                                              t,
-                                                                            ),
-                                                                            style: TextButton.styleFrom(
-                                                                              backgroundColor: accent.withOpacity(
-                                                                                0.1,
-                                                                              ),
-                                                                              padding: const EdgeInsets.symmetric(
-                                                                                horizontal: 12,
-                                                                                vertical: 6,
-                                                                              ),
-                                                                              shape: RoundedRectangleBorder(
-                                                                                borderRadius: BorderRadius.circular(
-                                                                                  6,
-                                                                                ),
-                                                                              ),
-                                                                            ),
-                                                                            child: Text(
-                                                                              'Use',
-                                                                              style: TextStyle(
-                                                                                fontSize: 12,
-                                                                                fontWeight: FontWeight.w700,
-                                                                                color: accent,
-                                                                              ),
-                                                                            ),
-                                                                          )
-                                                                        : Icon(
-                                                                            Icons.chevron_right,
-                                                                            color:
-                                                                                Colors.grey[400],
-                                                                            size:
-                                                                                20,
-                                                                          ),
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                            ),
-                                                          );
-                                                        },
+                                                if (!isMobile)
+                                                  const Expanded(
+                                                    flex: 2,
+                                                    child: Text(
+                                                      'Category',
+                                                      style: TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        fontSize: 13,
                                                       ),
+                                                    ),
+                                                  ),
+                                                if (!isMobile)
+                                                  const Expanded(
+                                                    flex: 1,
+                                                    child: Text(
+                                                      'Unit',
+                                                      style: TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        fontSize: 13,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                if (!isMobile)
+                                                  const Expanded(
+                                                    flex: 2,
+                                                    child: Text(
+                                                      'Project',
+                                                      style: TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        fontSize: 13,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                SizedBox(
+                                                  width: isMobile ? 120 : 160,
+                                                ), // for details/use actions
                                               ],
                                             ),
                                           ),
+
+                                          // Table Body
+                                          _filtered.isEmpty
+                                              ? Padding(
+                                                  padding: const EdgeInsets.all(
+                                                    24,
+                                                  ),
+                                                  child: Center(
+                                                    child: Text(
+                                                      'No tools found',
+                                                      style: TextStyle(
+                                                        color: Colors.grey[600],
+                                                      ),
+                                                    ),
+                                                  ),
+                                                )
+                                              : ListView.builder(
+                                                  shrinkWrap: true,
+                                                  physics:
+                                                      const NeverScrollableScrollPhysics(),
+                                                  itemCount: _filtered.length,
+                                                  itemBuilder: (context, i) {
+                                                    final t = _filtered[i];
+                                                    final isEven = i.isEven;
+                                                    return _tableRow(
+                                                      t,
+                                                      isEven,
+                                                      isMobile,
+                                                    );
+                                                  },
+                                                ),
+                                        ],
+                                      ),
+                                    ),
 
                                     const SizedBox(height: 22),
 
@@ -723,64 +475,92 @@ class _InventoryPageState extends State<InventoryPage> {
                                                 margin: const EdgeInsets.only(
                                                   bottom: 8,
                                                 ),
-                                                child: InkWell(
-                                                  onTap: () => _showToolDetails(
-                                                    usage.tool,
+                                                child: Padding(
+                                                  padding: const EdgeInsets.all(
+                                                    12,
                                                   ),
-                                                  borderRadius:
-                                                      BorderRadius.circular(12),
-                                                  child: Padding(
-                                                    padding:
-                                                        const EdgeInsets.all(
-                                                          12,
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      Text(
+                                                        usage.tool.name,
+                                                        style: const TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                          fontSize: 14,
                                                         ),
-                                                    child: Column(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .start,
-                                                      children: [
-                                                        Row(
-                                                          children: [
-                                                            Expanded(
-                                                              child: Text(
-                                                                usage.tool.name,
-                                                                style: const TextStyle(
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w700,
-                                                                  fontSize: 14,
-                                                                ),
+                                                      ),
+                                                      const SizedBox(height: 6),
+                                                      Text(
+                                                        usage.tool.category,
+                                                        style: TextStyle(
+                                                          color:
+                                                              Colors.grey[600],
+                                                          fontSize: 12,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 6),
+                                                      Text(
+                                                        'Serial: ${usage.serial}',
+                                                        style: TextStyle(
+                                                          color:
+                                                              Colors.grey[700],
+                                                          fontSize: 12,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 6),
+                                                      Text(
+                                                        'Used by: ${usage.user}',
+                                                        style: TextStyle(
+                                                          color:
+                                                              Colors.grey[700],
+                                                          fontSize: 12,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(
+                                                        height: 10,
+                                                      ),
+                                                      Align(
+                                                        alignment: Alignment
+                                                            .centerRight,
+                                                        child: ElevatedButton.icon(
+                                                          onPressed: () =>
+                                                              _returnUsage(
+                                                                usage,
                                                               ),
+                                                          icon: const Icon(
+                                                            Icons
+                                                                .assignment_return,
+                                                            size: 16,
+                                                          ),
+                                                          label: const Text(
+                                                            'Return',
+                                                          ),
+                                                          style: ElevatedButton.styleFrom(
+                                                            backgroundColor:
+                                                                const Color(
+                                                                  0xFFFF7A18,
+                                                                ),
+                                                            foregroundColor:
+                                                                Colors.white,
+                                                            padding:
+                                                                const EdgeInsets.symmetric(
+                                                                  horizontal:
+                                                                      12,
+                                                                  vertical: 8,
+                                                                ),
+                                                            shape: RoundedRectangleBorder(
+                                                              borderRadius:
+                                                                  BorderRadius.circular(
+                                                                    8,
+                                                                  ),
                                                             ),
-                                                            _statusChip(
-                                                              usage.usageStatus,
-                                                            ),
-                                                          ],
-                                                        ),
-                                                        const SizedBox(
-                                                          height: 6,
-                                                        ),
-                                                        Text(
-                                                          usage.tool.category,
-                                                          style: TextStyle(
-                                                            color: Colors
-                                                                .grey[600],
-                                                            fontSize: 12,
                                                           ),
                                                         ),
-                                                        const SizedBox(
-                                                          height: 6,
-                                                        ),
-                                                        Text(
-                                                          'Used by: ${usage.users.join(', ')}',
-                                                          style: TextStyle(
-                                                            color: Colors
-                                                                .grey[700],
-                                                            fontSize: 12,
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
+                                                      ),
+                                                    ],
                                                   ),
                                                 ),
                                               );
@@ -844,7 +624,7 @@ class _InventoryPageState extends State<InventoryPage> {
                                                       Expanded(
                                                         flex: 2,
                                                         child: Text(
-                                                          'Used By',
+                                                          'Serial',
                                                           style: TextStyle(
                                                             fontWeight:
                                                                 FontWeight.w700,
@@ -855,7 +635,7 @@ class _InventoryPageState extends State<InventoryPage> {
                                                       Expanded(
                                                         flex: 2,
                                                         child: Text(
-                                                          'Status',
+                                                          'Used By',
                                                           style: TextStyle(
                                                             fontWeight:
                                                                 FontWeight.w700,
@@ -864,7 +644,7 @@ class _InventoryPageState extends State<InventoryPage> {
                                                         ),
                                                       ),
                                                       SizedBox(
-                                                        width: 80,
+                                                        width: 110,
                                                       ), // for actions
                                                     ],
                                                   ),
@@ -879,7 +659,7 @@ class _InventoryPageState extends State<InventoryPage> {
                                                             ),
                                                         child: Center(
                                                           child: Text(
-                                                            'No active tools currently',
+                                                            'No active units currently',
                                                             style: TextStyle(
                                                               color: Colors
                                                                   .grey[600],
@@ -899,214 +679,238 @@ class _InventoryPageState extends State<InventoryPage> {
                                                           final isEven =
                                                               i.isEven;
 
-                                                          return InkWell(
-                                                            onTap: () =>
-                                                                _showToolDetails(
-                                                                  usage.tool,
+                                                          return Container(
+                                                            padding:
+                                                                const EdgeInsets.symmetric(
+                                                                  horizontal:
+                                                                      16,
+                                                                  vertical: 12,
                                                                 ),
-                                                            child: Container(
-                                                              padding:
-                                                                  const EdgeInsets.symmetric(
-                                                                    horizontal:
-                                                                        16,
-                                                                    vertical:
-                                                                        12,
-                                                                  ),
-                                                              decoration: BoxDecoration(
-                                                                color: isEven
-                                                                    ? Colors
-                                                                          .grey
-                                                                          .shade50
-                                                                    : Colors
-                                                                          .white,
-                                                                border: Border(
-                                                                  bottom:
-                                                                      i ==
-                                                                          _active.length -
-                                                                              1
-                                                                      ? BorderSide
-                                                                            .none
-                                                                      : BorderSide(
-                                                                          color: Colors
-                                                                              .grey
-                                                                              .shade200,
-                                                                          width:
-                                                                              1,
-                                                                        ),
-                                                                ),
-                                                              ),
-                                                              child: Row(
-                                                                children: [
-                                                                  // Tool name with icon
-                                                                  Expanded(
-                                                                    flex: 3,
-                                                                    child: Row(
-                                                                      children: [
-                                                                        Container(
-                                                                          width:
-                                                                              40,
-                                                                          height:
-                                                                              40,
-                                                                          decoration: BoxDecoration(
-                                                                            color: accent.withOpacity(
-                                                                              0.1,
-                                                                            ),
-                                                                            borderRadius: BorderRadius.circular(
-                                                                              8,
-                                                                            ),
-                                                                          ),
-                                                                          child:
-                                                                              usage.tool.photoUrl !=
-                                                                                      null &&
-                                                                                  usage.tool.photoUrl!.isNotEmpty
-                                                                              ? ClipRRect(
-                                                                                  borderRadius: BorderRadius.circular(
-                                                                                    8,
-                                                                                  ),
-                                                                                  child: Image.network(
-                                                                                    usage.tool.photoUrl!,
-                                                                                    fit: BoxFit.cover,
-                                                                                    errorBuilder:
-                                                                                        (
-                                                                                          _,
-                                                                                          __,
-                                                                                          ___,
-                                                                                        ) => Icon(
-                                                                                          Icons.build,
-                                                                                          color: accent,
-                                                                                          size: 20,
-                                                                                        ),
-                                                                                  ),
-                                                                                )
-                                                                              : Icon(
-                                                                                  Icons.build,
-                                                                                  color: accent,
-                                                                                  size: 20,
-                                                                                ),
-                                                                        ),
-                                                                        const SizedBox(
-                                                                          width:
-                                                                              12,
-                                                                        ),
-                                                                        Expanded(
-                                                                          child: Text(
-                                                                            usage.tool.name,
-                                                                            style: const TextStyle(
-                                                                              fontWeight: FontWeight.w700,
-                                                                              fontSize: 14,
-                                                                            ),
-                                                                            overflow:
-                                                                                TextOverflow.ellipsis,
-                                                                          ),
-                                                                        ),
-                                                                      ],
-                                                                    ),
-                                                                  ),
-
-                                                                  // Category
-                                                                  Expanded(
-                                                                    flex: 2,
-                                                                    child: Container(
-                                                                      padding: const EdgeInsets.symmetric(
-                                                                        horizontal:
-                                                                            10,
-                                                                        vertical:
-                                                                            6,
-                                                                      ),
-                                                                      decoration: BoxDecoration(
+                                                            decoration: BoxDecoration(
+                                                              color: isEven
+                                                                  ? Colors
+                                                                        .grey
+                                                                        .shade50
+                                                                  : Colors
+                                                                        .white,
+                                                              border: Border(
+                                                                bottom:
+                                                                    i ==
+                                                                        _active.length -
+                                                                            1
+                                                                    ? BorderSide
+                                                                          .none
+                                                                    : BorderSide(
                                                                         color: Colors
-                                                                            .grey[100],
-                                                                        borderRadius:
-                                                                            BorderRadius.circular(
-                                                                              6,
-                                                                            ),
+                                                                            .grey
+                                                                            .shade200,
+                                                                        width:
+                                                                            1,
                                                                       ),
-                                                                      child: Text(
-                                                                        usage
-                                                                            .tool
-                                                                            .category,
-                                                                        style: const TextStyle(
-                                                                          fontSize:
-                                                                              12,
-                                                                          color:
-                                                                              Colors.grey,
-                                                                          fontWeight:
-                                                                              FontWeight.w600,
+                                                              ),
+                                                            ),
+                                                            child: Row(
+                                                              children: [
+                                                                // Tool name with icon
+                                                                Expanded(
+                                                                  flex: 3,
+                                                                  child: Row(
+                                                                    children: [
+                                                                      Container(
+                                                                        width:
+                                                                            40,
+                                                                        height:
+                                                                            40,
+                                                                        decoration: BoxDecoration(
+                                                                          color: accent.withOpacity(
+                                                                            0.1,
+                                                                          ),
+                                                                          borderRadius:
+                                                                              BorderRadius.circular(
+                                                                                8,
+                                                                              ),
                                                                         ),
-                                                                        overflow:
-                                                                            TextOverflow.ellipsis,
+                                                                        child:
+                                                                            usage.tool.photoUrl !=
+                                                                                    null &&
+                                                                                usage.tool.photoUrl!.isNotEmpty
+                                                                            ? ClipRRect(
+                                                                                borderRadius: BorderRadius.circular(
+                                                                                  8,
+                                                                                ),
+                                                                                child: Image.network(
+                                                                                  usage.tool.photoUrl!,
+                                                                                  fit: BoxFit.cover,
+                                                                                  errorBuilder:
+                                                                                      (
+                                                                                        _,
+                                                                                        __,
+                                                                                        ___,
+                                                                                      ) => Icon(
+                                                                                        Icons.build,
+                                                                                        color: accent,
+                                                                                        size: 20,
+                                                                                      ),
+                                                                                ),
+                                                                              )
+                                                                            : Icon(
+                                                                                Icons.build,
+                                                                                color: accent,
+                                                                                size: 20,
+                                                                              ),
                                                                       ),
+                                                                      const SizedBox(
+                                                                        width:
+                                                                            12,
+                                                                      ),
+                                                                      Expanded(
+                                                                        child: Text(
+                                                                          usage
+                                                                              .tool
+                                                                              .name,
+                                                                          style: const TextStyle(
+                                                                            fontWeight:
+                                                                                FontWeight.w700,
+                                                                            fontSize:
+                                                                                14,
+                                                                          ),
+                                                                          overflow:
+                                                                              TextOverflow.ellipsis,
+                                                                        ),
+                                                                      ),
+                                                                    ],
+                                                                  ),
+                                                                ),
+
+                                                                // Category
+                                                                Expanded(
+                                                                  flex: 2,
+                                                                  child: Container(
+                                                                    padding: const EdgeInsets.symmetric(
+                                                                      horizontal:
+                                                                          10,
+                                                                      vertical:
+                                                                          6,
                                                                     ),
-                                                                  ),
-
-                                                                  const SizedBox(
-                                                                    width: 12,
-                                                                  ),
-
-                                                                  // Users
-                                                                  Expanded(
-                                                                    flex: 2,
+                                                                    decoration: BoxDecoration(
+                                                                      color: Colors
+                                                                          .grey[100],
+                                                                      borderRadius:
+                                                                          BorderRadius.circular(
+                                                                            6,
+                                                                          ),
+                                                                    ),
                                                                     child: Text(
                                                                       usage
-                                                                          .users
-                                                                          .join(
-                                                                            ', ',
-                                                                          ),
+                                                                          .tool
+                                                                          .category,
                                                                       style: const TextStyle(
                                                                         fontSize:
-                                                                            13,
+                                                                            12,
+                                                                        color: Colors
+                                                                            .grey,
                                                                         fontWeight:
-                                                                            FontWeight.w500,
+                                                                            FontWeight.w600,
                                                                       ),
                                                                       overflow:
                                                                           TextOverflow
                                                                               .ellipsis,
-                                                                      maxLines:
-                                                                          2,
                                                                     ),
                                                                   ),
+                                                                ),
 
-                                                                  const SizedBox(
-                                                                    width: 12,
-                                                                  ),
+                                                                const SizedBox(
+                                                                  width: 12,
+                                                                ),
 
-                                                                  // Status
-                                                                  Expanded(
-                                                                    flex: 2,
-                                                                    child: _statusChip(
-                                                                      usage
-                                                                          .usageStatus,
+                                                                // Serial
+                                                                Expanded(
+                                                                  flex: 2,
+                                                                  child: Text(
+                                                                    usage
+                                                                        .serial,
+                                                                    style: const TextStyle(
+                                                                      fontSize:
+                                                                          13,
+                                                                      fontWeight:
+                                                                          FontWeight
+                                                                              .w500,
                                                                     ),
+                                                                    overflow:
+                                                                        TextOverflow
+                                                                            .ellipsis,
                                                                   ),
+                                                                ),
 
-                                                                  // View button
-                                                                  const SizedBox(
-                                                                    width: 12,
+                                                                const SizedBox(
+                                                                  width: 12,
+                                                                ),
+
+                                                                // Users
+                                                                Expanded(
+                                                                  flex: 2,
+                                                                  child: Text(
+                                                                    usage.user,
+                                                                    style: const TextStyle(
+                                                                      fontSize:
+                                                                          13,
+                                                                      fontWeight:
+                                                                          FontWeight
+                                                                              .w500,
+                                                                    ),
+                                                                    overflow:
+                                                                        TextOverflow
+                                                                            .ellipsis,
+                                                                    maxLines: 2,
                                                                   ),
-                                                                  TextButton(
+                                                                ),
+
+                                                                const SizedBox(
+                                                                  width: 12,
+                                                                ),
+                                                                SizedBox(
+                                                                  width: 110,
+                                                                  child: ElevatedButton.icon(
                                                                     onPressed: () =>
-                                                                        _showToolDetails(
-                                                                          usage
-                                                                              .tool,
+                                                                        _returnUsage(
+                                                                          usage,
                                                                         ),
-                                                                    style: TextButton.styleFrom(
-                                                                      padding: const EdgeInsets.symmetric(
-                                                                        horizontal:
-                                                                            4,
-                                                                        vertical:
-                                                                            4,
-                                                                      ),
+                                                                    icon: const Icon(
+                                                                      Icons
+                                                                          .assignment_return,
+                                                                      size: 16,
                                                                     ),
-                                                                    child: const Text(
-                                                                      'View',
+                                                                    label: const Text(
+                                                                      'Return',
                                                                       style: TextStyle(
                                                                         fontSize:
                                                                             12,
                                                                       ),
                                                                     ),
+                                                                    style: ElevatedButton.styleFrom(
+                                                                      backgroundColor:
+                                                                          const Color(
+                                                                            0xFFFF7A18,
+                                                                          ),
+                                                                      foregroundColor:
+                                                                          Colors
+                                                                              .white,
+                                                                      padding: const EdgeInsets.symmetric(
+                                                                        horizontal:
+                                                                            10,
+                                                                        vertical:
+                                                                            8,
+                                                                      ),
+                                                                      shape: RoundedRectangleBorder(
+                                                                        borderRadius:
+                                                                            BorderRadius.circular(
+                                                                              8,
+                                                                            ),
+                                                                      ),
+                                                                    ),
                                                                   ),
-                                                                ],
-                                                              ),
+                                                                ),
+                                                              ],
                                                             ),
                                                           );
                                                         },
@@ -1139,203 +943,199 @@ class _InventoryPageState extends State<InventoryPage> {
     );
   }
 
-  Widget _buildNavItem(IconData icon, String label, bool isActive) {
-    final color = isActive ? AppColors.accent : Colors.white70;
-
-    return InkWell(
-      onTap: () {
-        if (label == 'More') {
-          _showMoreOptions();
-        } else {
-          _navigateToPage(label);
-        }
-      },
-      borderRadius: BorderRadius.circular(12),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: AppSpacing.sm),
-        decoration: BoxDecoration(
-          color: isActive ? AppColors.accent.withOpacity(0.15) : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 24),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              label,
-              style: AppTypography.mobileNavLabel(color, isActive: isActive),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showMoreOptions() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: AppColors.navSurface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 12),
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white30,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 20),
-              _buildMoreOption(
-                Icons.show_chart,
-                'Task Progress',
-                'Tasks',
-                false,
-              ),
-              _buildMoreOption(Icons.file_copy, 'Reports', 'Reports', false),
-              _buildMoreOption(Icons.inventory, 'Inventory', 'Inventory', true),
-              const SizedBox(height: 20),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMoreOption(
-    IconData icon,
-    String title,
-    String page,
-    bool isActive,
-  ) {
-    return ListTile(
-      leading: Icon(
-        icon,
-        color: isActive ? const Color(0xFFFF6F00) : Colors.white70,
-        size: 24,
-      ),
-      title: Text(
-        title,
-        style: TextStyle(
-          color: isActive ? const Color(0xFFFF6F00) : Colors.white,
-          fontSize: 14,
-          fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-        ),
-      ),
-      onTap: () {
-        Navigator.pop(context);
-        _navigateToPage(page);
-      },
-    );
-  }
-
-  Widget _statusChip(String status) {
-    final lower = status.toLowerCase();
-    final color = lower == 'available'
-        ? Colors.green
-        : lower == 'maintenance'
-        ? Colors.orange
-        : lower == 'returned'
-        ? Colors.blue
-        : Colors.redAccent;
+  Widget _tableRow(ToolItem t, bool isEven, bool isMobile) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-        borderRadius: BorderRadius.circular(8),
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 12 : 16,
+        vertical: isMobile ? 10 : 12,
       ),
-      child: Text(
-        status,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w700,
-          fontSize: 12,
+      decoration: BoxDecoration(
+        color: isEven ? Colors.grey.shade50 : Colors.white,
+        border: Border(
+          bottom: BorderSide(color: Colors.grey.shade200, width: 1),
         ),
       ),
-    );
-  }
-
-  Widget _activeCard(ActiveUsage a, BuildContext ctx) {
-    return SizedBox(
-      width: 320,
-      child: Card(
-        elevation: 3,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // small photo
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: a.tool.photoUrl != null && a.tool.photoUrl!.isNotEmpty
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.network(
-                          a.tool.photoUrl!,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const Icon(
-                            Icons.build,
-                            size: 36,
-                            color: Colors.grey,
-                          ),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: Row(
+              children: [
+                if (!isMobile) ...[
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: t.photoUrl != null && t.photoUrl!.isNotEmpty
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.network(
+                              t.photoUrl!,
+                              width: 40,
+                              height: 40,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Icon(
+                                Icons.construction,
+                                color: primary,
+                                size: 20,
+                              ),
+                            ),
+                          )
+                        : Icon(Icons.construction, color: primary, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        t.name,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: isMobile ? 13 : 14,
                         ),
-                      )
-                    : const Icon(Icons.build, size: 36, color: Colors.grey),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      a.tool.name,
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Used by: ${a.users.join(', ')}',
-                      style: const TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        _statusChip(a.usageStatus),
-                        const SizedBox(width: 8),
-                        TextButton(
-                          onPressed: () => _showToolDetails(a.tool),
-                          child: const Text(
-                            'View',
-                            style: TextStyle(fontSize: 12),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (isMobile) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Units: ${t.totalUnits} • Projects: ${_projectsSummary(t)}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF6B7280),
+                            fontWeight: FontWeight.w600,
                           ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
-                    ),
-                  ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (!isMobile)
+            Expanded(
+              flex: 2,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    t.category,
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
-            ],
+            ),
+          if (!isMobile)
+            Expanded(
+              flex: 1,
+              child: Text(
+                t.totalUnits.toString(),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF374151),
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          if (!isMobile)
+            Expanded(
+              flex: 2,
+              child: Text(
+                _projectsSummary(t),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF374151),
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          SizedBox(
+            width: isMobile ? 120 : 160,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _availabilitySummary(t),
+                    style: TextStyle(
+                      fontSize: isMobile ? 10 : 12,
+                      fontWeight: FontWeight.w600,
+                      color: t.availableUnitsCount > 0
+                          ? const Color(0xFF0C1935)
+                          : Colors.redAccent,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Expanded(
+                  child: TextButton(
+                    onPressed: t.hasCheckoutableUnits
+                        ? () => _showUseItemModal(t)
+                        : null,
+                    child: Text(
+                      'Use',
+                      style: TextStyle(
+                        fontSize: isMobile ? 10 : 12,
+                        fontWeight: FontWeight.w600,
+                        color: t.hasCheckoutableUnits ? primary : Colors.grey,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
+  }
+
+  String _projectsSummary(ToolItem item) {
+    final projectNames = item.units
+        .map((u) => (u['current_project_name'] ?? '').toString().trim())
+        .where((name) => name.isNotEmpty)
+        .toSet();
+
+    return projectNames.isEmpty
+        ? 'Unassigned'
+        : projectNames.length == 1
+        ? projectNames.first
+        : '${projectNames.length} projects';
+  }
+
+  String _availabilitySummary(ToolItem item) {
+    final total = item.totalUnits;
+    final available = item.availableUnitsCount;
+
+    if (available <= 0) {
+      return 'Unavailable';
+    }
+    if (total > 0 && available == total) {
+      return 'All available';
+    }
+    if (available == 1) {
+      return 'One available';
+    }
+    if (available == 2) {
+      return 'Two available';
+    }
+    return '$available available';
   }
 
   void _showUseItemModal(ToolItem tool) {
@@ -1356,12 +1156,14 @@ class _InventoryPageState extends State<InventoryPage> {
     );
   }
 
-  Future<void> _returnItem(ToolItem tool) async {
+  Future<void> _returnUsage(ActiveUsage usage) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Return Item'),
-        content: Text('Are you sure you want to return "${tool.name}"?'),
+        title: const Text('Return Unit'),
+        content: Text(
+          'Return ${usage.tool.name} (${usage.serial}) from ${usage.user}?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -1385,12 +1187,13 @@ class _InventoryPageState extends State<InventoryPage> {
       final supervisorId = user?['supervisor_id'] ?? user?['user_id'];
       if (supervisorId == null) return;
       await InventoryService.returnItem(
-        itemId: int.parse(tool.id),
+        itemId: int.parse(usage.tool.id),
         supervisorId: supervisorId,
+        unitId: usage.unitId,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${tool.name} returned successfully')),
+          SnackBar(content: Text('${usage.serial} returned successfully')),
         );
         _loadItems();
       }
@@ -1398,179 +1201,9 @@ class _InventoryPageState extends State<InventoryPage> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Failed to return item: $e')));
+        ).showSnackBar(SnackBar(content: Text('Failed to return unit: $e')));
       }
     }
-  }
-
-  void _showToolDetails(ToolItem t) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Container(
-          width: 400,
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header with close button
-              Row(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(Icons.construction, color: primary, size: 24),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      t.name,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    icon: const Icon(Icons.close),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 24),
-
-              // Photo section
-              if (t.photoUrl != null && t.photoUrl!.isNotEmpty)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.network(
-                    t.photoUrl!,
-                    height: 180,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      height: 180,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[100],
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Center(
-                        child: Icon(
-                          Icons.construction,
-                          size: 64,
-                          color: Colors.grey[400],
-                        ),
-                      ),
-                    ),
-                  ),
-                )
-              else
-                Container(
-                  height: 180,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Center(
-                    child: Icon(
-                      Icons.construction,
-                      size: 64,
-                      color: Colors.grey[400],
-                    ),
-                  ),
-                ),
-
-              const SizedBox(height: 20),
-
-              // Details
-              const Text(
-                'Details',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 12),
-
-              _detailRow('Category', t.category),
-              if (t.serialNumber != null && t.serialNumber!.isNotEmpty)
-                _detailRow('Serial No.', t.serialNumber!),
-              _detailRow('Quantity', t.quantity.toString()),
-              if (t.location != null && t.location!.isNotEmpty)
-                _detailRow('Location', t.location!),
-              if (t.notes != null && t.notes!.isNotEmpty)
-                _detailRow('Notes', t.notes!),
-              _detailRow('Status', '', customValue: _statusChip(t.status)),
-
-              const SizedBox(height: 24),
-
-              // Action buttons
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    child: const Text('Close'),
-                  ),
-                  if (t.status == 'Checked Out') ...[
-                    const SizedBox(width: 8),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.of(ctx).pop();
-                        _returnItem(t);
-                      },
-                      icon: const Icon(Icons.assignment_return, size: 18),
-                      label: const Text('Return'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.accent,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _detailRow(String label, String value, {Widget? customValue}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 100,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[600],
-                fontSize: 13,
-              ),
-            ),
-          ),
-          Expanded(
-            child:
-                customValue ??
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w500,
-                    fontSize: 13,
-                  ),
-                ),
-          ),
-        ],
-      ),
-    );
   }
 }
 
@@ -1599,13 +1232,23 @@ class _UseItemModalState extends State<_UseItemModal> {
   List<Map<String, dynamic>> _fieldWorkers = [];
 
   int? _selectedFieldWorkerId;
+  int? _selectedUnitId;
   DateTime _checkoutDate = DateTime.now();
   DateTime? _expectedReturnDate;
   final _notesController = TextEditingController();
 
+  List<Map<String, dynamic>> get _availableUnits =>
+      widget.tool.units.where((u) {
+        final status = u['status']?.toString() ?? '';
+        return status == 'Available' || status == 'Returned';
+      }).toList();
+
   @override
   void initState() {
     super.initState();
+    if (_availableUnits.isNotEmpty) {
+      _selectedUnitId = _availableUnits.first['unit_id'] as int?;
+    }
     _loadData();
   }
 
@@ -1646,6 +1289,35 @@ class _UseItemModalState extends State<_UseItemModal> {
       return;
     }
 
+    if (_selectedUnitId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a unit to assign')),
+      );
+      return;
+    }
+
+    final checkoutDateOnly = DateTime(
+      _checkoutDate.year,
+      _checkoutDate.month,
+      _checkoutDate.day,
+    );
+    final expectedDateOnly = _expectedReturnDate == null
+        ? null
+        : DateTime(
+            _expectedReturnDate!.year,
+            _expectedReturnDate!.month,
+            _expectedReturnDate!.day,
+          );
+    if (expectedDateOnly != null &&
+        expectedDateOnly.isBefore(checkoutDateOnly)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Expected return date cannot be before checkout date'),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
       await InventoryService.checkoutItem(
@@ -1655,6 +1327,7 @@ class _UseItemModalState extends State<_UseItemModal> {
             : int.parse(widget.supervisorId.toString()),
         userId: widget.supervisorId,
         fieldWorkerId: _selectedFieldWorkerId,
+        unitId: _selectedUnitId,
         expectedReturnDate: _expectedReturnDate != null
             ? '${_expectedReturnDate!.year}-${_expectedReturnDate!.month.toString().padLeft(2, '0')}-${_expectedReturnDate!.day.toString().padLeft(2, '0')}'
             : null,
@@ -1680,19 +1353,33 @@ class _UseItemModalState extends State<_UseItemModal> {
   }
 
   Future<void> _pickDate({required bool isCheckout}) async {
+    final today = DateTime.now();
+    final todayOnly = DateTime(today.year, today.month, today.day);
+    final checkoutDateOnly = DateTime(
+      _checkoutDate.year,
+      _checkoutDate.month,
+      _checkoutDate.day,
+    );
     final initial = isCheckout
         ? _checkoutDate
-        : (_expectedReturnDate ?? DateTime.now().add(const Duration(days: 7)));
+        : (_expectedReturnDate ??
+              checkoutDateOnly.add(const Duration(days: 7)));
+    final firstDate = isCheckout ? todayOnly : checkoutDateOnly;
+    final safeInitial = initial.isBefore(firstDate) ? firstDate : initial;
     final picked = await showDatePicker(
       context: context,
-      initialDate: initial,
-      firstDate: DateTime.now().subtract(const Duration(days: 30)),
+      initialDate: safeInitial,
+      firstDate: firstDate,
       lastDate: DateTime.now().add(const Duration(days: 365)),
     );
     if (picked != null && mounted) {
       setState(() {
         if (isCheckout) {
           _checkoutDate = picked;
+          if (_expectedReturnDate != null &&
+              _expectedReturnDate!.isBefore(_checkoutDate)) {
+            _expectedReturnDate = _checkoutDate;
+          }
         } else {
           _expectedReturnDate = picked;
         }
@@ -1800,7 +1487,7 @@ class _UseItemModalState extends State<_UseItemModal> {
                           ),
                           const SizedBox(height: 6),
                           DropdownButtonFormField<int>(
-                            value: _selectedFieldWorkerId,
+                            initialValue: _selectedFieldWorkerId,
                             isExpanded: true,
                             decoration: InputDecoration(
                               hintText: 'Select a field worker',
@@ -1855,6 +1542,74 @@ class _UseItemModalState extends State<_UseItemModal> {
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: Colors.orange[700],
+                                ),
+                              ),
+                            ),
+
+                          const SizedBox(height: 16),
+
+                          // Unit dropdown
+                          const Text(
+                            'Select Unit *',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF374151),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          DropdownButtonFormField<int>(
+                            initialValue: _selectedUnitId,
+                            isExpanded: true,
+                            decoration: InputDecoration(
+                              hintText: 'Select an available unit',
+                              hintStyle: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[400],
+                              ),
+                              filled: true,
+                              fillColor: const Color(0xFFF9FAFB),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(
+                                  color: Colors.grey[300]!,
+                                ),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(
+                                  color: Colors.grey[300]!,
+                                ),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 12,
+                              ),
+                            ),
+                            items: _availableUnits.map((unit) {
+                              final id = unit['unit_id'] as int;
+                              final code =
+                                  unit['unit_code']?.toString() ?? 'Unit $id';
+                              return DropdownMenuItem<int>(
+                                value: id,
+                                child: Text(
+                                  code,
+                                  style: const TextStyle(fontSize: 14),
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: _isLoading
+                                ? null
+                                : (v) => setState(() => _selectedUnitId = v),
+                          ),
+                          if (_availableUnits.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                'No available units for this item',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.red[700],
                                 ),
                               ),
                             ),
