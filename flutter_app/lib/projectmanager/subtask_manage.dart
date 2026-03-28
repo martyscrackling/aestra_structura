@@ -333,7 +333,7 @@ class _SubtaskTile extends StatelessWidget {
                 builder: (context) => ViewWorkForceModal(subtask: subtask),
               );
             },
-            icon: const Icon(Icons.groups_outlined),
+              icon: const Icon(Icons.groups_outlined),
             tooltip: 'View Work Force',
             color: const Color(0xFF0C1935),
           ),
