@@ -193,7 +193,11 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
           children: [
             Row(
               children: [
-                Icon(Icons.show_chart, color: _primary, size: isMobile ? 18 : 20),
+                Icon(
+                  Icons.show_chart,
+                  color: _primary,
+                  size: isMobile ? 18 : 20,
+                ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
@@ -290,8 +294,8 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
 
                             final rawTitle =
                                 _projectProgressPoints[index].projectName;
-              final shortTitle = rawTitle.length > 8
-                ? '${rawTitle.substring(0, 8)}...'
+                            final shortTitle = rawTitle.length > 8
+                                ? '${rawTitle.substring(0, 8)}...'
                                 : rawTitle;
 
                             return SideTitleWidget(
@@ -480,7 +484,7 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
   // Mobile layout - Stack everything vertically
   Widget _buildMobileLayout() {
     final viewHeight = MediaQuery.of(context).size.height;
-    final activeProjectsHeight = (viewHeight * 0.36).clamp(300.0, 360.0);
+    final activeProjectsHeight = (viewHeight * 0.28).clamp(220.0, 270.0);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
@@ -606,7 +610,7 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
   // Tablet layout - Stack vertically with more spacing
   Widget _buildTabletLayout() {
     final viewHeight = MediaQuery.of(context).size.height;
-    final activeProjectsHeight = (viewHeight * 0.4).clamp(330.0, 430.0);
+    final activeProjectsHeight = (viewHeight * 0.3).clamp(240.0, 320.0);
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -650,7 +654,7 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildScrollableActiveProjects(height: 560),
+                    _buildScrollableActiveProjects(height: 390),
                     const SizedBox(height: 12),
                   ],
                 ),

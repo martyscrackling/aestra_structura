@@ -38,12 +38,13 @@ class _ActiveProjectState extends State<ActiveProject> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _cardsScrollController = ScrollController();
   final PageController _carouselController = PageController(
-    viewportFraction: 0.88,
+    viewportFraction: 0.8,
   );
   String _searchQuery = '';
   _ProjectSortOrder _sortOrder = _ProjectSortOrder.oldestToNewest;
   String? _projectTypeFilter;
   int _carouselIndex = 0;
+  bool _isCarouselHovered = false;
 
   @override
   void initState() {
@@ -112,7 +113,10 @@ class _ActiveProjectState extends State<ActiveProject> {
     return origin.resolve('/media/$value').toString();
   }
 
-  Widget _buildProjectImage(Map<String, dynamic> project, {double height = 138}) {
+  Widget _buildProjectImage(
+    Map<String, dynamic> project, {
+    double height = 138,
+  }) {
     final imagePath = (project['project_image'] ?? '').toString().trim();
 
     if (imagePath.isEmpty || imagePath == 'null') {
@@ -317,6 +321,15 @@ class _ActiveProjectState extends State<ActiveProject> {
     widget.onProjectLoaded?.call(projectId);
   }
 
+  void _goToCarouselPage(int page, int totalCount) {
+    if (page < 0 || page >= totalCount) return;
+    _carouselController.animateToPage(
+      page,
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   String _getLocation(Map<String, dynamic> project) {
     final street = project['street'] ?? '';
     final barangay = project['barangay_name'] ?? '';
@@ -456,8 +469,9 @@ class _ActiveProjectState extends State<ActiveProject> {
     }
 
     final visibleProjects = _visibleProjects;
-  final useCarousel = widget.carouselWhenMultiple && visibleProjects.length >= 2;
-  final compact = widget.compactCards;
+    final useCarousel =
+        widget.carouselWhenMultiple && visibleProjects.length >= 2;
+    final compact = widget.compactCards;
 
     final projectsContent = visibleProjects.isEmpty
         ? const Padding(
@@ -475,271 +489,284 @@ class _ActiveProjectState extends State<ActiveProject> {
           )
         : LayoutBuilder(
             builder: (context, constraints) {
-            final columnCount = constraints.maxWidth >= 1200
-              ? 3
-              : constraints.maxWidth >= 760
-              ? 2
-              : 1;
-              const spacing = 16.0;
+              final columnCount = constraints.maxWidth >= 1200
+                  ? 3
+                  : constraints.maxWidth >= 760
+                  ? 2
+                  : 1;
+              const spacing = 12.0;
               final cardWidth =
                   (constraints.maxWidth - ((columnCount - 1) * spacing)) /
                   columnCount;
 
-            Widget buildProjectCard(Map<String, dynamic> project, {double? width}) {
-                  final projectName =
-                      project['project_name'] ?? 'Unknown Project';
-                  final projectIdRaw = project['project_id'];
-              if (projectIdRaw == null) return const SizedBox.shrink();
+              Widget buildProjectCard(
+                Map<String, dynamic> project, {
+                double? width,
+              }) {
+                final projectName =
+                    project['project_name'] ?? 'Unknown Project';
+                final projectIdRaw = project['project_id'];
+                if (projectIdRaw == null) return const SizedBox.shrink();
 
-                  final int projectId = projectIdRaw is int
-                      ? projectIdRaw
-                      : int.parse(projectIdRaw.toString());
+                final int projectId = projectIdRaw is int
+                    ? projectIdRaw
+                    : int.parse(projectIdRaw.toString());
 
-                  final location = _getLocation(project);
-                  final progress = _calculateProgress(projectId);
-                  final progressPercentage = (progress * 100).round();
-                  final startDate = _formatDate(
-                    project['start_date']?.toString(),
-                  );
-                  final endDate = _formatDate(project['end_date']?.toString());
-                  final label = _statusLabel(project);
-                  final bool isSelected =
-                      widget.enableSelection && _selectedProjectId == projectId;
+                final location = _getLocation(project);
+                final progress = _calculateProgress(projectId);
+                final progressPercentage = (progress * 100).round();
+                final startDate = _formatDate(
+                  project['start_date']?.toString(),
+                );
+                final endDate = _formatDate(project['end_date']?.toString());
+                final label = _statusLabel(project);
+                final bool isSelected =
+                    widget.enableSelection && _selectedProjectId == projectId;
 
-                  final imageHeight = compact ? (isMobile ? 102.0 : 112.0) : 138.0;
-                  final contentPadding = compact ? 12.0 : 18.0;
-                  final titleSize = compact ? 15.0 : 18.0;
-                  final metaSize = compact ? 12.0 : 13.0;
-                  final chipFont = compact ? 11.0 : 12.0;
-                  final progressHeight = compact ? 6.0 : 8.0;
+                final imageHeight = compact
+                    ? (isMobile ? 148.0 : 168.0)
+                    : 200.0;
+                final contentPadding = compact ? 10.0 : 18.0;
+                final titleSize = compact ? 13.0 : 18.0;
+                final metaSize = compact ? 10.0 : 13.0;
+                final chipFont = compact ? 9.5 : 12.0;
+                final progressHeight = compact ? 4.0 : 8.0;
 
-                  return SizedBox(
-                    width: width ?? cardWidth,
-                    child: GestureDetector(
-                      onTap: widget.enableSelection
-                          ? () => _selectProject(projectId)
-                          : null,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(compact ? 14 : 18),
-                          border: Border.all(
-                            color: isSelected
-                                ? AppColors.accent
-                                : const Color(0xFFE5E7EB),
-                            width: 2,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(
-                                isSelected ? 0.08 : 0.05,
-                              ),
-                              blurRadius: isSelected ? 16 : 12,
-                              offset: const Offset(0, 6),
-                            ),
-                          ],
+                return SizedBox(
+                  width: width ?? cardWidth,
+                  child: GestureDetector(
+                    onTap: widget.enableSelection
+                        ? () => _selectProject(projectId)
+                        : null,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(compact ? 10 : 18),
+                        border: Border.all(
+                          color: isSelected
+                              ? AppColors.accent
+                              : const Color(0xFFE5E7EB),
+                          width: 2,
                         ),
-                        child: SingleChildScrollView(
-                          physics: useCarousel
-                              ? const ClampingScrollPhysics()
-                              : const NeverScrollableScrollPhysics(),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.vertical(
-                                  top: Radius.circular(compact ? 12 : 16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(
+                              isSelected ? 0.08 : 0.05,
+                            ),
+                            blurRadius: isSelected ? 16 : 12,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.vertical(
+                              top: Radius.circular(compact ? 8 : 16),
+                            ),
+                            child: _buildProjectImage(
+                              project,
+                              height: imageHeight,
+                            ),
+                          ),
+                          Padding(
+                            padding: EdgeInsets.fromLTRB(
+                              contentPadding,
+                              contentPadding + (compact ? 3 : 6),
+                              contentPadding,
+                              contentPadding,
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: compact ? 6 : 10,
+                                    vertical: compact ? 1.5 : 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    border: Border.all(
+                                      color: const Color(0xFFE5E7EB),
+                                    ),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    label,
+                                    style: TextStyle(
+                                      fontSize: chipFont,
+                                      fontWeight: FontWeight.w600,
+                                      color: progress >= 1
+                                          ? const Color(0xFF10B981)
+                                          : AppColors.accent,
+                                    ),
+                                  ),
                                 ),
-                                child: _buildProjectImage(
-                                  project,
-                                  height: imageHeight,
+                                SizedBox(height: compact ? 5 : 12),
+                                Text(
+                                  projectName,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: titleSize,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF0C1935),
+                                  ),
                                 ),
-                              ),
-                              Padding(
-                                padding: EdgeInsets.all(contentPadding),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                SizedBox(height: compact ? 2 : 6),
+                                Text(
+                                  location,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: metaSize,
+                                    color: const Color(0xFF6B7280),
+                                  ),
+                                ),
+                                SizedBox(height: compact ? 6 : 14),
+                                Row(
                                   children: [
-                                    Container(
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: compact ? 8 : 10,
-                                      vertical: compact ? 3 : 4,
+                                    Icon(
+                                      Icons.calendar_today_outlined,
+                                      size: compact ? 11 : 14,
+                                      color: Color(0xFFA0AEC0),
                                     ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      border: Border.all(
-                                        color: const Color(0xFFE5E7EB),
-                                      ),
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: Text(
-                                      label,
-                                      style: TextStyle(
-                                        fontSize: chipFont,
-                                        fontWeight: FontWeight.w600,
-                                        color: progress >= 1
-                                            ? const Color(0xFF10B981)
-                                            : AppColors.accent,
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(height: compact ? 8 : 12),
-                                  Text(
-                                    projectName,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: titleSize,
-                                      fontWeight: FontWeight.w700,
-                                      color: const Color(0xFF0C1935),
-                                    ),
-                                  ),
-                                  SizedBox(height: compact ? 4 : 6),
-                                  Text(
-                                    location,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: metaSize,
-                                      color: const Color(0xFF6B7280),
-                                    ),
-                                  ),
-                                  SizedBox(height: compact ? 10 : 14),
-                                  Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.calendar_today_outlined,
-                                        size: 14,
-                                        color: Color(0xFFA0AEC0),
-                                      ),
-                                      const SizedBox(width: 5),
-                                      Expanded(
-                                        child: Text(
-                                          '$startDate   •   $endDate',
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontSize: compact ? 11 : 12,
-                                            color: const Color(0xFF6B7280),
-                                          ),
+                                    SizedBox(width: compact ? 3 : 5),
+                                    Expanded(
+                                      child: Text(
+                                        '$startDate   •   $endDate',
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: compact ? 9.5 : 12,
+                                          color: const Color(0xFF6B7280),
                                         ),
                                       ),
-                                    ],
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: compact ? 6 : 14),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: LinearProgressIndicator(
+                                    value: progress,
+                                    minHeight: progressHeight,
+                                    backgroundColor: const Color(0xFFF3F4F6),
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      progress >= 1
+                                          ? const Color(0xFF22C55E)
+                                          : AppColors.accent,
+                                    ),
                                   ),
-                                  SizedBox(height: compact ? 10 : 14),
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: LinearProgressIndicator(
-                                      value: progress,
-                                      minHeight: progressHeight,
-                                      backgroundColor: const Color(0xFFF3F4F6),
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        progress >= 1
+                                ),
+                                SizedBox(height: compact ? 4 : 8),
+                                Row(
+                                  mainAxisAlignment: widget.enableSelection
+                                      ? MainAxisAlignment.spaceBetween
+                                      : MainAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '$progressPercentage%',
+                                      style: TextStyle(
+                                        fontSize: compact ? 10.5 : 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: const Color(0xFF0C1935),
+                                      ),
+                                    ),
+                                    if (widget.enableSelection)
+                                      Text(
+                                        isSelected
+                                            ? 'Selected'
+                                            : 'Tap to select',
+                                        style: TextStyle(
+                                          fontSize: compact ? 9.5 : 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: isSelected
+                                              ? AppColors.accent
+                                              : const Color(0xFF9CA3AF),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                SizedBox(height: compact ? 6 : 14),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: OutlinedButton(
+                                    onPressed: () {
+                                      Navigator.of(context).push(
+                                        PageRouteBuilder(
+                                          pageBuilder:
+                                              (
+                                                context,
+                                                animation,
+                                                secondaryAnimation,
+                                              ) => ProjectInfosPage(
+                                                projectTitle: projectName
+                                                    .toString(),
+                                                projectLocation: location,
+                                                projectImage:
+                                                    (project['project_image'] ??
+                                                            '')
+                                                        .toString(),
+                                                progress: progress,
+                                                budget: project['budget']
+                                                    ?.toString(),
+                                                projectId: projectId,
+                                              ),
+                                          transitionDuration: Duration.zero,
+                                        ),
+                                      );
+                                    },
+                                    style: OutlinedButton.styleFrom(
+                                      side: BorderSide(
+                                        color: progress >= 1
                                             ? const Color(0xFF22C55E)
                                             : AppColors.accent,
                                       ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      visualDensity: compact
+                                          ? VisualDensity.compact
+                                          : VisualDensity.standard,
+                                      tapTargetSize: compact
+                                          ? MaterialTapTargetSize.shrinkWrap
+                                          : MaterialTapTargetSize.padded,
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: compact ? 6 : 12,
+                                        vertical: compact ? 5 : 10,
+                                      ),
                                     ),
-                                  ),
-                                  SizedBox(height: compact ? 6 : 8),
-                                  Row(
-                                    mainAxisAlignment: widget.enableSelection
-                                        ? MainAxisAlignment.spaceBetween
-                                        : MainAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        '$progressPercentage%',
-                                        style: TextStyle(
-                                          fontSize: compact ? 12 : 13,
-                                          fontWeight: FontWeight.w600,
-                                          color: const Color(0xFF0C1935),
-                                        ),
-                                      ),
-                                      if (widget.enableSelection)
-                                        Text(
-                                          isSelected
-                                              ? 'Selected'
-                                              : 'Tap to select',
-                                          style: TextStyle(
-                                            fontSize: compact ? 11 : 12,
-                                            fontWeight: FontWeight.w600,
-                                            color: isSelected
-                                                ? AppColors.accent
-                                                : const Color(0xFF9CA3AF),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                  SizedBox(height: compact ? 10 : 14),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: OutlinedButton(
-                                      onPressed: () {
-                                        Navigator.of(context).push(
-                                          PageRouteBuilder(
-                                            pageBuilder:
-                                                (
-                                                  context,
-                                                  animation,
-                                                  secondaryAnimation,
-                                                ) => ProjectInfosPage(
-                                                  projectTitle: projectName
-                                                      .toString(),
-                                                  projectLocation: location,
-                                                  projectImage:
-                                                      (project['project_image'] ??
-                                                              '')
-                                                          .toString(),
-                                                  progress: progress,
-                                                  budget: project['budget']
-                                                      ?.toString(),
-                                                  projectId: projectId,
-                                                ),
-                                            transitionDuration: Duration.zero,
-                                          ),
-                                        );
-                                      },
-                                      style: OutlinedButton.styleFrom(
-                                        side: BorderSide(
-                                          color: progress >= 1
-                                              ? const Color(0xFF22C55E)
-                                              : AppColors.accent,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            10,
-                                          ),
-                                        ),
-                                        visualDensity: compact
-                                            ? VisualDensity.compact
-                                            : VisualDensity.standard,
-                                      ),
-                                      child: Text(
-                                        'View more',
-                                        style: TextStyle(
-                                          color: progress >= 1
-                                              ? const Color(0xFF22C55E)
-                                              : AppColors.accent,
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: compact ? 12 : 13,
-                                        ),
+                                    child: Text(
+                                      'View more',
+                                      style: TextStyle(
+                                        color: progress >= 1
+                                            ? const Color(0xFF22C55E)
+                                            : AppColors.accent,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: compact ? 10 : 13,
                                       ),
                                     ),
                                   ),
-                                  ],
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
+                        ],
                       ),
                     ),
-                  );
+                  ),
+                );
               }
 
               if (useCarousel) {
-                final targetViewport = widget.cardsViewportHeight ??
-                  (compact
-                    ? (isMobile ? 312.0 : 328.0)
-                    : (isMobile ? 352.0 : 372.0));
+                final targetViewport =
+                    widget.cardsViewportHeight ??
+                    (compact
+                        ? (isMobile ? 360.0 : 390.0)
+                        : (isMobile ? 352.0 : 372.0));
                 return SizedBox(
                   height: targetViewport,
                   child: LayoutBuilder(
@@ -749,32 +776,138 @@ class _ActiveProjectState extends State<ActiveProject> {
                       return Column(
                         children: [
                           Expanded(
-                            child: PageView.builder(
-                              controller: _carouselController,
-                              itemCount: visibleProjects.length,
-                              onPageChanged: (index) {
-                                setState(() {
-                                  _carouselIndex = index;
-                                });
-
-                                final rawId =
-                                    visibleProjects[index]['project_id'];
-                                final projectId = rawId is int
-                                    ? rawId
-                                    : int.tryParse(rawId.toString());
-                                if (projectId != null && widget.enableSelection) {
-                                  _selectProject(projectId);
+                            child: MouseRegion(
+                              onEnter: (_) {
+                                if (isMobile ||
+                                    !_carouselController.hasClients) {
+                                  return;
                                 }
+                                setState(() {
+                                  _isCarouselHovered = true;
+                                });
                               },
-                              itemBuilder: (context, index) {
-                                return Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                                  child: buildProjectCard(
-                                    visibleProjects[index],
-                                    width: double.infinity,
+                              onExit: (_) {
+                                if (!_isCarouselHovered) return;
+                                setState(() {
+                                  _isCarouselHovered = false;
+                                });
+                              },
+                              child: Stack(
+                                children: [
+                                  PageView.builder(
+                                    controller: _carouselController,
+                                    padEnds: false,
+                                    itemCount: visibleProjects.length,
+                                    onPageChanged: (index) {
+                                      setState(() {
+                                        _carouselIndex = index;
+                                      });
+
+                                      final rawId =
+                                          visibleProjects[index]['project_id'];
+                                      final projectId = rawId is int
+                                          ? rawId
+                                          : int.tryParse(rawId.toString());
+                                      if (projectId != null &&
+                                          widget.enableSelection) {
+                                        _selectProject(projectId);
+                                      }
+                                    },
+                                    itemBuilder: (context, index) {
+                                      return AnimatedBuilder(
+                                        animation: _carouselController,
+                                        child: buildProjectCard(
+                                          visibleProjects[index],
+                                          width: double.infinity,
+                                        ),
+                                        builder: (context, child) {
+                                          double page = _carouselIndex
+                                              .toDouble();
+                                          if (_carouselController.hasClients) {
+                                            page =
+                                                _carouselController.page ??
+                                                page;
+                                          }
+
+                                          final distance = (page - index)
+                                              .abs()
+                                              .clamp(0.0, 1.0);
+                                          final scale = 1.0 - (distance * 0.12);
+                                          final opacity =
+                                              1.0 - (distance * 0.2);
+                                          final verticalInset = distance * 2;
+
+                                          return Padding(
+                                            padding: EdgeInsets.symmetric(
+                                              horizontal: compact ? 4 : 6,
+                                              vertical: verticalInset,
+                                            ),
+                                            child: Align(
+                                              alignment: Alignment.topCenter,
+                                              child: Opacity(
+                                                opacity: opacity,
+                                                child: Transform.scale(
+                                                  scale: scale,
+                                                  alignment:
+                                                      Alignment.topCenter,
+                                                  child: child,
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      );
+                                    },
                                   ),
-                                );
-                              },
+                                  if (!isMobile)
+                                    Positioned.fill(
+                                      child: IgnorePointer(
+                                        ignoring: !_isCarouselHovered,
+                                        child: AnimatedOpacity(
+                                          duration: const Duration(
+                                            milliseconds: 160,
+                                          ),
+                                          opacity: _isCarouselHovered ? 1 : 0,
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 4,
+                                            ),
+                                            child: Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
+                                              children: [
+                                                _CarouselArrowButton(
+                                                  icon: Icons
+                                                      .chevron_left_rounded,
+                                                  enabled: _carouselIndex > 0,
+                                                  onPressed: () =>
+                                                      _goToCarouselPage(
+                                                        _carouselIndex - 1,
+                                                        visibleProjects.length,
+                                                      ),
+                                                ),
+                                                _CarouselArrowButton(
+                                                  icon: Icons
+                                                      .chevron_right_rounded,
+                                                  enabled:
+                                                      _carouselIndex <
+                                                      visibleProjects.length -
+                                                          1,
+                                                  onPressed: () =>
+                                                      _goToCarouselPage(
+                                                        _carouselIndex + 1,
+                                                        visibleProjects.length,
+                                                      ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
                           ),
                           if (showDots) const SizedBox(height: 8),
@@ -787,12 +920,14 @@ class _ActiveProjectState extends State<ActiveProject> {
                                 final isActive = index == _carouselIndex;
                                 return AnimatedContainer(
                                   duration: const Duration(milliseconds: 180),
-                                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                                  margin: const EdgeInsets.symmetric(
+                                    horizontal: 3,
+                                  ),
                                   width: isActive ? 16 : 6,
                                   height: 6,
                                   decoration: BoxDecoration(
                                     color: isActive
-                                      ? AppColors.accent
+                                        ? AppColors.accent
                                         : const Color(0xFFD1D5DB),
                                     borderRadius: BorderRadius.circular(999),
                                   ),
@@ -853,7 +988,7 @@ class _ActiveProjectState extends State<ActiveProject> {
                       physics: const ClampingScrollPhysics(),
                       child: projectsContent,
                     ),
-              ),
+                  ),
           )
         else
           projectsContent,
@@ -864,6 +999,43 @@ class _ActiveProjectState extends State<ActiveProject> {
 }
 
 enum _ProjectSortOrder { oldestToNewest, newestToOldest }
+
+class _CarouselArrowButton extends StatelessWidget {
+  const _CarouselArrowButton({
+    required this.icon,
+    required this.enabled,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Ink(
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          color: enabled ? const Color(0xE60C1935) : const Color(0x809CA3AF),
+          shape: BoxShape.circle,
+        ),
+        child: IconButton(
+          padding: EdgeInsets.zero,
+          visualDensity: VisualDensity.compact,
+          onPressed: enabled ? onPressed : null,
+          icon: Icon(icon, size: 20, color: Colors.white),
+          splashRadius: 18,
+          tooltip: icon == Icons.chevron_left_rounded
+              ? 'Previous project'
+              : 'Next project',
+        ),
+      ),
+    );
+  }
+}
 
 class _ProjectsHeader extends StatelessWidget {
   const _ProjectsHeader({
