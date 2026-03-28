@@ -79,11 +79,15 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
       final int projectId = widget.phase.projectId;
 
       final List<String> endpoints = [
-        if (parsedUserId != null && parsedUserId > 0)
-          'field-workers/?user_id=$parsedUserId&project_id=$projectId',
+        // Try to fetch by user_id first (regardless of project assignment)
         if (parsedUserId != null && parsedUserId > 0)
           'field-workers/?user_id=$parsedUserId',
-        'field-workers/?project_id=$projectId',
+        // Then try with project filter if available
+        if (parsedUserId != null && parsedUserId > 0 && projectId > 0)
+          'field-workers/?user_id=$parsedUserId&project_id=$projectId',
+        if (projectId > 0)
+          'field-workers/?project_id=$projectId',
+        // Fallback to all field workers
         'field-workers/',
       ];
 
