@@ -983,6 +983,10 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
         pm_user_id = _get_request_pm_user_id(self.request)
         project_id = self.request.query_params.get('project_id')
         supervisor_id = self.request.query_params.get('supervisor_id')
+        
+        # Special case: If 'include_other_projects' flag is set, show ALL workers for assignment
+        # This is used when assigning workers to subtasks across projects
+        include_other_projects = self.request.query_params.get('include_other_projects')
 
         # Supervisor accessing field workers: return workers from their projects
         if supervisor_id:
@@ -1005,12 +1009,32 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
                 return models.FieldWorker.objects.filter(project_id=project_id)
             return models.FieldWorker.objects.none()
 
+        # If include_other_projects is requested, return ALL workers accessible to this PM
+        # (from any of their projects or directly assigned)
+        if include_other_projects:
+            queryset = models.FieldWorker.objects.filter(
+                Q(user_id=pm_user_id) | Q(project_id__user_id=pm_user_id)
+            ).distinct()
+            return queryset
+
+        # Default behavior: filter by project if specified
         queryset = models.FieldWorker.objects.filter(
             Q(user_id=pm_user_id) | Q(project_id__user_id=pm_user_id)
         ).distinct()
         if project_id:
             queryset = queryset.filter(project_id=project_id)
         return queryset
+
+    def get_serializer_context(self):
+        """Pass current_project_id context to serializer for assignment status calculation"""
+        context = super().get_serializer_context()
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            try:
+                context['current_project_id'] = int(project_id)
+            except (TypeError, ValueError):
+                pass
+        return context
 
     def perform_create(self, serializer):
         # If user_id wasn't provided, attach the PM based on request user_id.

@@ -473,6 +473,8 @@ class SupervisorSerializer(serializers.ModelSerializer):
 
 
 class FieldWorkerSerializer(serializers.ModelSerializer):
+    assignment_status = serializers.SerializerMethodField()
+    
     class Meta:
         model = models.FieldWorker
         fields = [
@@ -508,6 +510,7 @@ class FieldWorkerSerializer(serializers.ModelSerializer):
             'total_weekly_deduction',
             'net_weekly_pay',
             'photo',
+            'assignment_status',
             'created_at',
         ]
         extra_kwargs = {
@@ -535,6 +538,34 @@ class FieldWorkerSerializer(serializers.ModelSerializer):
             'pagibig_weekly_topup': {'required': False, 'allow_null': True},
             'photo': {'required': False, 'allow_null': True},
         }
+
+    def get_assignment_status(self, obj):
+        """
+        Determine if a field worker is 'Available' or 'Assigned' to another project.
+        
+        When viewing field workers for a specific project context:
+        - If the worker is assigned to a subtask in ANY OTHER project -> 'Assigned'
+        - Otherwise -> 'Available'
+        """
+        # Get the current project context from serializer context
+        current_project_id = self.context.get('current_project_id')
+        
+        if current_project_id is None:
+            # If no project context, always return 'Available'
+            return 'Available'
+        
+        # Check if this worker is assigned to ANY subtask in OTHER projects
+        from django.db.models import Q
+        other_project_assignments = models.SubtaskFieldWorker.objects.filter(
+            field_worker_id=obj.fieldworker_id
+        ).filter(
+            Q(subtask__phase__project_id__isnull=True) |  # Subtasks without a project
+            ~Q(subtask__phase__project_id=current_project_id)  # OR subtasks in other projects
+        ).exists()
+        
+        if other_project_assignments:
+            return 'Assigned'
+        return 'Available'
 
     def validate(self, attrs):
         cash_advance_balance = _to_decimal(

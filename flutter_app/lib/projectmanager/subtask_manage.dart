@@ -326,28 +326,19 @@ class _SubtaskTile extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          ElevatedButton.icon(
+          IconButton(
             onPressed: () {
               showDialog(
                 context: context,
                 builder: (context) => ViewWorkForceModal(subtask: subtask),
               );
             },
-            icon: const Icon(Icons.groups_outlined, size: 16),
-            label: const Text('View Work Force'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: const Color(0xFF0C1935),
-              elevation: 0,
-              side: const BorderSide(color: Color(0xFFE5E7EB), width: 1),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(6),
-              ),
-            ),
+            icon: const Icon(Icons.groups_outlined),
+            tooltip: 'View Work Force',
+            color: const Color(0xFF0C1935),
           ),
-          const SizedBox(width: 8),
-          ElevatedButton.icon(
+          const SizedBox(width: 4),
+          IconButton(
             onPressed: () {
               showDialog(
                 context: context,
@@ -355,18 +346,9 @@ class _SubtaskTile extends StatelessWidget {
                     ManageWorkersModal(subtask: subtask, phase: phase),
               );
             },
-            icon: const Icon(Icons.person_add_outlined, size: 16),
-            label: const Text('Manage workers'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.transparent,
-              foregroundColor: const Color(0xFFFF7A18),
-              elevation: 0,
-              side: const BorderSide(color: Color(0xFFFF7A18), width: 1),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(6),
-              ),
-            ),
+            icon: const Icon(Icons.person_add_outlined),
+            tooltip: 'Manage workers',
+            color: const Color(0xFFFF7A18),
           ),
         ],
       ),

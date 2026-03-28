@@ -78,67 +78,37 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
           : null;
       final int projectId = widget.phase.projectId;
 
-      final List<String> endpoints = [
-        // Try to fetch by user_id first (regardless of project assignment)
-        if (parsedUserId != null && parsedUserId > 0)
-          'field-workers/?user_id=$parsedUserId',
-        // Then try with project filter if available
-        if (parsedUserId != null && parsedUserId > 0 && projectId > 0)
-          'field-workers/?user_id=$parsedUserId&project_id=$projectId',
-        if (projectId > 0)
-          'field-workers/?project_id=$projectId',
-        // Fallback to all field workers
-        'field-workers/',
-      ];
+      // Fetch all field workers accessible to this user, including from other projects
+      // The assignment_status will be computed by the backend based on current project context
+      final endpoint = 'field-workers/?include_other_projects=true&project_id=$projectId';
 
-      http.Response? response;
-      List<dynamic> data = const [];
+      print('🔍 Fetching field workers from: $endpoint');
+      
       final headers = <String, String>{
         if (parsedUserId != null && parsedUserId > 0)
           'X-User-Id': parsedUserId.toString(),
       };
 
-      for (final endpoint in endpoints) {
-        print('🔍 Fetching field workers from: $endpoint');
-        final candidate = await http.get(
-          AppConfig.apiUri(endpoint),
-          headers: headers,
-        );
-        print('✅ Response status: ${candidate.statusCode}');
-        print('✅ Response body: ${candidate.body}');
+      final response = await http.get(
+        AppConfig.apiUri(endpoint),
+        headers: headers,
+      );
+      
+      print('✅ Response status: ${response.statusCode}');
+      print('✅ Response body: ${response.body}');
 
-        if (candidate.statusCode != 200) {
-          response = candidate;
-          continue;
-        }
-
-        final decoded = jsonDecode(candidate.body);
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
         final parsed = decoded is List
             ? decoded
             : (decoded is Map<String, dynamic> && decoded['results'] is List
                   ? decoded['results'] as List<dynamic>
                   : <dynamic>[]);
 
-        response = candidate;
-        data = parsed;
-        if (data.isNotEmpty) {
-          break;
-        }
-      }
-
-      if (response == null) {
-        setState(() {
-          _error = 'Failed to load field workers';
-          _isLoading = false;
-        });
-        return;
-      }
-
-      if (response.statusCode == 200) {
-        print('📊 Field workers fetched: ${data.length}');
+        print('📊 Field workers fetched: ${parsed.length}');
 
         setState(() {
-          _availableWorkers = data
+          _availableWorkers = parsed
               .map((json) {
                 final rawId = json['fieldworker_id'] ?? json['id'];
                 final workerId = rawId is int
@@ -149,7 +119,7 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
                   workerId: workerId,
                   name: '${json['first_name']} ${json['last_name']}',
                   role: json['role'] ?? 'Field Worker',
-                  status: 'active',
+                  status: json['assignment_status'] ?? 'Available', // Use backend-computed status
                 );
               })
               .where((worker) => worker.workerId > 0)
@@ -591,6 +561,9 @@ class _WorkerChecklistItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Determine if worker is assigned to other project's subtasks
+    final isAssignedToOtherProject = worker.status == 'Assigned';
+    
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
@@ -637,15 +610,15 @@ class _WorkerChecklistItem extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFFE5F8ED),
+                color: isAssignedToOtherProject ? const Color(0xFFFEE2E2) : const Color(0xFFE5F8ED),
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: const Text(
-                'Active',
+              child: Text(
+                isAssignedToOtherProject ? 'Assigned' : 'Available',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF10B981),
+                  color: isAssignedToOtherProject ? const Color(0xFFDC2626) : const Color(0xFF10B981),
                 ),
               ),
             ),
