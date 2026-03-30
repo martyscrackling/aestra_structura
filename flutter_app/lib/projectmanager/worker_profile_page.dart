@@ -14,6 +14,8 @@ class WorkerProject {
   final String endDate;
   final double progress;
   final String status;
+  final String? phaseName;
+  final String? subtaskTitle;
 
   WorkerProject({
     required this.projectName,
@@ -22,6 +24,8 @@ class WorkerProject {
     required this.endDate,
     required this.progress,
     required this.status,
+    this.phaseName,
+    this.subtaskTitle,
   });
 }
 
@@ -229,39 +233,63 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
         }).toList();
       } else if (worker.type == 'Field Worker' &&
           worker.fieldWorkerId != null) {
-        // Best-effort: if backend supports projects-by-field-worker, use it.
+        // Use the new active-projects endpoint to get active subtask assignments
         final id = worker.fieldWorkerId!;
-        final queryKeys = ['field_worker_id', 'fieldworker_id', 'field_worker'];
-
-        for (final key in queryKeys) {
-          final uri = (currentUserId != null && currentUserId > 0)
-              ? AppConfig.apiUri('projects/?$key=$id&user_id=$currentUserId')
-              : AppConfig.apiUri('projects/?$key=$id');
+        try {
+          final uri = AppConfig.apiUri('field-workers/$id/active-projects/');
+          print('🔍 Fetching active projects from: $uri');
           final response = await http.get(uri);
-          if (response.statusCode != 200) continue;
-          final decoded = jsonDecode(response.body);
-          if (decoded is! List) continue;
-          projects = decoded
-              .whereType<Map>()
-              .map((e) => Map<String, dynamic>.from(e))
-              .toList();
-          break;
-        }
-
-        // Fallback: infer project membership via field-workers/?project_id.
-        if (projects.isEmpty) {
-          final allProjects = await _fetchProjectsList(userId: currentUserId);
-          final matched = <Map<String, dynamic>>[];
-          for (final project in allProjects) {
-            final projectId = _tryParseInt(project['project_id']);
-            if (projectId == null || projectId <= 0) continue;
-            final hasWorker = await _projectHasFieldWorker(
-              projectId: projectId,
-              fieldWorkerId: id,
-            );
-            if (hasWorker) matched.add(project);
+          print('📊 Response status: ${response.statusCode}');
+          print('📝 Response body: ${response.body}');
+          
+          if (response.statusCode == 200) {
+            final decoded = jsonDecode(response.body);
+            print('🔍 Decoded response type: ${decoded.runtimeType}');
+            print('📦 Decoded response length: ${decoded is List ? decoded.length : 'not a list'}');
+            
+            if (decoded is List) {
+              print('✓ Response is a list with ${decoded.length} items');
+              // Convert subtask assignments to project format for display
+              for (final assignment in decoded) {
+                if (assignment is Map) {
+                  final projectData = assignment['project'] ?? {};
+                  final phaseData = assignment['phase'] ?? {};
+                  final subtaskData = assignment['subtask'] ?? {};
+                  
+                  print('  📍 Processing: ${projectData['project_name']} > ${phaseData['phase_name']} > ${subtaskData['title']}');
+                  
+                  // Create a project entry with subtask/phase info
+                  final projectEntry = {
+                    'project_id': projectData['project_id'],
+                    'project_name': projectData['project_name'],
+                    'status': projectData['status'],
+                    'phase_name': phaseData['phase_name'],
+                    'subtask_title': subtaskData['title'],
+                    'subtask_status': subtaskData['status'],
+                    'start_date': projectData['start_date'],
+                    'end_date': projectData['end_date'],
+                    'street': projectData['street'],
+                    'barangay': projectData['barangay'],
+                    'barangay_name': projectData['barangay_name'],
+                    'city': projectData['city'],
+                    'city_name': projectData['city_name'],
+                    'province': projectData['province'],
+                    'province_name': projectData['province_name'],
+                  };
+                  projects.add(projectEntry);
+                }
+              }
+              print('✅ Converted to ${projects.length} project entries');
+            } else {
+              print('❌ Response is not a list: $decoded');
+            }
+          } else {
+            print('❌ Request failed with status ${response.statusCode}');
           }
-          projects = matched;
+        } catch (e) {
+          print('❌ Exception: $e');
+          // Fallback if new endpoint not available
+          projects = [];
         }
       } else {
         projects = [];
@@ -286,6 +314,10 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
             (project['project_name'] as String?) ??
             (project['title'] as String?) ??
             'Unknown';
+        
+        // For field worker subtask assignments
+        final phaseName = (project['phase_name'] as String?) ?? '';
+        final subtaskTitle = (project['subtask_title'] as String?) ?? '';
 
         final item = WorkerProject(
           projectName: name,
@@ -294,6 +326,8 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
           endDate: endDate,
           progress: progress,
           status: status,
+          phaseName: phaseName.isNotEmpty ? phaseName : null,
+          subtaskTitle: subtaskTitle.isNotEmpty ? subtaskTitle : null,
         );
 
         final isFinished =
@@ -377,6 +411,29 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
                   ],
                 ),
                 SizedBox(height: isMobile ? 16 : 24),
+                
+                // DEBUG: Show worker details
+                // Container(
+                //   padding: const EdgeInsets.all(12),
+                //   decoration: BoxDecoration(
+                //     color: const Color(0xFFF0F4F8),
+                //     borderRadius: BorderRadius.circular(8),
+                //     border: Border.all(color: const Color(0xFFD0D5DD)),
+                //   ),
+                //   child: Column(
+                //     crossAxisAlignment: CrossAxisAlignment.start,
+                //     children: [
+                //       const Text('DEBUG INFO:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                //       Text('Worker Type: ${widget.worker.type}', style: const TextStyle(fontSize: 11)),
+                //       Text('Supervisor ID: ${widget.worker.supervisorId ?? 'N/A'}', style: const TextStyle(fontSize: 11)),
+                //       Text('Field Worker ID: ${widget.worker.fieldWorkerId ?? 'N/A'}', style: const TextStyle(fontSize: 11)),
+                //       Text('Active Projects: ${_activeProjects.length}', style: const TextStyle(fontSize: 11)),
+                //       Text('Finished Projects: ${_finishedProjects.length}', style: const TextStyle(fontSize: 11)),
+                //       if (_error != null) Text('Error: $_error', style: const TextStyle(fontSize: 11, color: Colors.red)),
+                //     ],
+                //   ),
+                // ),
+                // SizedBox(height: isMobile ? 16 : 24),
 
                 // Worker Profile Card
                 Container(
@@ -774,6 +831,53 @@ class _ProjectCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 8),
+                    // Show phase and subtask if available (Field Worker assignments)
+                    if (project.phaseName != null && project.phaseName!.isNotEmpty) ...[
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.layers_outlined,
+                            size: 14,
+                            color: Color(0xFF6B7280),
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              project.phaseName!,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF6B7280),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                    ],
+                    if (project.subtaskTitle != null && project.subtaskTitle!.isNotEmpty) ...[
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.check_circle_outline,
+                            size: 14,
+                            color: Color(0xFF6B7280),
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              project.subtaskTitle!,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF0C1935),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                    ],
                     Row(
                       children: [
                         const Icon(
@@ -846,6 +950,52 @@ class _ProjectCard extends StatelessWidget {
                             ],
                           ),
                           const SizedBox(height: 6),
+                          // Show phase if available (Field Worker assignments)
+                          if (project.phaseName != null && project.phaseName!.isNotEmpty) ...[
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.layers_outlined,
+                                  size: 16,
+                                  color: Color(0xFF6B7280),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  project.phaseName!,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Color(0xFF6B7280),
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                          ],
+                          // Show subtask if available
+                          if (project.subtaskTitle != null && project.subtaskTitle!.isNotEmpty) ...[
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.check_circle_outline,
+                                  size: 16,
+                                  color: Color(0xFF6B7280),
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    project.subtaskTitle!,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      color: Color(0xFF0C1935),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                          ],
                           Row(
                             children: [
                               const Icon(

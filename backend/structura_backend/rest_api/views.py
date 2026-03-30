@@ -1111,6 +1111,180 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
+    @action(detail=True, methods=['get'], url_path='debug-assignments')
+    def debug_assignments(self, request, pk=None):
+        """Debug endpoint to show all assignments for a field worker."""
+        try:
+            field_worker = self.get_object()
+            
+            # Check subtask assignments
+            subtask_count = models.SubtaskFieldWorker.objects.filter(
+                field_worker_id=field_worker.fieldworker_id
+            ).count()
+            
+            # Check direct project
+            has_direct_project = field_worker.project_id is not None
+            direct_project_name = field_worker.project_id.project_name if has_direct_project else None
+            
+            # Get all phases if has direct project
+            phase_count = 0
+            if has_direct_project:
+                phase_count = models.Phase.objects.filter(
+                    project_id=field_worker.project_id.project_id
+                ).count()
+            
+            return Response({
+                'field_worker_id': field_worker.fieldworker_id,
+                'name': f"{field_worker.first_name} {field_worker.last_name}",
+                'subtask_assignments': subtask_count,
+                'has_direct_project': has_direct_project,
+                'direct_project': direct_project_name,
+                'phases_in_project': phase_count,
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=True, methods=['get'], url_path='active-projects')
+    def active_projects(self, request, pk=None):
+        """Get active subtask assignments with their phase and project details."""
+        try:
+            print(f"\n{'='*80}")
+            print(f"🔍 active_projects endpoint called with pk={pk}")
+            print(f"   Request path: {request.path}")
+            print(f"   Request user: {request.user}")
+            
+            # Try to bypass permission filters and get directly from all field workers
+            try:
+                field_worker = models.FieldWorker.objects.get(fieldworker_id=int(pk))
+                print(f"✓ Found field worker: {field_worker.first_name} {field_worker.last_name} (ID: {field_worker.fieldworker_id})")
+            except models.FieldWorker.DoesNotExist:
+                print(f"❌ FieldWorker with id={pk} does not exist in database")
+                return Response(
+                    {'error': f'Field worker {pk} not found in database'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            except (ValueError, TypeError) as e:
+                print(f"❌ Invalid pk type: {e}")
+                return Response(
+                    {'error': f'Invalid field worker ID: {pk}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            print(f"   Direct project assignment: {field_worker.project_id}")
+            
+            assignments_data = []
+            
+            # Method 1: Subtask assignments
+            subtask_assignments = models.SubtaskFieldWorker.objects.filter(
+                field_worker_id=field_worker.fieldworker_id
+            ).select_related(
+                'subtask__phase__project',
+                'subtask__phase__project__region',
+                'subtask__phase__project__province',
+                'subtask__phase__project__city',
+                'subtask__phase__project__barangay',
+            )
+            
+            print(f"📊 Subtask assignments: {subtask_assignments.count()}")
+            for i, assignment in enumerate(subtask_assignments, 1):
+                try:
+                    subtask = assignment.subtask
+                    phase = subtask.phase
+                    project = phase.project
+                    
+                    assignment_info = {
+                        'assignment_id': assignment.assignment_id,
+                        'assigned_at': assignment.assigned_at.isoformat(),
+                        'assignment_type': 'subtask',
+                        'subtask': {
+                            'subtask_id': subtask.subtask_id,
+                            'title': subtask.title,
+                            'status': subtask.status,
+                        },
+                        'phase': {
+                            'phase_id': phase.phase_id,
+                            'phase_name': phase.phase_name,
+                            'status': phase.status,
+                        },
+                        'project': {
+                            'project_id': project.project_id,
+                            'project_name': project.project_name,
+                            'status': project.status,
+                            'start_date': project.start_date.isoformat() if project.start_date else None,
+                            'end_date': project.end_date.isoformat() if project.end_date else None,
+                            'street': project.street,
+                            'barangay_name': project.barangay.name if project.barangay else None,
+                            'city_name': project.city.name if project.city else None,
+                            'province_name': project.province.name if project.province else None,
+                        }
+                    }
+                    assignments_data.append(assignment_info)
+                    print(f"  #{i} ✓ Subtask: {project.project_name} > {phase.phase_name} > {subtask.title}")
+                except Exception as e:
+                    print(f"  #{i} ❌ Error: {e}")
+            
+            # Method 2: Direct project assignment (if no subtask assignments, show direct project)
+            if len(assignments_data) == 0 and field_worker.project_id:
+                print(f"⚠️  No subtask assignments, checking direct project assignment...")
+                try:
+                    project = field_worker.project_id
+                    
+                    # Get all phases for this project
+                    phases = models.Phase.objects.filter(project_id=project.project_id)
+                    print(f"   Project has {phases.count()} phases")
+                    
+                    for phase in phases:
+                        assignment_info = {
+                            'assignment_id': None,
+                            'assigned_at': str(field_worker.created_at.isoformat() if field_worker.created_at else None),
+                            'assignment_type': 'project',
+                            'subtask': {
+                                'subtask_id': None,
+                                'title': 'Assigned to Project',
+                                'status': 'assigned',
+                            },
+                            'phase': {
+                                'phase_id': phase.phase_id,
+                                'phase_name': phase.phase_name,
+                                'status': phase.status,
+                            },
+                            'project': {
+                                'project_id': project.project_id,
+                                'project_name': project.project_name,
+                                'status': project.status,
+                                'start_date': project.start_date.isoformat() if project.start_date else None,
+                                'end_date': project.end_date.isoformat() if project.end_date else None,
+                                'street': project.street,
+                                'barangay_name': project.barangay.name if project.barangay else None,
+                                'city_name': project.city.name if project.city else None,
+                                'province_name': project.province.name if project.province else None,
+                            }
+                        }
+                        assignments_data.append(assignment_info)
+                        print(f"  ✓ Direct: {project.project_name} > {phase.phase_name}")
+                except Exception as e:
+                    print(f"  ❌ Error getting direct project: {e}")
+            
+            print(f"✅ Returning {len(assignments_data)} total assignments")
+            print(f"{'='*80}\n")
+            
+            return Response(assignments_data, status=status.HTTP_200_OK)
+            
+        except models.FieldWorker.DoesNotExist:
+            print(f"❌ Field worker not found: {pk}")
+            return Response(
+                {'error': f'Field worker {pk} not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            print(f"❌ Unexpected error: {e}")
+            import traceback
+            traceback.print_exc()
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 
 # Client ViewSet
 class ClientViewSet(viewsets.ModelViewSet):
