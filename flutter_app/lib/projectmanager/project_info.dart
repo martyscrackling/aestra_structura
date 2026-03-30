@@ -573,6 +573,13 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: () {},
+                      icon: const Icon(Icons.settings, size: 20),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
                   ],
                 ),
               ],
@@ -649,6 +656,13 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                       IconButton(
                         onPressed: () {},
                         icon: const Icon(Icons.edit, size: 20),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        onPressed: () {},
+                        icon: const Icon(Icons.settings, size: 20),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
                       ),
