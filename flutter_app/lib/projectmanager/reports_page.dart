@@ -295,16 +295,6 @@ class _ReportsPageState extends State<ReportsPage> {
     );
   }
 
-  // Submit the current report to PM (demo)
-  void _submitToPM() {
-    setState(() {
-      _rows = List<AttendanceReport>.from(_rows);
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Submitted successfully (demo)')),
-    );
-  }
-
   double get _totalDeductions =>
       _rows.fold(0.0, (t, r) => t + r.deduction + r.cashAdvance);
   double get _totalComputedSalary =>
@@ -550,32 +540,16 @@ class _ReportsPageState extends State<ReportsPage> {
                         style: TextStyle(color: Colors.grey[700], fontSize: 12),
                       ),
                       const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: _submitToPM,
-                              icon: const Icon(Icons.send, color: Colors.white, size: 18),
-                              label: const Text(
-                                'Submit',
-                                style: TextStyle(color: Colors.white),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: accent,
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                              ),
-                            ),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: IconButton(
+                          onPressed: () {},
+                          icon: const Icon(
+                            Icons.download_rounded,
+                            color: Color(0xFF0C1935),
                           ),
-                          const SizedBox(width: 8),
-                          IconButton(
-                            onPressed: () {},
-                            icon: const Icon(
-                              Icons.download_rounded,
-                              color: Color(0xFF0C1935),
-                            ),
-                            tooltip: 'Export CSV',
-                          ),
-                        ],
+                          tooltip: 'Export CSV',
+                        ),
                       ),
                     ],
                   ),
@@ -609,18 +583,6 @@ class _ReportsPageState extends State<ReportsPage> {
                           color: Color(0xFF0C1935),
                         ),
                         tooltip: 'Export CSV',
-                      ),
-                      const SizedBox(width: 6),
-                      ElevatedButton.icon(
-                        onPressed: _submitToPM,
-                        icon: const Icon(Icons.send, color: Colors.white),
-                        label: const Text(
-                          'Submit',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: accent,
-                        ),
                       ),
                     ],
                   ),

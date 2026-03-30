@@ -474,6 +474,7 @@ class SupervisorSerializer(serializers.ModelSerializer):
 
 class FieldWorkerSerializer(serializers.ModelSerializer):
     assignment_status = serializers.SerializerMethodField()
+    assigned_projects = serializers.SerializerMethodField()
     
     class Meta:
         model = models.FieldWorker
@@ -511,6 +512,7 @@ class FieldWorkerSerializer(serializers.ModelSerializer):
             'net_weekly_pay',
             'photo',
             'assignment_status',
+            'assigned_projects',
             'created_at',
         ]
         extra_kwargs = {
@@ -566,6 +568,27 @@ class FieldWorkerSerializer(serializers.ModelSerializer):
         if other_project_assignments:
             return 'Assigned'
         return 'Available'
+
+    def get_assigned_projects(self, obj):
+        project_map = {}
+
+        if obj.project_id is not None:
+            project_map[obj.project_id.project_id] = obj.project_id.project_name
+
+        assigned = (
+            models.SubtaskFieldWorker.objects
+            .filter(field_worker_id=obj.fieldworker_id)
+            .select_related('subtask__phase__project')
+        )
+        for row in assigned:
+            project = getattr(getattr(row.subtask, 'phase', None), 'project', None)
+            if project is not None:
+                project_map[project.project_id] = project.project_name
+
+        return [
+            {'project_id': pid, 'project_name': pname}
+            for pid, pname in sorted(project_map.items(), key=lambda item: item[1].lower())
+        ]
 
     def validate(self, attrs):
         cash_advance_balance = _to_decimal(

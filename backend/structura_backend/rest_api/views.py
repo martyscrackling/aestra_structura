@@ -999,9 +999,15 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
                 .filter(supervisor_id=sv.supervisor_id)
                 .values_list('project_id', flat=True)
             )
-            queryset = models.FieldWorker.objects.filter(project_id__in=sv_project_ids)
+            queryset = models.FieldWorker.objects.filter(
+                Q(project_id__in=sv_project_ids)
+                | Q(subtask_assignments__subtask__phase__project_id__in=sv_project_ids)
+            )
             if project_id:
-                queryset = queryset.filter(project_id=project_id)
+                queryset = queryset.filter(
+                    Q(project_id=project_id)
+                    | Q(subtask_assignments__subtask__phase__project_id=project_id)
+                )
             return queryset.distinct()
 
         if pm_user_id is None:

@@ -41,29 +41,30 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
       final currentUser = authService.currentUser ?? <String, dynamic>{};
       final userId = _toInt(currentUser['user_id']);
       final projectId = _toInt(currentUser['project_id']);
-      final typeOrRole =
-        (currentUser['type'] ?? currentUser['role'] ?? '')
+      final typeOrRole = (currentUser['type'] ?? currentUser['role'] ?? '')
           .toString()
           .trim()
           .toLowerCase();
 
       // Some sessions only keep `user_id` for supervisors. Fall back to it.
       final supervisorId =
-        _toInt(currentUser['supervisor_id']) ??
-        ((typeOrRole == 'supervisor') ? userId : null);
+          _toInt(currentUser['supervisor_id']) ??
+          ((typeOrRole == 'supervisor') ? userId : null);
 
       await _fetchProjects(supervisorId: supervisorId, userId: userId);
 
       print('=== Fetching Field Workers ===');
       print('Scope: all projects | filter: active workers');
       print('Current user payload: $currentUser');
-      print('Resolved supervisorId: $supervisorId, projectId: $projectId, userId: $userId');
+      print(
+        'Resolved supervisorId: $supervisorId, projectId: $projectId, userId: $userId',
+      );
 
       final url = supervisorId != null
-        ? AppConfig.apiUri('field-workers/?supervisor_id=$supervisorId')
-        : (projectId != null
-          ? AppConfig.apiUri('field-workers/?project_id=$projectId')
-          : AppConfig.apiUri('field-workers/'));
+          ? AppConfig.apiUri('field-workers/?supervisor_id=$supervisorId')
+          : (projectId != null
+                ? AppConfig.apiUri('field-workers/?project_id=$projectId')
+                : AppConfig.apiUri('field-workers/'));
       print('📡 API URL: $url');
 
       final response = await http.get(url);
@@ -75,7 +76,9 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
         final decoded = jsonDecode(response.body);
         final workers = _extractWorkers(decoded);
         final activeWorkers = workers.where(_isWorkerActive).toList();
-        print('✅ Found ${workers.length} workers (${activeWorkers.length} active)');
+        print(
+          '✅ Found ${workers.length} workers (${activeWorkers.length} active)',
+        );
 
         // Some backends restrict supervisors to project-scoped data even when no
         // query param is provided. Fallback prevents empty table in that case.
@@ -90,7 +93,9 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
           if (fallbackResponse.statusCode == 200) {
             final fallbackDecoded = jsonDecode(fallbackResponse.body);
             final fallbackWorkers = _extractWorkers(fallbackDecoded);
-            final fallbackActive = fallbackWorkers.where(_isWorkerActive).toList();
+            final fallbackActive = fallbackWorkers
+                .where(_isWorkerActive)
+                .toList();
             print(
               '✅ Fallback workers: ${fallbackWorkers.length} (${fallbackActive.length} active)',
             );
@@ -156,13 +161,19 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
 
   List<Map<String, dynamic>> _extractWorkers(dynamic decoded) {
     if (decoded is List) {
-      return decoded.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+      return decoded
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
     }
 
     if (decoded is Map<String, dynamic>) {
       final results = decoded['results'];
       if (results is List) {
-        return results.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+        return results
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
       }
     }
 
@@ -192,12 +203,7 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
     }
 
     if (status.isNotEmpty) {
-      const inactiveValues = {
-        'inactive',
-        'disabled',
-        'terminated',
-        'archived',
-      };
+      const inactiveValues = {'inactive', 'disabled', 'terminated', 'archived'};
       return !inactiveValues.contains(status);
     }
 
@@ -245,14 +251,14 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
   ];
   final List<String> sortOptions = ['Name A-Z', 'Name Z-A', 'Recently Hired'];
 
-  List<String> _getProjectFilterOptions(
-    List<Map<String, dynamic>> allWorkers,
-  ) {
+  List<String> _getProjectFilterOptions(List<Map<String, dynamic>> allWorkers) {
     final projects = <String>{'All Projects'};
     for (final worker in allWorkers) {
-      final name = _getProjectName(worker);
-      if (name.trim().isNotEmpty) {
-        projects.add(name);
+      final names = _getWorkerProjectNames(worker);
+      for (final name in names) {
+        if (name.trim().isNotEmpty) {
+          projects.add(name);
+        }
       }
     }
 
@@ -272,19 +278,19 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
       final fullName = '${worker['first_name']} ${worker['last_name']}'
           .toLowerCase();
       final role = (worker['role'] ?? '').toString().toLowerCase();
-      final projectName = _getProjectName(worker).toLowerCase();
+      final projectNames = _getWorkerProjectNames(worker);
+      final projectSearchText = projectNames.join(' ').toLowerCase();
       final query = searchQuery.toLowerCase();
       final matchesSearch =
           fullName.contains(query) ||
           role.contains(query) ||
-          projectName.contains(query);
+          projectSearchText.contains(query);
       final matchesRole =
           selectedRole == 'All' || worker['role'] == selectedRole;
-        final workerProjectName = _getProjectName(worker);
-        final matchesProject =
+      final matchesProject =
           selectedProject == 'All Projects' ||
-          workerProjectName == selectedProject;
-        return matchesSearch && matchesRole && matchesProject;
+          projectNames.contains(selectedProject);
+      return matchesSearch && matchesRole && matchesProject;
     }).toList();
 
     if (sortBy == 'Name A-Z') {
@@ -406,31 +412,65 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
     return 'Not set';
   }
 
-  String _getProjectName(Map<String, dynamic> worker) {
+  List<String> _getWorkerProjectNames(Map<String, dynamic> worker) {
+    final names = <String>{};
+
+    final assignedProjects = worker['assigned_projects'];
+    if (assignedProjects is List) {
+      for (final project in assignedProjects) {
+        if (project is Map) {
+          final map = Map<String, dynamic>.from(project);
+          final name = (map['project_name'] ?? map['name'] ?? '')
+              .toString()
+              .trim();
+          if (name.isNotEmpty) {
+            names.add(name);
+          }
+          final id = _toInt(map['project_id'] ?? map['id']);
+          if (id != null && _projectNamesById.containsKey(id)) {
+            names.add(_projectNamesById[id]!);
+          }
+        }
+      }
+    }
+
     final directProjectName = worker['project_name'];
-    if (directProjectName != null && directProjectName.toString().trim().isNotEmpty) {
-      return directProjectName.toString();
+    if (directProjectName != null &&
+        directProjectName.toString().trim().isNotEmpty) {
+      names.add(directProjectName.toString().trim());
     }
 
     final directProjectId = _toInt(worker['project_id']);
-    if (directProjectId != null && _projectNamesById.containsKey(directProjectId)) {
-      return _projectNamesById[directProjectId]!;
+    if (directProjectId != null &&
+        _projectNamesById.containsKey(directProjectId)) {
+      names.add(_projectNamesById[directProjectId]!);
     }
 
     final project = worker['project'];
     if (project is Map<String, dynamic>) {
       final nestedId = _toInt(project['project_id'] ?? project['id']);
       if (nestedId != null && _projectNamesById.containsKey(nestedId)) {
-        return _projectNamesById[nestedId]!;
+        names.add(_projectNamesById[nestedId]!);
       }
 
       final nestedName = project['name'] ?? project['project_name'];
       if (nestedName != null && nestedName.toString().trim().isNotEmpty) {
-        return nestedName.toString();
+        names.add(nestedName.toString().trim());
       }
     }
 
-    return 'Unassigned';
+    if (names.isEmpty) {
+      return const ['Unassigned'];
+    }
+    final sorted = names.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return sorted;
+  }
+
+  String _getProjectName(Map<String, dynamic> worker) {
+    final names = _getWorkerProjectNames(worker);
+    if (names.isEmpty) return 'Unassigned';
+    return names.join(', ');
   }
 
   Color _roleColor(String role) {
@@ -478,7 +518,9 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
           worker['pagibig_weekly_min'],
         );
         final weeklySalary = _formatCurrency(worker['weekly_salary']);
-        final totalWeeklyDeduction = _formatCurrency(worker['total_weekly_deduction']);
+        final totalWeeklyDeduction = _formatCurrency(
+          worker['total_weekly_deduction'],
+        );
         final netWeeklyPay = _formatCurrency(worker['net_weekly_pay']);
         final fieldWorkerId = (worker['fieldworker_id'] as num?)?.toInt();
 
@@ -538,15 +580,13 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                             height: 110,
                             decoration: BoxDecoration(
                               color: Colors.white,
-                              border: Border.all(color: const Color(0xFFE5E7EB)),
+                              border: Border.all(
+                                color: const Color(0xFFE5E7EB),
+                              ),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: workerPhotoUrl == null
-                                ? Icon(
-                                    Icons.person,
-                                    size: 56,
-                                    color: roleColor,
-                                  )
+                                ? Icon(Icons.person, size: 56, color: roleColor)
                                 : ClipRRect(
                                     borderRadius: BorderRadius.circular(20),
                                     child: Image.network(
@@ -579,7 +619,9 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                             ),
                             decoration: BoxDecoration(
                               color: Colors.white,
-                              border: Border.all(color: const Color(0xFFE5E7EB)),
+                              border: Border.all(
+                                color: const Color(0xFFE5E7EB),
+                              ),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
@@ -611,8 +653,14 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                     _buildDetailRow("Phone", phoneNumber),
                     _buildDetailRow("Birthdate", birthdate),
                     _buildDetailRow("SSS Deduction (Weekly)", sssDeduction),
-                    _buildDetailRow("PhilHealth Deduction (Weekly)", philhealthDeduction),
-                    _buildDetailRow("Pag-IBIG Deduction (Weekly)", pagibigDeduction),
+                    _buildDetailRow(
+                      "PhilHealth Deduction (Weekly)",
+                      philhealthDeduction,
+                    ),
+                    _buildDetailRow(
+                      "Pag-IBIG Deduction (Weekly)",
+                      pagibigDeduction,
+                    ),
                     const SizedBox(height: 12),
                     const Text(
                       "Work Details",
@@ -625,7 +673,10 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                     _buildDetailRow("Date Hired", dateHired),
                     _buildDetailRow("Payrate (Hourly)", payrate),
                     _buildDetailRow("Weekly Salary", weeklySalary),
-                    _buildDetailRow("Total Weekly Deduction", totalWeeklyDeduction),
+                    _buildDetailRow(
+                      "Total Weekly Deduction",
+                      totalWeeklyDeduction,
+                    ),
                     _buildDetailRow("Net Weekly Pay", netWeeklyPay),
                     _buildDetailRowWithStatus(
                       "Status",
@@ -1033,14 +1084,13 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                                                         ),
                                                   ),
                                                   child: DropdownButton<String>(
-                                                    value: projectOptions
-                                                            .contains(
-                                                              selectedProject,
-                                                            )
+                                                    value:
+                                                        projectOptions.contains(
+                                                          selectedProject,
+                                                        )
                                                         ? selectedProject
                                                         : 'All Projects',
-                                                    underline:
-                                                        const SizedBox(),
+                                                    underline: const SizedBox(),
                                                     isDense: true,
                                                     icon: const Icon(
                                                       Icons.apartment,
@@ -1224,14 +1274,13 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                                                         ),
                                                   ),
                                                   child: DropdownButton<String>(
-                                                    value: projectOptions
-                                                            .contains(
-                                                              selectedProject,
-                                                            )
+                                                    value:
+                                                        projectOptions.contains(
+                                                          selectedProject,
+                                                        )
                                                         ? selectedProject
                                                         : 'All Projects',
-                                                    underline:
-                                                        const SizedBox(),
+                                                    underline: const SizedBox(),
                                                     hint: const Text(
                                                       'Filter by project',
                                                     ),
@@ -1392,9 +1441,14 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
       borderRadius: BorderRadius.circular(12),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: AppSpacing.sm),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: AppSpacing.sm,
+        ),
         decoration: BoxDecoration(
-          color: isActive ? AppColors.accent.withOpacity(0.15) : Colors.transparent,
+          color: isActive
+              ? AppColors.accent.withOpacity(0.15)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -1516,7 +1570,9 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                               ),
                               decoration: BoxDecoration(
                                 color: Colors.white,
-                                border: Border.all(color: const Color(0xFFE5E7EB)),
+                                border: Border.all(
+                                  color: const Color(0xFFE5E7EB),
+                                ),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
@@ -1578,6 +1634,12 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                   _buildMobileDetailRow(
                     Icons.calendar_today,
                     _formatDate(worker['created_at']),
+                  ),
+                  const SizedBox(height: 6),
+                  _buildMobileDetailRow(
+                    Icons.apartment,
+                    _getProjectName(worker),
+                    maxLines: 2,
                   ),
                   const SizedBox(height: 10),
                   // Action button
@@ -1733,25 +1795,34 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                       // Project column
                       Expanded(
                         flex: isTablet ? 3 : 4,
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.apartment,
-                              size: isTablet ? 12 : 14,
-                              color: Colors.grey[500],
-                            ),
-                            SizedBox(width: isTablet ? 4 : 6),
-                            Expanded(
-                              child: Text(
-                                _getProjectName(worker),
-                                style: TextStyle(
-                                  color: Colors.grey[700],
-                                  fontSize: isTablet ? 11 : 13,
-                                ),
-                                overflow: TextOverflow.ellipsis,
+                        child: Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: _getWorkerProjectNames(worker).map((
+                            projectName,
+                          ) {
+                            return Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: isTablet ? 6 : 8,
+                                vertical: 4,
                               ),
-                            ),
-                          ],
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF4F8FC),
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(
+                                  color: const Color(0xFFDCE7F3),
+                                ),
+                              ),
+                              child: Text(
+                                projectName,
+                                style: TextStyle(
+                                  color: const Color(0xFF334155),
+                                  fontSize: isTablet ? 10 : 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            );
+                          }).toList(),
                         ),
                       ),
                       // Status column
