@@ -1128,6 +1128,19 @@ class ProjectOverviewCard extends StatelessWidget {
     );
   }
 
+  Color _getStatusColor(String status, {required bool isBackground}) {
+    final lowerStatus = status.toLowerCase();
+    if (lowerStatus == 'active') {
+      return isBackground ? const Color(0xFFE5F8ED) : const Color(0xFF10B981);
+    } else if (lowerStatus == 'on hold') {
+      return isBackground ? const Color(0xFFFFF2E8) : const Color(0xFFFF7A18);
+    } else if (lowerStatus == 'deactivated') {
+      return isBackground ? const Color(0xFFFEECEC) : const Color(0xFFDC2626);
+    }
+    // Default
+    return isBackground ? const Color(0xFFF3F4F6) : const Color(0xFF6B7280);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -1154,29 +1167,52 @@ class ProjectOverviewCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: data.progress >= 1
-                        ? const Color(0xFFE5F8ED)
-                        : const Color(0xFFFFF2E8),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    data.projectType.isNotEmpty
-                        ? data.projectType
-                        : data.status,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: data.progress >= 1
-                          ? const Color(0xFF10B981)
-                          : const Color(0xFFFF7A18),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: data.progress >= 1
+                            ? const Color(0xFFE5F8ED)
+                            : const Color(0xFFFFF2E8),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        data.projectType.isNotEmpty
+                            ? data.projectType
+                            : 'Project',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: data.progress >= 1
+                              ? const Color(0xFF10B981)
+                              : const Color(0xFFFF7A18),
+                        ),
+                      ),
                     ),
-                  ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _getStatusColor(data.status, isBackground: true),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        data.status,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: _getStatusColor(data.status, isBackground: false),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 Text(
