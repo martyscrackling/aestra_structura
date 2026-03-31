@@ -26,7 +26,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
   String _searchQuery = '';
   _ProjectSortOrder _sortOrder = _ProjectSortOrder.oldestToNewest;
   String? _projectTypeFilter; // null = All
-  String? _statusFilter; // null = All
+  String? _statusFilter = 'Active'; // defaults to Active
 
   @override
   void initState() {
@@ -165,7 +165,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
         // Debug: Print all unique status values from API
         final uniqueStatuses = <String>{};
         for (var project in data) {
-          final status = (project['status'] as String?) ?? 'Planning';
+          final status = (project['status'] as String?) ?? 'Active';
           uniqueStatuses.add(status);
         }
         print('🔍 Unique status values from API: $uniqueStatuses');
@@ -180,7 +180,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
             final int projectId = (project['project_id'] as int?) ?? 0;
             final String projectName =
                 (project['project_name'] as String?) ?? 'Unknown';
-            final String status = (project['status'] as String?) ?? 'Planning';
+            final String status = (project['status'] as String?) ?? 'Active';
             final String startDateStr =
                 (project['start_date'] as String?) ?? '';
             final String endDateStr = (project['end_date'] as String?) ?? '';
@@ -361,11 +361,15 @@ class _ProjectsPageState extends State<ProjectsPage> {
                   ),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () {
-                      showDialog(
+                    onPressed: () async {
+                      await showDialog(
                         context: context,
                         builder: (context) => const CreateProjectModal(),
                       );
+                      // Refresh projects after dialog closes
+                      if (mounted) {
+                        _fetchProjects();
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFFF7A18),
@@ -534,13 +538,13 @@ class _ProjectsHeader extends StatelessWidget {
                         borderRadius: BorderRadius.circular(20),
                       ),
                     ),
-                    onPressed: () {
-                      showDialog(
+                    onPressed: () async {
+                      await showDialog(
                         context: context,
                         builder: (context) => const CreateProjectModal(),
-                      ).then((_) {
-                        onRefresh();
-                      });
+                      );
+                      // Refresh projects after dialog closes
+                      onRefresh();
                     },
                     icon: const Icon(Icons.add, size: 18, color: Colors.white),
                     label: const Text(
@@ -619,13 +623,13 @@ class _ProjectsHeader extends StatelessWidget {
                 borderRadius: BorderRadius.circular(20),
               ),
             ),
-            onPressed: () {
-              showDialog(
+            onPressed: () async {
+              await showDialog(
                 context: context,
                 builder: (context) => const CreateProjectModal(),
-              ).then((_) {
-                onRefresh();
-              });
+              );
+              // Refresh projects after dialog closes
+              onRefresh();
             },
             icon: const Icon(Icons.add, size: 18, color: Colors.white),
             label: const Text(
