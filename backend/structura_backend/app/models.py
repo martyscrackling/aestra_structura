@@ -453,7 +453,7 @@ class Phase(models.Model):
 
     phase_id = models.AutoField(primary_key=True)
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='phases')
-    phase_name = models.CharField(max_length=100, choices=PHASE_CHOICES)
+    phase_name = models.CharField(max_length=100)
     description = models.TextField(null=True, blank=True)
     days_duration = models.IntegerField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='not_started')
