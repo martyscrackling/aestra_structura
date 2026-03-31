@@ -31,6 +31,7 @@ class _PhaseModalState extends State<PhaseModal> {
   int? _projectDurationDays;
   int _existingPhasesDurationDays = 0;
   String? _durationWarning;
+  bool _showSubtaskError = false;
 
   final List<String> _phases = [
     'PHASE 1 - Pre-Construction Phase',
@@ -171,6 +172,19 @@ class _PhaseModalState extends State<PhaseModal> {
 
   Future<void> _submitPhase() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // Validate that at least one subtask is provided
+    bool hasSubtask = _subtaskControllers.any((controller) => controller.text.trim().isNotEmpty);
+    if (!hasSubtask) {
+      setState(() {
+        _showSubtaskError = true;
+      });
+      return;
+    }
+
+    setState(() {
+      _showSubtaskError = false;
+    });
 
     if (_durationWarning != null) {
       if (mounted) {
@@ -610,6 +624,18 @@ class _PhaseModalState extends State<PhaseModal> {
                           ),
                         ),
                       ),
+                      if (_showSubtaskError)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Text(
+                            'Please add at least one subtask',
+                            style: TextStyle(
+                              color: Colors.red,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
