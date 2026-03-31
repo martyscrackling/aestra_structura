@@ -423,6 +423,9 @@ class _AttendancePageState extends State<AttendancePage> {
       case 'Dashboard':
         context.go('/supervisor');
         break;
+      case 'Projects':
+        context.go('/supervisor/projects');
+        break;
       case 'Workers':
       case 'Worker Management':
         context.go('/supervisor/workers');
@@ -1208,8 +1211,9 @@ class _AttendancePageState extends State<AttendancePage> {
 
   Widget _buildBottomNavBar() {
     return SupervisorMobileBottomNav(
-      activeTab: SupervisorMobileTab.attendance,
+      activeTab: SupervisorMobileTab.more,
       onSelect: _navigateToPage,
+      activeMorePage: 'Attendance',
     );
   }
 

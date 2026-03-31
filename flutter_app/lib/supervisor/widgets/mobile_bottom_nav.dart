@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../services/app_theme_tokens.dart';
 
-enum SupervisorMobileTab { dashboard, workers, attendance, more }
+enum SupervisorMobileTab { dashboard, projects, workers, more }
 
 class SupervisorMobileBottomNav extends StatefulWidget {
   const SupervisorMobileBottomNav({
@@ -22,8 +22,7 @@ class SupervisorMobileBottomNav extends StatefulWidget {
       _SupervisorMobileBottomNavState();
 }
 
-class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav>
-  {
+class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav> {
   bool _isMoreExpanded = false;
 
   @override
@@ -38,97 +37,92 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav>
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      minimum: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-      child: AnimatedSize(
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(26),
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                AppColors.navyHover,
-                AppColors.navSurface,
-              ],
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [AppColors.navyHover, AppColors.navSurface],
+          ),
+          border: Border.all(color: Colors.white.withOpacity(0.08)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.16),
+              blurRadius: 22,
+              offset: const Offset(0, 8),
             ),
-            border: Border.all(color: Colors.white.withOpacity(0.08)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.16),
-                blurRadius: 22,
-                offset: const Offset(0, 8),
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ClipRect(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  height: _isMoreExpanded ? 58 : 0,
+                  child: _buildMoreHorizontalRail(context),
+                ),
               ),
-              BoxShadow(
-                color: Colors.black.withOpacity(0.08),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
+              if (_isMoreExpanded) const SizedBox(height: 2),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildNavItem(
+                      context,
+                      icon: Icons.dashboard_rounded,
+                      label: 'Dashboard',
+                      isActive:
+                          widget.activeTab == SupervisorMobileTab.dashboard,
+                      onTap: () => widget.onSelect('Dashboard'),
+                    ),
+                  ),
+                  Expanded(
+                    child: _buildNavItem(
+                      context,
+                      icon: Icons.folder_rounded,
+                      label: 'Projects',
+                      isActive:
+                          widget.activeTab == SupervisorMobileTab.projects,
+                      onTap: () => widget.onSelect('Projects'),
+                    ),
+                  ),
+                  Expanded(
+                    child: _buildNavItem(
+                      context,
+                      icon: Icons.groups_rounded,
+                      label: 'Workers',
+                      isActive: widget.activeTab == SupervisorMobileTab.workers,
+                      onTap: () => widget.onSelect('Workers'),
+                    ),
+                  ),
+                  Expanded(
+                    child: _buildNavItem(
+                      context,
+                      icon: _isMoreExpanded
+                          ? Icons.close_rounded
+                          : Icons.grid_view_rounded,
+                      label: _isMoreExpanded ? 'Close' : 'More',
+                      isActive:
+                          _isMoreExpanded ||
+                          widget.activeTab == SupervisorMobileTab.more,
+                      onTap: _toggleMore,
+                    ),
+                  ),
+                ],
               ),
             ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ClipRect(
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 220),
-                    curve: Curves.easeOutCubic,
-                    height: _isMoreExpanded ? 58 : 0,
-                    child: _buildMoreHorizontalRail(context),
-                  ),
-                ),
-                if (_isMoreExpanded) const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildNavItem(
-                        context,
-                        icon: Icons.dashboard_rounded,
-                        label: 'Dashboard',
-                        isActive:
-                            widget.activeTab == SupervisorMobileTab.dashboard,
-                        onTap: () => widget.onSelect('Dashboard'),
-                      ),
-                    ),
-                    Expanded(
-                      child: _buildNavItem(
-                        context,
-                        icon: Icons.groups_rounded,
-                        label: 'Workers',
-                        isActive: widget.activeTab == SupervisorMobileTab.workers,
-                        onTap: () => widget.onSelect('Workers'),
-                      ),
-                    ),
-                    Expanded(
-                      child: _buildNavItem(
-                        context,
-                        icon: Icons.fact_check_rounded,
-                        label: 'Attendance',
-                        isActive:
-                            widget.activeTab == SupervisorMobileTab.attendance,
-                        onTap: () => widget.onSelect('Attendance'),
-                      ),
-                    ),
-                    Expanded(
-                      child: _buildNavItem(
-                        context,
-                        icon: _isMoreExpanded
-                            ? Icons.close_rounded
-                            : Icons.grid_view_rounded,
-                        label: _isMoreExpanded ? 'Close' : 'More',
-                        isActive: _isMoreExpanded ||
-                            widget.activeTab == SupervisorMobileTab.more,
-                        onTap: _toggleMore,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
           ),
         ),
       ),
@@ -149,7 +143,10 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav>
     required bool isActive,
     required VoidCallback onTap,
   }) {
-    final color = isActive ? AppColors.accent : Colors.white.withOpacity(0.78);
+    final color = isActive
+        ? const Color.fromRGBO(74, 159, 216, 1)
+        : Colors.white.withOpacity(0.78);
+    final bgColor = isActive ? Colors.white : Colors.transparent;
 
     return InkWell(
       onTap: () {
@@ -162,7 +159,7 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav>
         curve: Curves.easeOutCubic,
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         decoration: BoxDecoration(
-          color: Colors.transparent,
+          color: bgColor,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Column(
@@ -191,6 +188,7 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav>
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 6),
         children: [
+          _buildMoreChip(context, Icons.fact_check_rounded, 'Attendance', 'Attendance'),
           _buildMoreChip(context, Icons.show_chart, 'Task Progress', 'Tasks'),
           _buildMoreChip(context, Icons.file_copy, 'Reports', 'Reports'),
           _buildMoreChip(context, Icons.inventory, 'Inventory', 'Inventory'),
@@ -206,7 +204,9 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav>
     String page,
   ) {
     final isActive = widget.activeMorePage == page;
-    final color = isActive ? AppColors.accent : Colors.white;
+    final color = isActive
+        ? const Color.fromRGBO(74, 159, 216, 1)
+        : Colors.white;
 
     return InkWell(
       onTap: () {
@@ -218,14 +218,10 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav>
         width: 118,
         margin: const EdgeInsets.symmetric(horizontal: 3),
         decoration: BoxDecoration(
-          color: isActive
-              ? AppColors.accent.withOpacity(0.16)
-              : Colors.white.withOpacity(0.05),
+          color: isActive ? Colors.white : Colors.white.withOpacity(0.05),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: isActive
-                ? AppColors.accent.withOpacity(0.45)
-                : Colors.white.withOpacity(0.1),
+            color: isActive ? Colors.white : Colors.white.withOpacity(0.1),
           ),
         ),
         child: Padding(

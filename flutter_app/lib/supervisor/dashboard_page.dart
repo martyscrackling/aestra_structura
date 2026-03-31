@@ -378,6 +378,9 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
     switch (page) {
       case 'Dashboard':
         return; // Already on dashboard
+      case 'Projects':
+        context.go('/supervisor/projects');
+        break;
       case 'Workers':
       case 'Worker Management':
         context.go('/supervisor/workers');
@@ -455,6 +458,9 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
                     // Scrollable content below header while sidebar stays put
                     Expanded(
                       child: SingleChildScrollView(
+                        padding: isMobile
+                            ? const EdgeInsets.only(bottom: 100)
+                            : null,
                         child: isMobile
                             ? _buildMobileLayout()
                             : isTablet
@@ -484,7 +490,7 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
   // Mobile layout - Stack everything vertically
   Widget _buildMobileLayout() {
     final viewHeight = MediaQuery.of(context).size.height;
-    final activeProjectsHeight = (viewHeight * 0.28).clamp(220.0, 270.0);
+    final activeProjectsHeight = (viewHeight * 0.48).clamp(340.0, 420.0);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
