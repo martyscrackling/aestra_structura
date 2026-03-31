@@ -679,6 +679,32 @@ class ProjectViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    @action(detail=True, methods=['post'], url_path='deactivate')
+    def deactivate(self, request, pk=None):
+        """
+        Toggle project status through cycle: Active → On Hold → Deactivated → Active
+        """
+        project = self.get_object()
+        
+        # Cycle through all three states
+        if project.status == 'Active':
+            project.status = 'On Hold'
+        elif project.status == 'On Hold':
+            project.status = 'Deactivated'
+        elif project.status == 'Deactivated':
+            project.status = 'Active'
+        else:
+            # If status is unknown, default to On Hold
+            project.status = 'On Hold'
+        
+        project.save()
+        
+        print(f'✅ Project {project.project_name} (ID: {project.project_id}) status changed to {project.status}')
+        
+        # Return updated project data
+        serializer = ProjectSerializer(project)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
     def get_queryset(self):
         """
         Get projects only for the logged-in user

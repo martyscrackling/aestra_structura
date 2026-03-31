@@ -26,6 +26,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
   String _searchQuery = '';
   _ProjectSortOrder _sortOrder = _ProjectSortOrder.oldestToNewest;
   String? _projectTypeFilter; // null = All
+  String? _statusFilter; // null = All
 
   @override
   void initState() {
@@ -49,13 +50,22 @@ class _ProjectsPageState extends State<ProjectsPage> {
 
   List<ProjectOverviewData> get _visibleProjects {
     final query = _searchQuery.trim().toLowerCase();
+    print('🔍 _visibleProjects called: typeFilter=$_projectTypeFilter, statusFilter=$_statusFilter, searchQuery=$_searchQuery');
     final filteredByType = (_projectTypeFilter == null)
         ? List<ProjectOverviewData>.from(_projects)
         : _projects.where((p) => p.projectType == _projectTypeFilter).toList();
+    
+    print('🔍 After type filter: ${filteredByType.length} projects');
+    
+    final filteredByStatus = (_statusFilter == null)
+        ? filteredByType
+        : filteredByType.where((p) => p.status.toLowerCase() == _statusFilter!.toLowerCase()).toList();
+    
+    print('🔍 After status filter: ${filteredByStatus.length} projects');
 
     final filtered = query.isEmpty
-        ? filteredByType
-        : filteredByType.where((project) {
+        ? filteredByStatus
+        : filteredByStatus.where((project) {
             return project.title.toLowerCase().contains(query) ||
                 project.location.toLowerCase().contains(query) ||
                 project.status.toLowerCase().contains(query) ||
@@ -151,6 +161,14 @@ class _ProjectsPageState extends State<ProjectsPage> {
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
         print('📊 Projects fetched: ${data.length}');
+        
+        // Debug: Print all unique status values from API
+        final uniqueStatuses = <String>{};
+        for (var project in data) {
+          final status = (project['status'] as String?) ?? 'Planning';
+          uniqueStatuses.add(status);
+        }
+        print('🔍 Unique status values from API: $uniqueStatuses');
 
         // Process projects and calculate progress from phases/subtasks
         List<ProjectOverviewData> projects = [];
@@ -376,8 +394,26 @@ class _ProjectsPageState extends State<ProjectsPage> {
                   },
                   projectTypeFilter: _projectTypeFilter,
                   onProjectTypeFilterChanged: (value) {
+                    print('🔄 Project type filter changed to: $value');
+                    print('📊 Filter is null: ${value == null}');
+                    print('📊 Current projects count: ${_projects.length}');
                     setState(() {
                       _projectTypeFilter = value;
+                    });
+                    Future.delayed(const Duration(milliseconds: 100), () {
+                      print('📊 Visible projects after filter: ${_visibleProjects.length}');
+                    });
+                  },
+                  statusFilter: _statusFilter,
+                  onStatusFilterChanged: (value) {
+                    print('🔄 Status filter changed to: $value');
+                    print('📊 Filter is null: ${value == null}');
+                    print('📊 Current projects count: ${_projects.length}');
+                    setState(() {
+                      _statusFilter = value;
+                    });
+                    Future.delayed(const Duration(milliseconds: 100), () {
+                      print('📊 Visible projects after filter: ${_visibleProjects.length}');
                     });
                   },
                 ),
@@ -442,6 +478,8 @@ class _ProjectsHeader extends StatelessWidget {
     required this.onSortOrderChanged,
     required this.projectTypeFilter,
     required this.onProjectTypeFilterChanged,
+    required this.statusFilter,
+    required this.onStatusFilterChanged,
   });
 
   final VoidCallback onRefresh;
@@ -450,6 +488,8 @@ class _ProjectsHeader extends StatelessWidget {
   final ValueChanged<_ProjectSortOrder> onSortOrderChanged;
   final String? projectTypeFilter;
   final ValueChanged<String?> onProjectTypeFilterChanged;
+  final String? statusFilter;
+  final ValueChanged<String?> onStatusFilterChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -529,6 +569,12 @@ class _ProjectsHeader extends StatelessWidget {
                 isMobile: true,
               ),
               const SizedBox(width: 8),
+              _StatusFilterDropdown(
+                value: statusFilter,
+                onChanged: onStatusFilterChanged,
+                isMobile: true,
+              ),
+              const SizedBox(width: 8),
               _SortOrderDropdown(
                 value: sortOrder,
                 onChanged: onSortOrderChanged,
@@ -600,6 +646,12 @@ class _ProjectsHeader extends StatelessWidget {
           isMobile: false,
         ),
         const SizedBox(width: 12),
+        _StatusFilterDropdown(
+          value: statusFilter,
+          onChanged: onStatusFilterChanged,
+          isMobile: false,
+        ),
+        const SizedBox(width: 12),
         _SortOrderDropdown(
           value: sortOrder,
           onChanged: onSortOrderChanged,
@@ -653,6 +705,111 @@ class _SearchField extends StatelessWidget {
 
 enum _ProjectSortOrder { oldestToNewest, newestToOldest }
 
+class _StatusFilterDropdown extends StatelessWidget {
+  const _StatusFilterDropdown({
+    required this.value,
+    required this.onChanged,
+    required this.isMobile,
+  });
+
+  final String? value; // null = All
+  final ValueChanged<String?> onChanged;
+  final bool isMobile;
+
+  static const List<String> _statuses = [
+    'Active',
+    'On Hold',
+    'Deactivated',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final displayText = value ?? 'All';
+
+    if (isMobile) {
+      return SizedBox(
+        height: 36,
+        child: PopupMenuButton<String?>(
+          onSelected: (selected) {
+            print('✅ Status (mobile) selected: $selected');
+            // Convert placeholder 'ALL' back to null
+            final result = selected == 'ALL' ? null : selected;
+            print('✅ Status (mobile) after conversion: $result');
+            onChanged(result);
+          },
+          itemBuilder: (BuildContext context) => <PopupMenuEntry<String?>>[
+            const PopupMenuItem<String?>(value: 'ALL', child: Text('All')),
+            ..._statuses.map(
+              (status) => PopupMenuItem<String?>(value: status, child: Text(status)),
+            ),
+          ],
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey[300]!),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.check_circle_outline, size: 16, color: Color(0xFF0C1935)),
+                const SizedBox(width: 4),
+                const Icon(Icons.arrow_drop_down, size: 18, color: Color(0xFF0C1935)),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 36,
+      child: PopupMenuButton<String?>(
+        onSelected: (selected) {
+          print('✅ Status (desktop) selected: $selected');
+          // Convert placeholder 'ALL' back to null
+          final result = selected == 'ALL' ? null : selected;
+          print('✅ Status (desktop) after conversion: $result');
+          onChanged(result);
+        },
+        itemBuilder: (BuildContext context) => <PopupMenuEntry<String?>>[
+          const PopupMenuItem<String?>(value: 'ALL', child: const Text('All')),
+          ..._statuses.map(
+            (status) => PopupMenuItem<String?>(value: status, child: Text(status)),
+          ),
+        ],
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey[300]!),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.check_circle_outline, size: 16, color: Color(0xFF0C1935)),
+              const SizedBox(width: 6),
+              Text(
+                displayText,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF0C1935),
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Icon(
+                Icons.arrow_drop_down,
+                size: 18,
+                color: Color(0xFF0C1935),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ProjectTypeFilterDropdown extends StatelessWidget {
   const _ProjectTypeFilterDropdown({
     required this.value,
@@ -679,27 +836,31 @@ class _ProjectTypeFilterDropdown extends StatelessWidget {
       return SizedBox(
         height: 36,
         child: PopupMenuButton<String?>(
-          onSelected: onChanged,
+          onSelected: (selected) {
+            print('✅ ProjectType (mobile) selected: $selected');
+            // Convert placeholder 'ALL' back to null
+            final result = selected == 'ALL' ? null : selected;
+            print('✅ ProjectType (mobile) after conversion: $result');
+            onChanged(result);
+          },
           itemBuilder: (BuildContext context) => <PopupMenuEntry<String?>>[
-            const PopupMenuItem<String?>(value: null, child: Text('All')),
+            const PopupMenuItem<String?>(value: 'ALL', child: const Text('All')),
             ..._types.map(
               (type) => PopupMenuItem<String?>(value: type, child: Text(type)),
             ),
           ],
-          child: OutlinedButton(
-            onPressed: null,
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              side: BorderSide(color: Colors.grey[300]!),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey[300]!),
+              borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
-              children: const [
-                Icon(Icons.tune, size: 16, color: Color(0xFF0C1935)),
-                SizedBox(width: 4),
-                Icon(Icons.arrow_drop_down, size: 18, color: Color(0xFF0C1935)),
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.tune, size: 16, color: Color(0xFF0C1935)),
+                const SizedBox(width: 4),
+                const Icon(Icons.arrow_drop_down, size: 18, color: Color(0xFF0C1935)),
               ],
             ),
           ),
@@ -710,21 +871,24 @@ class _ProjectTypeFilterDropdown extends StatelessWidget {
     return SizedBox(
       height: 36,
       child: PopupMenuButton<String?>(
-        onSelected: onChanged,
+        onSelected: (selected) {
+          print('✅ ProjectType (desktop) selected: $selected');
+          // Convert placeholder 'ALL' back to null
+          final result = selected == 'ALL' ? null : selected;
+          print('✅ ProjectType (desktop) after conversion: $result');
+          onChanged(result);
+        },
         itemBuilder: (BuildContext context) => <PopupMenuEntry<String?>>[
-          const PopupMenuItem<String?>(value: null, child: Text('All')),
+          const PopupMenuItem<String?>(value: 'ALL', child: Text('All')),
           ..._types.map(
             (type) => PopupMenuItem<String?>(value: type, child: Text(type)),
           ),
         ],
-        child: OutlinedButton(
-          onPressed: null,
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            side: BorderSide(color: Colors.grey[300]!),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey[300]!),
+            borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
             children: [
@@ -787,16 +951,14 @@ class _SortOrderDropdown extends StatelessWidget {
                 ),
               )
               .toList(),
-          child: OutlinedButton(
-            onPressed: null,
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              side: BorderSide(color: Colors.grey[300]!),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey[300]!),
+              borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: const [
                 Icon(Icons.swap_vert, size: 16, color: Color(0xFF0C1935)),
                 SizedBox(width: 4),
@@ -820,14 +982,11 @@ class _SortOrderDropdown extends StatelessWidget {
               ),
             )
             .toList(),
-        child: OutlinedButton(
-          onPressed: null,
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            side: BorderSide(color: Colors.grey[300]!),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey[300]!),
+            borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
             children: [

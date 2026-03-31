@@ -229,6 +229,12 @@ class PaymentHistory(models.Model):
 
 # Project Model
 class Project(models.Model):
+    STATUS_CHOICES = [
+        ('Active', 'Active'),
+        ('On Hold', 'On Hold'),
+        ('Deactivated', 'Deactivated'),
+    ]
+
     project_id = models.AutoField(primary_key=True)
     project_image = models.CharField(max_length=500, null=True, blank=True)
     project_name = models.CharField(max_length=200)
@@ -250,7 +256,7 @@ class Project(models.Model):
     client = models.ForeignKey('Client', on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_projects')
     supervisor = models.ForeignKey('Supervisors', on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_projects')
     budget = models.DecimalField(max_digits=12, decimal_places=2)
-    status = models.CharField(max_length=50)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Active')
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
