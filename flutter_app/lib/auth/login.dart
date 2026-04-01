@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 import '../services/auth_service.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+  final String? redirectTo;
+
+  const LoginPage({super.key, this.redirectTo});
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -328,6 +330,12 @@ class _LoginPageState extends State<LoginPage> {
                           'redirectTo': redirectTo,
                         },
                       );
+                      return;
+                    }
+
+                    // If redirectTo is provided, navigate there
+                    if (widget.redirectTo != null) {
+                      context.go(widget.redirectTo!);
                       return;
                     }
 
