@@ -524,95 +524,73 @@ class _ProjectsHeader extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          // Controls row for mobile
+          // First row: Create + Search
           Row(
             children: [
-              Expanded(
-                child: SizedBox(
-                  height: 40,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFF7A18),
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
+              SizedBox(
+                height: 40,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF7A18),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                    onPressed: () async {
-                      await showDialog(
-                        context: context,
-                        builder: (context) => const CreateProjectModal(),
-                      );
-                      // Refresh projects after dialog closes
-                      onRefresh();
-                    },
-                    icon: const Icon(Icons.add, size: 18, color: Colors.white),
-                    label: const Text(
-                      'Create',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                        fontSize: 13,
-                      ),
+                  ),
+                  onPressed: () async {
+                    await showDialog(
+                      context: context,
+                      builder: (context) => const CreateProjectModal(),
+                    );
+                    // Refresh projects after dialog closes
+                    onRefresh();
+                  },
+                  icon: const Icon(Icons.add, size: 18, color: Colors.white),
+                  label: const Text(
+                    'Create',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                      fontSize: 13,
                     ),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                flex: 2,
                 child: _SearchField(
                   isMobile: true,
                   controller: searchController,
                 ),
               ),
-              const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 2),
-                  SizedBox(
-                    height: 36,
-                    child: _ProjectTypeFilterDropdown(
-                      value: projectTypeFilter,
-                      onChanged: onProjectTypeFilterChanged,
-                      isMobile: true,
-                    ),
-                  ),
-                ],
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Second row: Filters
+          Row(
+            children: [
+              Expanded(
+                child: _ProjectTypeFilterDropdown(
+                  value: projectTypeFilter,
+                  onChanged: onProjectTypeFilterChanged,
+                  isMobile: true,
+                ),
               ),
               const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 2),
-                  SizedBox(
-                    height: 36,
-                    child: _StatusFilterDropdown(
-                      value: statusFilter,
-                      onChanged: onStatusFilterChanged,
-                      isMobile: true,
-                    ),
-                  ),
-                ],
+              Expanded(
+                child: _StatusFilterDropdown(
+                  value: statusFilter,
+                  onChanged: onStatusFilterChanged,
+                  isMobile: true,
+                ),
               ),
               const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 2),
-                  SizedBox(
-                    height: 36,
-                    child: _SortOrderDropdown(
-                      value: sortOrder,
-                      onChanged: onSortOrderChanged,
-                      isMobile: true,
-                    ),
-                  ),
-                ],
+              Expanded(
+                child: _SortOrderDropdown(
+                  value: sortOrder,
+                  onChanged: onSortOrderChanged,
+                  isMobile: true,
+                ),
               ),
             ],
           ),
@@ -818,10 +796,21 @@ class _StatusFilterDropdown extends StatelessWidget {
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Icon(Icons.check_circle_outline, size: 16, color: Color(0xFF0C1935)),
                 const SizedBox(width: 4),
-                const Icon(Icons.arrow_drop_down, size: 18, color: Color(0xFF0C1935)),
+                Flexible(
+                  child: Text(
+                    displayText,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF0C1935),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             ),
           ),
@@ -924,10 +913,21 @@ class _ProjectTypeFilterDropdown extends StatelessWidget {
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Icon(Icons.tune, size: 16, color: Color(0xFF0C1935)),
                 const SizedBox(width: 4),
-                const Icon(Icons.arrow_drop_down, size: 18, color: Color(0xFF0C1935)),
+                Flexible(
+                  child: Text(
+                    displayText,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF0C1935),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             ),
           ),
@@ -997,6 +997,15 @@ class _SortOrderDropdown extends StatelessWidget {
   String _label(_ProjectSortOrder order) {
     switch (order) {
       case _ProjectSortOrder.oldestToNewest:
+        return 'Oldest';
+      case _ProjectSortOrder.newestToOldest:
+        return 'Newest';
+    }
+  }
+
+  String _fullLabel(_ProjectSortOrder order) {
+    switch (order) {
+      case _ProjectSortOrder.oldestToNewest:
         return 'Oldest to Newest';
       case _ProjectSortOrder.newestToOldest:
         return 'Newest to Oldest';
@@ -1014,7 +1023,7 @@ class _SortOrderDropdown extends StatelessWidget {
               .map(
                 (order) => PopupMenuItem<_ProjectSortOrder>(
                   value: order,
-                  child: Text(_label(order)),
+                  child: Text(_fullLabel(order)),
                 ),
               )
               .toList(),
@@ -1026,10 +1035,21 @@ class _SortOrderDropdown extends StatelessWidget {
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
-              children: const [
-                Icon(Icons.swap_vert, size: 16, color: Color(0xFF0C1935)),
-                SizedBox(width: 4),
-                Icon(Icons.arrow_drop_down, size: 18, color: Color(0xFF0C1935)),
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.swap_vert, size: 16, color: Color(0xFF0C1935)),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    _label(value),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF0C1935),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1045,7 +1065,7 @@ class _SortOrderDropdown extends StatelessWidget {
             .map(
               (order) => PopupMenuItem<_ProjectSortOrder>(
                 value: order,
-                child: Text(_label(order)),
+                child: Text(_fullLabel(order)),
               ),
             )
             .toList(),
@@ -1060,7 +1080,7 @@ class _SortOrderDropdown extends StatelessWidget {
               const Icon(Icons.swap_vert, size: 16, color: Color(0xFF0C1935)),
               const SizedBox(width: 6),
               Text(
-                _label(value),
+                _fullLabel(value),
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
