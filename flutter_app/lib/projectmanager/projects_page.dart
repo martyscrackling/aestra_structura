@@ -567,22 +567,52 @@ class _ProjectsHeader extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              _ProjectTypeFilterDropdown(
-                value: projectTypeFilter,
-                onChanged: onProjectTypeFilterChanged,
-                isMobile: true,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 2),
+                  SizedBox(
+                    height: 36,
+                    child: _ProjectTypeFilterDropdown(
+                      value: projectTypeFilter,
+                      onChanged: onProjectTypeFilterChanged,
+                      isMobile: true,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(width: 8),
-              _StatusFilterDropdown(
-                value: statusFilter,
-                onChanged: onStatusFilterChanged,
-                isMobile: true,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 2),
+                  SizedBox(
+                    height: 36,
+                    child: _StatusFilterDropdown(
+                      value: statusFilter,
+                      onChanged: onStatusFilterChanged,
+                      isMobile: true,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(width: 8),
-              _SortOrderDropdown(
-                value: sortOrder,
-                onChanged: onSortOrderChanged,
-                isMobile: true,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 2),
+                  SizedBox(
+                    height: 36,
+                    child: _SortOrderDropdown(
+                      value: sortOrder,
+                      onChanged: onSortOrderChanged,
+                      isMobile: true,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -644,22 +674,55 @@ class _ProjectsHeader extends StatelessWidget {
         const SizedBox(width: 16),
         _SearchField(isMobile: false, controller: searchController),
         const SizedBox(width: 12),
-        _ProjectTypeFilterDropdown(
-          value: projectTypeFilter,
-          onChanged: onProjectTypeFilterChanged,
-          isMobile: false,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Project Type',
+              style: TextStyle(fontSize: 12, color: Color(0xFF6B7280), fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 4),
+            _ProjectTypeFilterDropdown(
+              value: projectTypeFilter,
+              onChanged: onProjectTypeFilterChanged,
+              isMobile: false,
+            ),
+          ],
         ),
         const SizedBox(width: 12),
-        _StatusFilterDropdown(
-          value: statusFilter,
-          onChanged: onStatusFilterChanged,
-          isMobile: false,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Status',
+              style: TextStyle(fontSize: 12, color: Color(0xFF6B7280), fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 4),
+            _StatusFilterDropdown(
+              value: statusFilter,
+              onChanged: onStatusFilterChanged,
+              isMobile: false,
+            ),
+          ],
         ),
         const SizedBox(width: 12),
-        _SortOrderDropdown(
-          value: sortOrder,
-          onChanged: onSortOrderChanged,
-          isMobile: false,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Sort By',
+              style: TextStyle(fontSize: 12, color: Color(0xFF6B7280), fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 4),
+            _SortOrderDropdown(
+              value: sortOrder,
+              onChanged: onSortOrderChanged,
+              isMobile: false,
+            ),
+          ],
         ),
       ],
     );
