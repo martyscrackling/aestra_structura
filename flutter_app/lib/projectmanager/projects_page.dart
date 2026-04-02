@@ -357,7 +357,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
                       fontSize: 18,
                       fontWeight: FontWeight.w500,
                       color: Colors.grey,
-                    )
+                    ),
                   ),
                   const SizedBox(height: 16),
                   ElevatedButton(
