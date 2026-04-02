@@ -764,6 +764,7 @@ class _StatusFilterDropdown extends StatelessWidget {
   static const List<String> _statuses = [
     'Active',
     'On Hold',
+    'Completed',
     'Deactivated',
   ];
 
