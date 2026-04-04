@@ -1115,6 +1115,7 @@ class _ReportsPageState extends State<ReportsPage> {
   Widget _kpiCard(String title, String value, {Color? color, IconData? icon}) {
     return Expanded(
       child: Card(
+        color: Colors.white,
         elevation: 2,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
@@ -1204,6 +1205,7 @@ class _ReportsPageState extends State<ReportsPage> {
     final deductionStr = _money.format(r.deduction);
     final cashAdvanceStr = _money.format(r.cashAdvance);
     return Card(
+      color: Colors.white,
       elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -1344,6 +1346,7 @@ class _ReportsPageState extends State<ReportsPage> {
                           children: [
                             // report date selector
                             Card(
+                              color: Colors.white,
                               elevation: 1,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -1369,6 +1372,7 @@ class _ReportsPageState extends State<ReportsPage> {
                             ),
                             const SizedBox(width: 10),
                             Card(
+                              color: Colors.white,
                               elevation: 1,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -1642,6 +1646,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                                   .join();
 
                                               return Card(
+                                                color: Colors.white,
                                                 margin: const EdgeInsets.only(
                                                   bottom: 8,
                                                 ),
@@ -1856,6 +1861,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                 ],
                               )
                             : Card(
+                                color: Colors.white,
                                 elevation: 2,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
@@ -2250,7 +2256,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                                           style:
                                                               const TextStyle(
                                                                 color: Colors
-                                                                    .green,
+                                                                    .blue,
                                                                 fontSize: 12,
                                                                 fontWeight:
                                                                     FontWeight
@@ -2423,7 +2429,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                                 style: const TextStyle(
                                                   fontWeight: FontWeight.w700,
                                                   fontSize: 13,
-                                                  color: Colors.green,
+                                                  color: Colors.blue,
                                                 ),
                                               ),
                                             ],
@@ -3015,7 +3021,7 @@ class _ReportsPageState extends State<ReportsPage> {
                 _salaryRow(
                   'PhilHealth',
                   '- ${_money.format(r.philhealthDeduction)}',
-                  Colors.green,
+                  Colors.blue,
                 ),
                 _salaryRow(
                   'Pag-IBIG',

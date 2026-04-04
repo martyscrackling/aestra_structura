@@ -325,6 +325,7 @@ class _InventoryPageState extends State<InventoryPage> {
 
                                     // Tools table (PM-style responsive layout)
                                     Card(
+                                      color: Colors.white,
                                       elevation: 2,
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(12),
@@ -471,6 +472,7 @@ class _InventoryPageState extends State<InventoryPage> {
                                         ? Column(
                                             children: _active.map((usage) {
                                               return Card(
+                                                color: Colors.white,
                                                 elevation: 1,
                                                 margin: const EdgeInsets.only(
                                                   bottom: 8,
@@ -567,6 +569,7 @@ class _InventoryPageState extends State<InventoryPage> {
                                             }).toList(),
                                           )
                                         : Card(
+                                            color: Colors.white,
                                             elevation: 2,
                                             shape: RoundedRectangleBorder(
                                               borderRadius:
@@ -2028,6 +2031,7 @@ class _MaterialsPageState extends State<MaterialsPage> {
             // Materials table
             Expanded(
               child: Card(
+                color: Colors.white,
                 elevation: 2,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),

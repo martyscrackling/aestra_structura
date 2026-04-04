@@ -11,6 +11,7 @@ class Worker {
   final String name;
   final String role;
   final String status;
+  final List<String> assignedProjectNames;
   final String? imageUrl;
 
   Worker({
@@ -18,6 +19,7 @@ class Worker {
     required this.name,
     required this.role,
     required this.status,
+    this.assignedProjectNames = const [],
     this.imageUrl,
   });
 }
@@ -80,10 +82,11 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
 
       // Fetch all field workers accessible to this user, including from other projects
       // The assignment_status will be computed by the backend based on current project context
-      final endpoint = 'field-workers/?include_other_projects=true&project_id=$projectId';
+      final endpoint =
+          'field-workers/?include_other_projects=true&project_id=$projectId';
 
       print('🔍 Fetching field workers from: $endpoint');
-      
+
       final headers = <String, String>{
         if (parsedUserId != null && parsedUserId > 0)
           'X-User-Id': parsedUserId.toString(),
@@ -93,7 +96,7 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
         AppConfig.apiUri(endpoint),
         headers: headers,
       );
-      
+
       print('✅ Response status: ${response.statusCode}');
       print('✅ Response body: ${response.body}');
 
@@ -115,11 +118,31 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
                     ? rawId
                     : int.tryParse(rawId?.toString() ?? '') ?? 0;
 
+                final assignedProjects = json['assigned_projects'];
+                final List<String> assignedProjectNames = [];
+                if (assignedProjects is List) {
+                  for (final project in assignedProjects.cast<dynamic>()) {
+                    if (project is! Map<String, dynamic>) continue;
+                    final projectName = project['project_name']
+                        ?.toString()
+                        .trim();
+
+                    if (projectName == null || projectName.isEmpty) continue;
+
+                    if (!assignedProjectNames.contains(projectName)) {
+                      assignedProjectNames.add(projectName);
+                    }
+                  }
+                }
+
                 return Worker(
                   workerId: workerId,
                   name: '${json['first_name']} ${json['last_name']}',
                   role: json['role'] ?? 'Field Worker',
-                  status: json['assignment_status'] ?? 'Available', // Use backend-computed status
+                  status:
+                      json['assignment_status'] ??
+                      'Available', // Use backend-computed status
+                  assignedProjectNames: assignedProjectNames,
                 );
               })
               .where((worker) => worker.workerId > 0)
@@ -561,9 +584,32 @@ class _WorkerChecklistItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Determine if worker is assigned to other project's subtasks
-    final isAssignedToOtherProject = worker.status == 'Assigned';
-    
+    final assignedProjectsText = worker.assignedProjectNames.join(' • ');
+    final hasAssignments = assignedProjectsText.isNotEmpty;
+    final statusLabel = hasAssignments ? assignedProjectsText : 'Available';
+
+    final statusBadge = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: hasAssignments
+            ? const Color(0xFFFEE2E2)
+            : const Color(0xFFE5F8ED),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        statusLabel,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: hasAssignments
+              ? const Color(0xFFDC2626)
+              : const Color(0xFF10B981),
+        ),
+      ),
+    );
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
@@ -607,18 +653,18 @@ class _WorkerChecklistItem extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: isAssignedToOtherProject ? const Color(0xFFFEE2E2) : const Color(0xFFE5F8ED),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                isAssignedToOtherProject ? 'Assigned' : 'Available',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: isAssignedToOtherProject ? const Color(0xFFDC2626) : const Color(0xFF10B981),
+            Flexible(
+              fit: FlexFit.tight,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 260),
+                  child: hasAssignments
+                      ? Tooltip(
+                          message: assignedProjectsText,
+                          child: statusBadge,
+                        )
+                      : statusBadge,
                 ),
               ),
             ),

@@ -912,6 +912,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
 
   Widget _buildProjectProgressChart(bool isMobile) {
     return Card(
+      color: Colors.white,
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(

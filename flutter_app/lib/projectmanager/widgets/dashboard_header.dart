@@ -193,6 +193,7 @@ class _NotificationMenuState extends State<_NotificationMenu> {
     final count = _badgeCount;
 
     return PopupMenuButton<int>(
+      color: Colors.white,
       tooltip: 'Notifications',
       offset: const Offset(0, 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -497,6 +498,7 @@ class _ProfileMenu extends StatelessWidget {
         final role = _displayRole(user);
 
         return PopupMenuButton<_ProfileAction>(
+          color: Colors.white,
           tooltip: 'Profile menu',
           offset: const Offset(0, 12),
           shape: RoundedRectangleBorder(
