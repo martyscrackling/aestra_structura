@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 
 class SignUpPage extends StatefulWidget {
-  const SignUpPage({super.key});
+  final String? redirectTo;
+
+  const SignUpPage({super.key, this.redirectTo});
 
   @override
   State<SignUpPage> createState() => _SignUpPageState();
@@ -302,8 +304,12 @@ class _SignUpPageState extends State<SignUpPage> {
                       if (!mounted) return;
 
                       if (success) {
-                        // Signup successful, navigate to infos page
-                        context.go('/infos');
+                        // Signup successful, navigate to infos page or redirectTo if provided
+                        if (widget.redirectTo != null) {
+                          context.go(widget.redirectTo!);
+                        } else {
+                          context.go('/infos');
+                        }
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(

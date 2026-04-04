@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:go_router/go_router.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'widgets/sidebar.dart';
 import 'widgets/dashboard_header.dart';
+import 'widgets/mobile_bottom_nav.dart';
 import '../services/app_config.dart';
 import '../services/auth_service.dart';
 import '../services/app_time_service.dart';
@@ -56,6 +58,43 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
   void _onTestTimeChanged() {
     if (!mounted) return;
     setState(() {});
+  }
+
+  void _navigateToPage(String page) {
+    switch (page) {
+      case 'Dashboard':
+        context.go('/supervisor');
+        break;
+      case 'Projects':
+        context.go('/supervisor/projects');
+        break;
+      case 'Workers':
+      case 'Worker Management':
+        context.go('/supervisor/workers');
+        break;
+      case 'Attendance':
+        context.go('/supervisor/attendance');
+        break;
+      case 'Tasks':
+      case 'Task Progress':
+        context.go('/supervisor/task-progress');
+        break;
+      case 'Reports':
+        context.go('/supervisor/reports');
+        break;
+      case 'Inventory':
+        context.go('/supervisor/inventory');
+        break;
+      default:
+        return;
+    }
+  }
+
+  Widget _buildBottomNavBar() {
+    return SupervisorMobileBottomNav(
+      activeTab: SupervisorMobileTab.projects,
+      onSelect: _navigateToPage,
+    );
   }
 
   String? _asNonEmptyString(dynamic value) {
@@ -769,7 +808,12 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
         : _error != null
         ? Center(child: Text('Error: $_error'))
         : SingleChildScrollView(
-            padding: EdgeInsets.all(isMobile ? 16 : 24),
+            padding: EdgeInsets.only(
+              left: isMobile ? 16 : 24,
+              right: isMobile ? 16 : 24,
+              top: isMobile ? 16 : 24,
+              bottom: isMobile ? 100 : 24,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1090,6 +1134,7 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
           ),
         ],
       ),
+      bottomNavigationBar: isMobile ? _buildBottomNavBar() : null,
     );
   }
 }

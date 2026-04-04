@@ -26,6 +26,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
   String _searchQuery = '';
   _ProjectSortOrder _sortOrder = _ProjectSortOrder.oldestToNewest;
   String? _projectTypeFilter; // null = All
+  String? _statusFilter = 'Active'; // defaults to Active
 
   @override
   void initState() {
@@ -49,13 +50,22 @@ class _ProjectsPageState extends State<ProjectsPage> {
 
   List<ProjectOverviewData> get _visibleProjects {
     final query = _searchQuery.trim().toLowerCase();
+    print('🔍 _visibleProjects called: typeFilter=$_projectTypeFilter, statusFilter=$_statusFilter, searchQuery=$_searchQuery');
     final filteredByType = (_projectTypeFilter == null)
         ? List<ProjectOverviewData>.from(_projects)
         : _projects.where((p) => p.projectType == _projectTypeFilter).toList();
+    
+    print('🔍 After type filter: ${filteredByType.length} projects');
+    
+    final filteredByStatus = (_statusFilter == null)
+        ? filteredByType
+        : filteredByType.where((p) => p.status.toLowerCase() == _statusFilter!.toLowerCase()).toList();
+    
+    print('🔍 After status filter: ${filteredByStatus.length} projects');
 
     final filtered = query.isEmpty
-        ? filteredByType
-        : filteredByType.where((project) {
+        ? filteredByStatus
+        : filteredByStatus.where((project) {
             return project.title.toLowerCase().contains(query) ||
                 project.location.toLowerCase().contains(query) ||
                 project.status.toLowerCase().contains(query) ||
@@ -209,6 +219,14 @@ class _ProjectsPageState extends State<ProjectsPage> {
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
         print('📊 Projects fetched: ${data.length}');
+        
+        // Debug: Print all unique status values from API
+        final uniqueStatuses = <String>{};
+        for (var project in data) {
+          final status = (project['status'] as String?) ?? 'Active';
+          uniqueStatuses.add(status);
+        }
+        print('🔍 Unique status values from API: $uniqueStatuses');
 
         // Process projects and calculate progress from phases/subtasks
         List<ProjectOverviewData> projects = [];
@@ -220,7 +238,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
             final int projectId = (project['project_id'] as int?) ?? 0;
             final String projectName =
                 (project['project_name'] as String?) ?? 'Unknown';
-            final String status = (project['status'] as String?) ?? 'Planning';
+            final String status = (project['status'] as String?) ?? 'Active';
             final String startDateStr =
                 (project['start_date'] as String?) ?? '';
             final String endDateStr = (project['end_date'] as String?) ?? '';
@@ -413,11 +431,15 @@ class _ProjectsPageState extends State<ProjectsPage> {
                   ),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () {
-                      showDialog(
+                    onPressed: () async {
+                      await showDialog(
                         context: context,
                         builder: (context) => const CreateProjectModal(),
                       );
+                      // Refresh projects after dialog closes
+                      if (mounted) {
+                        _fetchProjects();
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFFF7A18),
@@ -446,8 +468,26 @@ class _ProjectsPageState extends State<ProjectsPage> {
                   },
                   projectTypeFilter: _projectTypeFilter,
                   onProjectTypeFilterChanged: (value) {
+                    print('🔄 Project type filter changed to: $value');
+                    print('📊 Filter is null: ${value == null}');
+                    print('📊 Current projects count: ${_projects.length}');
                     setState(() {
                       _projectTypeFilter = value;
+                    });
+                    Future.delayed(const Duration(milliseconds: 100), () {
+                      print('📊 Visible projects after filter: ${_visibleProjects.length}');
+                    });
+                  },
+                  statusFilter: _statusFilter,
+                  onStatusFilterChanged: (value) {
+                    print('🔄 Status filter changed to: $value');
+                    print('📊 Filter is null: ${value == null}');
+                    print('📊 Current projects count: ${_projects.length}');
+                    setState(() {
+                      _statusFilter = value;
+                    });
+                    Future.delayed(const Duration(milliseconds: 100), () {
+                      print('📊 Visible projects after filter: ${_visibleProjects.length}');
                     });
                   },
                 ),
@@ -512,6 +552,8 @@ class _ProjectsHeader extends StatelessWidget {
     required this.onSortOrderChanged,
     required this.projectTypeFilter,
     required this.onProjectTypeFilterChanged,
+    required this.statusFilter,
+    required this.onStatusFilterChanged,
   });
 
   final VoidCallback onRefresh;
@@ -520,6 +562,8 @@ class _ProjectsHeader extends StatelessWidget {
   final ValueChanged<_ProjectSortOrder> onSortOrderChanged;
   final String? projectTypeFilter;
   final ValueChanged<String?> onProjectTypeFilterChanged;
+  final String? statusFilter;
+  final ValueChanged<String?> onStatusFilterChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -550,59 +594,73 @@ class _ProjectsHeader extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          // Controls row for mobile
+          // First row: Create + Search
           Row(
             children: [
-              Expanded(
-                child: SizedBox(
-                  height: 40,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFF7A18),
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
+              SizedBox(
+                height: 40,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF7A18),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) => const CreateProjectModal(),
-                      ).then((_) {
-                        onRefresh();
-                      });
-                    },
-                    icon: const Icon(Icons.add, size: 18, color: Colors.white),
-                    label: const Text(
-                      'Create',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                        fontSize: 13,
-                      ),
+                  ),
+                  onPressed: () async {
+                    await showDialog(
+                      context: context,
+                      builder: (context) => const CreateProjectModal(),
+                    );
+                    // Refresh projects after dialog closes
+                    onRefresh();
+                  },
+                  icon: const Icon(Icons.add, size: 18, color: Colors.white),
+                  label: const Text(
+                    'Create',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                      fontSize: 13,
                     ),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                flex: 2,
                 child: _SearchField(
                   isMobile: true,
                   controller: searchController,
                 ),
               ),
-              const SizedBox(width: 8),
-              _ProjectTypeFilterDropdown(
-                value: projectTypeFilter,
-                onChanged: onProjectTypeFilterChanged,
-                isMobile: true,
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Second row: Filters
+          Row(
+            children: [
+              Expanded(
+                child: _ProjectTypeFilterDropdown(
+                  value: projectTypeFilter,
+                  onChanged: onProjectTypeFilterChanged,
+                  isMobile: true,
+                ),
               ),
               const SizedBox(width: 8),
-              _SortOrderDropdown(
-                value: sortOrder,
-                onChanged: onSortOrderChanged,
-                isMobile: true,
+              Expanded(
+                child: _StatusFilterDropdown(
+                  value: statusFilter,
+                  onChanged: onStatusFilterChanged,
+                  isMobile: true,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _SortOrderDropdown(
+                  value: sortOrder,
+                  onChanged: onSortOrderChanged,
+                  isMobile: true,
+                ),
               ),
             ],
           ),
@@ -643,13 +701,13 @@ class _ProjectsHeader extends StatelessWidget {
                 borderRadius: BorderRadius.circular(20),
               ),
             ),
-            onPressed: () {
-              showDialog(
+            onPressed: () async {
+              await showDialog(
                 context: context,
                 builder: (context) => const CreateProjectModal(),
-              ).then((_) {
-                onRefresh();
-              });
+              );
+              // Refresh projects after dialog closes
+              onRefresh();
             },
             icon: const Icon(Icons.add, size: 18, color: Colors.white),
             label: const Text(
@@ -664,16 +722,55 @@ class _ProjectsHeader extends StatelessWidget {
         const SizedBox(width: 16),
         _SearchField(isMobile: false, controller: searchController),
         const SizedBox(width: 12),
-        _ProjectTypeFilterDropdown(
-          value: projectTypeFilter,
-          onChanged: onProjectTypeFilterChanged,
-          isMobile: false,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Project Type',
+              style: TextStyle(fontSize: 12, color: Color(0xFF6B7280), fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 4),
+            _ProjectTypeFilterDropdown(
+              value: projectTypeFilter,
+              onChanged: onProjectTypeFilterChanged,
+              isMobile: false,
+            ),
+          ],
         ),
         const SizedBox(width: 12),
-        _SortOrderDropdown(
-          value: sortOrder,
-          onChanged: onSortOrderChanged,
-          isMobile: false,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Status',
+              style: TextStyle(fontSize: 12, color: Color(0xFF6B7280), fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 4),
+            _StatusFilterDropdown(
+              value: statusFilter,
+              onChanged: onStatusFilterChanged,
+              isMobile: false,
+            ),
+          ],
+        ),
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Sort By',
+              style: TextStyle(fontSize: 12, color: Color(0xFF6B7280), fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 4),
+            _SortOrderDropdown(
+              value: sortOrder,
+              onChanged: onSortOrderChanged,
+              isMobile: false,
+            ),
+          ],
         ),
       ],
     );
@@ -723,6 +820,123 @@ class _SearchField extends StatelessWidget {
 
 enum _ProjectSortOrder { oldestToNewest, newestToOldest }
 
+class _StatusFilterDropdown extends StatelessWidget {
+  const _StatusFilterDropdown({
+    required this.value,
+    required this.onChanged,
+    required this.isMobile,
+  });
+
+  final String? value; // null = All
+  final ValueChanged<String?> onChanged;
+  final bool isMobile;
+
+  static const List<String> _statuses = [
+    'Active',
+    'On Hold',
+    'Completed',
+    'Deactivated',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final displayText = value ?? 'All';
+
+    if (isMobile) {
+      return SizedBox(
+        height: 36,
+        child: PopupMenuButton<String?>(
+          onSelected: (selected) {
+            print('✅ Status (mobile) selected: $selected');
+            // Convert placeholder 'ALL' back to null
+            final result = selected == 'ALL' ? null : selected;
+            print('✅ Status (mobile) after conversion: $result');
+            onChanged(result);
+          },
+          itemBuilder: (BuildContext context) => <PopupMenuEntry<String?>>[
+            const PopupMenuItem<String?>(value: 'ALL', child: Text('All')),
+            ..._statuses.map(
+              (status) => PopupMenuItem<String?>(value: status, child: Text(status)),
+            ),
+          ],
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey[300]!),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.check_circle_outline, size: 16, color: Color(0xFF0C1935)),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    displayText,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF0C1935),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 36,
+      child: PopupMenuButton<String?>(
+        onSelected: (selected) {
+          print('✅ Status (desktop) selected: $selected');
+          // Convert placeholder 'ALL' back to null
+          final result = selected == 'ALL' ? null : selected;
+          print('✅ Status (desktop) after conversion: $result');
+          onChanged(result);
+        },
+        itemBuilder: (BuildContext context) => <PopupMenuEntry<String?>>[
+          const PopupMenuItem<String?>(value: 'ALL', child: const Text('All')),
+          ..._statuses.map(
+            (status) => PopupMenuItem<String?>(value: status, child: Text(status)),
+          ),
+        ],
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey[300]!),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.check_circle_outline, size: 16, color: Color(0xFF0C1935)),
+              const SizedBox(width: 6),
+              Text(
+                displayText,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF0C1935),
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Icon(
+                Icons.arrow_drop_down,
+                size: 18,
+                color: Color(0xFF0C1935),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ProjectTypeFilterDropdown extends StatelessWidget {
   const _ProjectTypeFilterDropdown({
     required this.value,
@@ -749,27 +963,42 @@ class _ProjectTypeFilterDropdown extends StatelessWidget {
       return SizedBox(
         height: 36,
         child: PopupMenuButton<String?>(
-          onSelected: onChanged,
+          onSelected: (selected) {
+            print('✅ ProjectType (mobile) selected: $selected');
+            // Convert placeholder 'ALL' back to null
+            final result = selected == 'ALL' ? null : selected;
+            print('✅ ProjectType (mobile) after conversion: $result');
+            onChanged(result);
+          },
           itemBuilder: (BuildContext context) => <PopupMenuEntry<String?>>[
-            const PopupMenuItem<String?>(value: null, child: Text('All')),
+            const PopupMenuItem<String?>(value: 'ALL', child: const Text('All')),
             ..._types.map(
               (type) => PopupMenuItem<String?>(value: type, child: Text(type)),
             ),
           ],
-          child: OutlinedButton(
-            onPressed: null,
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              side: BorderSide(color: Colors.grey[300]!),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey[300]!),
+              borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
-              children: const [
-                Icon(Icons.tune, size: 16, color: Color(0xFF0C1935)),
-                SizedBox(width: 4),
-                Icon(Icons.arrow_drop_down, size: 18, color: Color(0xFF0C1935)),
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.tune, size: 16, color: Color(0xFF0C1935)),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    displayText,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF0C1935),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             ),
           ),
@@ -780,21 +1009,24 @@ class _ProjectTypeFilterDropdown extends StatelessWidget {
     return SizedBox(
       height: 36,
       child: PopupMenuButton<String?>(
-        onSelected: onChanged,
+        onSelected: (selected) {
+          print('✅ ProjectType (desktop) selected: $selected');
+          // Convert placeholder 'ALL' back to null
+          final result = selected == 'ALL' ? null : selected;
+          print('✅ ProjectType (desktop) after conversion: $result');
+          onChanged(result);
+        },
         itemBuilder: (BuildContext context) => <PopupMenuEntry<String?>>[
-          const PopupMenuItem<String?>(value: null, child: Text('All')),
+          const PopupMenuItem<String?>(value: 'ALL', child: Text('All')),
           ..._types.map(
             (type) => PopupMenuItem<String?>(value: type, child: Text(type)),
           ),
         ],
-        child: OutlinedButton(
-          onPressed: null,
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            side: BorderSide(color: Colors.grey[300]!),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey[300]!),
+            borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
             children: [
@@ -836,6 +1068,15 @@ class _SortOrderDropdown extends StatelessWidget {
   String _label(_ProjectSortOrder order) {
     switch (order) {
       case _ProjectSortOrder.oldestToNewest:
+        return 'Oldest';
+      case _ProjectSortOrder.newestToOldest:
+        return 'Newest';
+    }
+  }
+
+  String _fullLabel(_ProjectSortOrder order) {
+    switch (order) {
+      case _ProjectSortOrder.oldestToNewest:
         return 'Oldest to Newest';
       case _ProjectSortOrder.newestToOldest:
         return 'Newest to Oldest';
@@ -853,24 +1094,33 @@ class _SortOrderDropdown extends StatelessWidget {
               .map(
                 (order) => PopupMenuItem<_ProjectSortOrder>(
                   value: order,
-                  child: Text(_label(order)),
+                  child: Text(_fullLabel(order)),
                 ),
               )
               .toList(),
-          child: OutlinedButton(
-            onPressed: null,
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              side: BorderSide(color: Colors.grey[300]!),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey[300]!),
+              borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
-              children: const [
-                Icon(Icons.swap_vert, size: 16, color: Color(0xFF0C1935)),
-                SizedBox(width: 4),
-                Icon(Icons.arrow_drop_down, size: 18, color: Color(0xFF0C1935)),
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.swap_vert, size: 16, color: Color(0xFF0C1935)),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    _label(value),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF0C1935),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             ),
           ),
@@ -886,25 +1136,22 @@ class _SortOrderDropdown extends StatelessWidget {
             .map(
               (order) => PopupMenuItem<_ProjectSortOrder>(
                 value: order,
-                child: Text(_label(order)),
+                child: Text(_fullLabel(order)),
               ),
             )
             .toList(),
-        child: OutlinedButton(
-          onPressed: null,
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            side: BorderSide(color: Colors.grey[300]!),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey[300]!),
+            borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
             children: [
               const Icon(Icons.swap_vert, size: 16, color: Color(0xFF0C1935)),
               const SizedBox(width: 6),
               Text(
-                _label(value),
+                _fullLabel(value),
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -1035,6 +1282,19 @@ class ProjectOverviewCard extends StatelessWidget {
     );
   }
 
+  Color _getStatusColor(String status, {required bool isBackground}) {
+    final lowerStatus = status.toLowerCase();
+    if (lowerStatus == 'active') {
+      return isBackground ? const Color(0xFFE5F8ED) : const Color(0xFF10B981);
+    } else if (lowerStatus == 'on hold') {
+      return isBackground ? const Color(0xFFFFF2E8) : const Color(0xFFFF7A18);
+    } else if (lowerStatus == 'deactivated') {
+      return isBackground ? const Color(0xFFFEECEC) : const Color(0xFFDC2626);
+    }
+    // Default
+    return isBackground ? const Color(0xFFF3F4F6) : const Color(0xFF6B7280);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -1061,29 +1321,52 @@ class ProjectOverviewCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: data.progress >= 1
-                        ? const Color(0xFFE5F8ED)
-                        : const Color(0xFFFFF2E8),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    data.projectType.isNotEmpty
-                        ? data.projectType
-                        : data.status,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: data.progress >= 1
-                          ? const Color(0xFF10B981)
-                          : const Color(0xFFFF7A18),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: data.progress >= 1
+                            ? const Color(0xFFE5F8ED)
+                            : const Color(0xFFFFF2E8),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        data.projectType.isNotEmpty
+                            ? data.projectType
+                            : 'Project',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: data.progress >= 1
+                              ? const Color(0xFF10B981)
+                              : const Color(0xFFFF7A18),
+                        ),
+                      ),
                     ),
-                  ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _getStatusColor(data.status, isBackground: true),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        data.status,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: _getStatusColor(data.status, isBackground: false),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 Text(

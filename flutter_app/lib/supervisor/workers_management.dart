@@ -216,6 +216,9 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
       case 'Dashboard':
         context.go('/supervisor');
         break;
+      case 'Projects':
+        context.go('/supervisor/projects');
+        break;
       case 'Workers':
       case 'Worker Management':
         return; // Already on workers page
