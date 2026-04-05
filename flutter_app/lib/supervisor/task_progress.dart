@@ -78,9 +78,6 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
       case 'Dashboard':
         context.go('/supervisor');
         break;
-      case 'Projects':
-        context.go('/supervisor/projects');
-        break;
       case 'Workers':
       case 'Worker Management':
         context.go('/supervisor/workers');

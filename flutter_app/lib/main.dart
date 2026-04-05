@@ -93,61 +93,8 @@ class StructuraApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final authService = AuthService();
-
-    // Define routes that require authentication
-    final protectedRoutes = {
-      '/dashboard',
-      '/projects',
-      '/workforce',
-      '/clients',
-      '/reports',
-      '/inventory',
-      '/settings',
-      '/test-time',
-      '/license',
-      '/supervisor',
-      '/supervisor/projects',
-      '/supervisor/workers',
-      '/supervisor/attendance',
-      '/supervisor/task-progress',
-      '/supervisor/reports',
-      '/supervisor/inventory',
-      '/client',
-    };
-
     final GoRouter router = GoRouter(
       initialLocation: '/',
-      redirect: (BuildContext context, GoRouterState state) {
-        final isLoggedIn = authService.isLoggedIn;
-        final isGoingToLogin = state.matchedLocation == '/login';
-        final isGoingToSignup = state.matchedLocation == '/signup';
-        final isGoingToHome = state.matchedLocation == '/';
-        final isGoingToChangePassword =
-            state.matchedLocation == '/change-password';
-
-        // If logged in and trying to access login or signup, redirect to dashboard
-        if (isLoggedIn && (isGoingToLogin || isGoingToSignup)) {
-          final userRole = authService.currentUser?['role'];
-          if (userRole == 'Supervisor') {
-            return '/supervisor';
-          } else if (userRole == 'Client') {
-            return '/client';
-          } else {
-            return '/dashboard';
-          }
-        }
-
-        // If not logged in and trying to access protected route, redirect to login
-        if (!isLoggedIn && protectedRoutes.contains(state.matchedLocation)) {
-          return Uri(
-            path: '/login',
-            queryParameters: {'redirect_to': state.matchedLocation},
-          ).toString();
-        }
-
-        return null; // Allow the navigation
-      },
       routes: [
         GoRoute(
           path: '/',
@@ -156,10 +103,7 @@ class StructuraApp extends StatelessWidget {
         ),
         GoRoute(
           path: '/login',
-          builder: (context, state) {
-            final redirectTo = state.uri.queryParameters['redirect_to'];
-            return LoginPage(redirectTo: redirectTo);
-          },
+          builder: (context, state) => const LoginPage(),
           name: 'login',
         ),
         GoRoute(
@@ -185,10 +129,7 @@ class StructuraApp extends StatelessWidget {
         ),
         GoRoute(
           path: '/signup',
-          builder: (context, state) {
-            final redirectTo = state.uri.queryParameters['redirect_to'];
-            return SignUpPage(redirectTo: redirectTo);
-          },
+          builder: (context, state) => const SignUpPage(),
           name: 'signup',
         ),
         GoRoute(

@@ -462,7 +462,7 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
           'province': _selectedProvinceId,
           'city': _selectedCityId,
           'barangay': _selectedBarangayId,
-          'status': 'Active',
+          'status': 'Planning',
           'project_image': null,
           'user_id': userId,
         };

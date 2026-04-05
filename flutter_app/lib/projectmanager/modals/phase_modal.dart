@@ -23,7 +23,6 @@ class _PhaseModalState extends State<PhaseModal> {
 
   final _descriptionController = TextEditingController();
   final _daysDurationController = TextEditingController();
-  final _customPhaseController = TextEditingController();
 
   String? _selectedPhase;
   final List<TextEditingController> _subtaskControllers = [];
@@ -32,8 +31,6 @@ class _PhaseModalState extends State<PhaseModal> {
   int? _projectDurationDays;
   int _existingPhasesDurationDays = 0;
   String? _durationWarning;
-  bool _showSubtaskError = false;
-  bool _useCustomPhase = false;
 
   final List<String> _phases = [
     'PHASE 1 - Pre-Construction Phase',
@@ -141,7 +138,6 @@ class _PhaseModalState extends State<PhaseModal> {
   void dispose() {
     _descriptionController.dispose();
     _daysDurationController.dispose();
-    _customPhaseController.dispose();
     for (var controller in _subtaskControllers) {
       controller.dispose();
     }
@@ -176,33 +172,6 @@ class _PhaseModalState extends State<PhaseModal> {
   Future<void> _submitPhase() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // Validate custom phase if being used
-    if (_useCustomPhase) {
-      final customPhase = _customPhaseController.text.trim();
-      if (customPhase.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please enter a custom phase name'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-    }
-
-    // Validate that at least one subtask is provided
-    bool hasSubtask = _subtaskControllers.any((controller) => controller.text.trim().isNotEmpty);
-    if (!hasSubtask) {
-      setState(() {
-        _showSubtaskError = true;
-      });
-      return;
-    }
-
-    setState(() {
-      _showSubtaskError = false;
-    });
-
     if (_durationWarning != null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -231,13 +200,10 @@ class _PhaseModalState extends State<PhaseModal> {
         }
       }
 
-      // Get the phase name
-      final phaseName = _useCustomPhase ? _customPhaseController.text.trim() : _selectedPhase;
-
       // Prepare phase data
       final phaseData = {
         'project': widget.projectId,
-        'phase_name': phaseName,
+        'phase_name': _selectedPhase,
         'description': _descriptionController.text,
         'days_duration': _daysDurationController.text.isNotEmpty
             ? int.tryParse(_daysDurationController.text)
@@ -390,98 +356,36 @@ class _PhaseModalState extends State<PhaseModal> {
                             ),
                           ),
                         ),
-                        items: [
-                          ..._phases.map((phase) {
-                            final isDisabled = _existingPhases.contains(phase);
-                            return DropdownMenuItem<String>(
-                              value: phase,
-                              enabled: !isDisabled,
-                              child: Text(
-                                phase,
-                                style: TextStyle(
-                                  color: isDisabled
-                                      ? Colors.grey.shade400
-                                      : Colors.black,
-                                  fontSize: isMobile ? 13 : 14,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
-                              ),
-                            );
-                          }).toList(),
-                          DropdownMenuItem<String>(
-                            value: 'CUSTOM_PHASE',
+                        items: _phases.map((phase) {
+                          final isDisabled = _existingPhases.contains(phase);
+                          return DropdownMenuItem<String>(
+                            value: phase,
+                            enabled: !isDisabled,
                             child: Text(
-                              'Custom Phase',
+                              phase,
                               style: TextStyle(
-                                color: Colors.orange,
+                                color: isDisabled
+                                    ? Colors.grey.shade400
+                                    : Colors.black,
                                 fontSize: isMobile ? 13 : 14,
-                                fontWeight: FontWeight.w600,
                               ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
-                          ),
-                        ],
+                          );
+                        }).toList(),
                         onChanged: (value) {
                           setState(() {
-                            if (value == 'CUSTOM_PHASE') {
-                              _useCustomPhase = true;
-                              _selectedPhase = null;
-                            } else {
-                              _useCustomPhase = false;
-                              _selectedPhase = value;
-                              _customPhaseController.clear();
-                            }
+                            _selectedPhase = value;
                           });
                         },
                         validator: (value) {
-                          if (!_useCustomPhase && (value == null || value.isEmpty)) {
+                          if (value == null || value.isEmpty) {
                             return 'Please select a phase';
                           }
                           return null;
                         },
                       ),
-
-                      if (_useCustomPhase) ...[
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: _customPhaseController,
-                          decoration: InputDecoration(
-                            labelText: 'CUSTOM PHASE NAME',
-                            labelStyle: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey,
-                            ),
-                            hintText: 'Enter custom phase name',
-                            filled: true,
-                            fillColor: const Color(0xFFF9FAFB),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(
-                                color: Color(0xFFE5E7EB),
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(
-                                color: Color(0xFFE5E7EB),
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(
-                                color: Color(0xFF0C1935),
-                                width: 2,
-                              ),
-                            ),
-                          ),
-                          validator: (value) {
-                            if (_useCustomPhase && (value == null || value.trim().isEmpty)) {
-                              return 'Please enter a custom phase name';
-                            }
-                            return null;
-                          },
-                        ),
-                      ],
 
                       const SizedBox(height: 20),
 
@@ -706,18 +610,6 @@ class _PhaseModalState extends State<PhaseModal> {
                           ),
                         ),
                       ),
-                      if (_showSubtaskError)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 12),
-                          child: Text(
-                            'Please add at least one subtask',
-                            style: TextStyle(
-                              color: Colors.red,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
                     ],
                   ),
                 ),

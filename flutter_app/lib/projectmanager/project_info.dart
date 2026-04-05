@@ -575,7 +575,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                     ),
                     const SizedBox(width: 8),
                     IconButton(
-                      onPressed: _showDeactivationModal,
+                      onPressed: () {},
                       icon: const Icon(Icons.settings, size: 20),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
@@ -661,7 +661,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                       ),
                       const SizedBox(width: 8),
                       IconButton(
-                        onPressed: _showDeactivationModal,
+                        onPressed: () {},
                         icon: const Icon(Icons.settings, size: 20),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
@@ -1146,132 +1146,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
       color: Colors.grey[300],
       child: const Center(child: Icon(Icons.image_not_supported, size: 40)),
     );
-  }
-
-  bool _isProjectActive() {
-    final status = _projectInfo?['status']?.toString().toLowerCase() ?? 'active';
-    return status == 'active';
-  }
-
-  bool _isProjectOnHold() {
-    final status = _projectInfo?['status']?.toString().toLowerCase() ?? 'active';
-    return status == 'on hold';
-  }
-
-  void _showDeactivationModal() {
-    final isActive = _isProjectActive();
-
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Project Status'),
-          content: isActive
-              ? const Text('What would you like to do with this project?')
-              : const Text('Activate this project or continue managing its status?'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('Cancel'),
-            ),
-            if (isActive)
-              TextButton(
-                onPressed: () async {
-                  Navigator.of(context).pop();
-                  await _setProjectStatus('On Hold');
-                },
-                child: const Text(
-                  'Hold the Project',
-                  style: TextStyle(color: Colors.orange),
-                ),
-              ),
-            if (isActive)
-              TextButton(
-                onPressed: () async {
-                  Navigator.of(context).pop();
-                  await _setProjectStatus('Deactivated');
-                },
-                child: const Text(
-                  'Deactivate',
-                  style: TextStyle(color: Colors.red),
-                ),
-              ),
-            if (!isActive)
-              TextButton(
-                onPressed: () async {
-                  Navigator.of(context).pop();
-                  await _setProjectStatus('Active');
-                },
-                child: const Text(
-                  'Activate Project',
-                  style: TextStyle(color: Colors.green),
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<void> _setProjectStatus(String targetStatus) async {
-    try {
-      final authUser = AuthService().currentUser;
-      final userId = authUser?['user_id'];
-      
-      // Get the current status
-      final currentStatus = _projectInfo?['status']?.toString() ?? 'Active';
-      final url = userId != null
-          ? 'projects/${widget.projectId}/deactivate/?user_id=$userId'
-          : 'projects/${widget.projectId}/deactivate/';
-
-      // Keep calling deactivate until we reach the target status
-      var currentStatusLoop = currentStatus;
-      while (currentStatusLoop != targetStatus) {
-        final response = await http.post(AppConfig.apiUri(url));
-
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-          currentStatusLoop = data['status'] ?? 'Unknown';
-          
-          if (currentStatusLoop == targetStatus) {
-            if (!mounted) return;
-            
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Project status changed to: $targetStatus'),
-                backgroundColor: Colors.green,
-              ),
-            );
-            
-            setState(() {
-              _projectInfo?['status'] = targetStatus;
-            });
-            break;
-          }
-        } else {
-          if (!mounted) return;
-          
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to change project status (${response.statusCode})'),
-              backgroundColor: Colors.red,
-            ),
-          );
-          break;
-        }
-      }
-    } catch (e) {
-      if (!mounted) return;
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
   }
 
   Widget _infoCard({
