@@ -49,13 +49,13 @@ class AttendanceReport {
   double get regularHours => totalHours;
 
   double get grossPay =>
-      regularHours * hourlyRate + overtimeHours * hourlyRate * _overtimeRateMultiplier;
+      regularHours * hourlyRate +
+      overtimeHours * hourlyRate * _overtimeRateMultiplier;
 
   double get totalGovernmentDeductions =>
       sssDeduction + philhealthDeduction + pagibigDeduction;
 
-  double get totalDeductions =>
-      deduction + totalGovernmentDeductions;
+  double get totalDeductions => deduction + totalGovernmentDeductions;
 
   double get computedSalary => grossPay - totalDeductions;
 }
@@ -133,6 +133,9 @@ class _ReportsPageState extends State<ReportsPage> {
       case 'Dashboard':
         context.go('/supervisor');
         break;
+      case 'Projects':
+        context.go('/supervisor/projects');
+        break;
       case 'Workers':
       case 'Worker Management':
         context.go('/supervisor/workers');
@@ -186,12 +189,18 @@ class _ReportsPageState extends State<ReportsPage> {
       'submission_id': '$projectId:${_dateString(_salaryDate)}',
       'project_id': projectId,
       'project_name':
-        (currentUser['project_name'] ?? currentUser['assigned_project_name'] ?? '')
-          .toString(),
-      'supervisor_id': _toInt(currentUser['supervisor_id']) ?? _toInt(currentUser['id']),
+          (currentUser['project_name'] ??
+                  currentUser['assigned_project_name'] ??
+                  '')
+              .toString(),
+      'supervisor_id':
+          _toInt(currentUser['supervisor_id']) ?? _toInt(currentUser['id']),
       'supervisor_name':
-        (currentUser['full_name'] ?? currentUser['name'] ?? currentUser['username'] ?? 'Supervisor')
-          .toString(),
+          (currentUser['full_name'] ??
+                  currentUser['name'] ??
+                  currentUser['username'] ??
+                  'Supervisor')
+              .toString(),
       'submitted_at': DateTime.now().toIso8601String(),
       'salary_date': _dateString(_salaryDate),
       'report_start': _dateString(_effectiveReportStart),
@@ -267,7 +276,8 @@ class _ReportsPageState extends State<ReportsPage> {
     return b.difference(a).inDays + 1;
   }
 
-  bool get _isSalaryDayMode => _dateString(_weekEnd) == _dateString(_salaryDate);
+  bool get _isSalaryDayMode =>
+      _dateString(_weekEnd) == _dateString(_salaryDate);
 
   Future<DateTime> _resolveSalaryCycleStartDate({
     required int projectId,
@@ -405,11 +415,10 @@ class _ReportsPageState extends State<ReportsPage> {
   Future<List<Map<String, dynamic>>> _fetchWorkers(int projectId) async {
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentUser = authService.currentUser ?? <String, dynamic>{};
-    final typeOrRole =
-        (currentUser['type'] ?? currentUser['role'] ?? '')
-            .toString()
-            .trim()
-            .toLowerCase();
+    final typeOrRole = (currentUser['type'] ?? currentUser['role'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
     final userId = _toInt(currentUser['user_id']);
     final supervisorId =
         _toInt(currentUser['supervisor_id']) ??
@@ -559,14 +568,16 @@ class _ReportsPageState extends State<ReportsPage> {
       final breakInMinutes = _timeToMinutes(breakIn);
       final mergedBreakInMinutes = _timeToMinutes(mergedBreakIn);
       if (breakInMinutes != null &&
-          (mergedBreakInMinutes == null || breakInMinutes < mergedBreakInMinutes)) {
+          (mergedBreakInMinutes == null ||
+              breakInMinutes < mergedBreakInMinutes)) {
         merged['break_in_time'] = breakIn;
       }
 
       final breakOutMinutes = _timeToMinutes(breakOut);
       final mergedBreakOutMinutes = _timeToMinutes(mergedBreakOut);
       if (breakOutMinutes != null &&
-          (mergedBreakOutMinutes == null || breakOutMinutes > mergedBreakOutMinutes)) {
+          (mergedBreakOutMinutes == null ||
+              breakOutMinutes > mergedBreakOutMinutes)) {
         merged['break_out_time'] = breakOut;
       }
     }
@@ -589,11 +600,10 @@ class _ReportsPageState extends State<ReportsPage> {
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentUser = authService.currentUser ?? <String, dynamic>{};
     final projectId = _toInt(currentUser['project_id']);
-    final typeOrRole =
-        (currentUser['type'] ?? currentUser['role'] ?? '')
-            .toString()
-            .trim()
-            .toLowerCase();
+    final typeOrRole = (currentUser['type'] ?? currentUser['role'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
     final userId = _toInt(currentUser['user_id']);
     final supervisorId =
         _toInt(currentUser['supervisor_id']) ??
@@ -652,7 +662,11 @@ class _ReportsPageState extends State<ReportsPage> {
       !date.isAfter(end);
       date = date.add(const Duration(days: 1))
     ) {
-      final attendance = await _fetchAttendanceForDate(projectId, date, workerIds);
+      final attendance = await _fetchAttendanceForDate(
+        projectId,
+        date,
+        workerIds,
+      );
       final mergedByWorker = <int, Map<String, dynamic>>{};
 
       for (final record in attendance) {
@@ -752,8 +766,8 @@ class _ReportsPageState extends State<ReportsPage> {
 
       // Fallback for older worker records that don't have computed deduction fields yet.
       // totalHours is regular-only; OT is stored in overtimeHours.
-        final regularHours = totals.totalHours < 0 ? 0.0 : totals.totalHours;
-        final grossPayEstimate =
+      final regularHours = totals.totalHours < 0 ? 0.0 : totals.totalHours;
+      final grossPayEstimate =
           regularHours * hourlyRate +
           totals.overtimeHours * hourlyRate * _overtimeRateMultiplier;
       final sssDeduction = sssWeekly > 0
@@ -764,7 +778,8 @@ class _ReportsPageState extends State<ReportsPage> {
           : grossPayEstimate * 0.0115;
       final pagibigDeduction = pagibigWeekly > 0
           ? pagibigWeekly * periodFactor
-          : ((grossPayEstimate > 1154.73 ? 1154.73 : grossPayEstimate) * 0.0046);
+          : ((grossPayEstimate > 1154.73 ? 1154.73 : grossPayEstimate) *
+                0.0046);
 
       reports.add(
         AttendanceReport(
@@ -775,10 +790,16 @@ class _ReportsPageState extends State<ReportsPage> {
           totalHours: totals.totalHours,
           overtimeHours: totals.overtimeHours,
           cashAdvance: _toDouble(
-            worker['cash_advance_balance'] ?? worker['cash_advance'] ?? worker['cashAdvance'] ?? 0,
+            worker['cash_advance_balance'] ??
+                worker['cash_advance'] ??
+                worker['cashAdvance'] ??
+                0,
           ),
           deduction: _toDouble(
-            worker['deduction_per_salary'] ?? worker['deduction'] ?? worker['other_deduction'] ?? 0,
+            worker['deduction_per_salary'] ??
+                worker['deduction'] ??
+                worker['other_deduction'] ??
+                0,
           ),
           hourlyRate: hourlyRate,
           sssDeduction: sssDeduction,
@@ -788,7 +809,9 @@ class _ReportsPageState extends State<ReportsPage> {
       );
     }
 
-    reports.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    reports.sort(
+      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+    );
     return reports;
   }
 
@@ -865,7 +888,10 @@ class _ReportsPageState extends State<ReportsPage> {
           start: start,
           end: end,
         );
-        final totalAmount = rows.fold<double>(0, (sum, r) => sum + r.computedSalary);
+        final totalAmount = rows.fold<double>(
+          0,
+          (sum, r) => sum + r.computedSalary,
+        );
         history.add(
           ReportHistoryEntry(
             start: start,
@@ -950,7 +976,9 @@ class _ReportsPageState extends State<ReportsPage> {
                                   'Week of ${_prettyDateFmt.format(entry.start)} - ${_prettyDateFmt.format(entry.end)}',
                                   'Workers with attendance: ${entry.workersCount}',
                                   _money.format(entry.totalAmount),
-                                  entry.totalAmount > 0 ? 'Available' : 'No payout',
+                                  entry.totalAmount > 0
+                                      ? 'Available'
+                                      : 'No payout',
                                   entry.totalAmount > 0
                                       ? const Color(0xFF757575)
                                       : const Color(0xFFFF8F00),
@@ -1463,7 +1491,9 @@ class _ReportsPageState extends State<ReportsPage> {
                                             Expanded(
                                               child: _mobileDatePickerButton(
                                                 label: 'Report Date',
-                                                value: _dateFmt.format(_weekEnd),
+                                                value: _dateFmt.format(
+                                                  _weekEnd,
+                                                ),
                                                 icon: Icons.calendar_today,
                                                 onTap: _pickReportDate,
                                               ),
@@ -1472,7 +1502,9 @@ class _ReportsPageState extends State<ReportsPage> {
                                             Expanded(
                                               child: _mobileDatePickerButton(
                                                 label: 'Salary Date',
-                                                value: _dateFmt.format(_salaryDate),
+                                                value: _dateFmt.format(
+                                                  _salaryDate,
+                                                ),
                                                 icon: Icons.payments_outlined,
                                                 onTap: _pickSalaryDate,
                                               ),
@@ -1490,7 +1522,9 @@ class _ReportsPageState extends State<ReportsPage> {
                                                 Icons.send,
                                                 size: 16,
                                               ),
-                                              label: const Text('Submit Report'),
+                                              label: const Text(
+                                                'Submit Report',
+                                              ),
                                               style: ElevatedButton.styleFrom(
                                                 backgroundColor:
                                                     AppColors.accent,
@@ -1516,9 +1550,10 @@ class _ReportsPageState extends State<ReportsPage> {
                                         : _loadError != null
                                         ? Center(
                                             child: Padding(
-                                              padding: const EdgeInsets.symmetric(
-                                                horizontal: 16,
-                                              ),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 16,
+                                                  ),
                                               child: Text(
                                                 _loadError!,
                                                 style: TextStyle(
@@ -1547,17 +1582,24 @@ class _ReportsPageState extends State<ReportsPage> {
                                                     top: 4,
                                                     bottom: 6,
                                                   ),
-                                                  padding: const EdgeInsets.all(12),
+                                                  padding: const EdgeInsets.all(
+                                                    12,
+                                                  ),
                                                   decoration: BoxDecoration(
                                                     color: Colors.white,
                                                     borderRadius:
-                                                        BorderRadius.circular(12),
+                                                        BorderRadius.circular(
+                                                          12,
+                                                        ),
                                                     boxShadow: [
                                                       BoxShadow(
                                                         color: Colors.black
                                                             .withOpacity(0.05),
                                                         blurRadius: 8,
-                                                        offset: const Offset(0, -2),
+                                                        offset: const Offset(
+                                                          0,
+                                                          -2,
+                                                        ),
                                                       ),
                                                     ],
                                                   ),
@@ -1575,7 +1617,8 @@ class _ReportsPageState extends State<ReportsPage> {
                                                                   .grey[700],
                                                               fontSize: 12,
                                                               fontWeight:
-                                                                  FontWeight.w600,
+                                                                  FontWeight
+                                                                      .w600,
                                                             ),
                                                           ),
                                                           Text(
@@ -1610,7 +1653,8 @@ class _ReportsPageState extends State<ReportsPage> {
                                                             style: TextStyle(
                                                               fontSize: 14,
                                                               fontWeight:
-                                                                  FontWeight.w700,
+                                                                  FontWeight
+                                                                      .w700,
                                                             ),
                                                           ),
                                                           Text(
@@ -1623,8 +1667,8 @@ class _ReportsPageState extends State<ReportsPage> {
                                                                       FontWeight
                                                                           .w900,
                                                                   fontSize: 16,
-                                                                  color:
-                                                                      Colors.green,
+                                                                  color: Colors
+                                                                      .green,
                                                                 ),
                                                           ),
                                                         ],
@@ -1742,14 +1786,15 @@ class _ReportsPageState extends State<ReportsPage> {
                                                                       ),
                                                                       child: Text(
                                                                         r.role,
-                                                                        maxLines: 1,
+                                                                        maxLines:
+                                                                            1,
                                                                         overflow:
                                                                             TextOverflow.ellipsis,
                                                                         style: const TextStyle(
                                                                           fontSize:
                                                                               10,
-                                                                          color: AppColors
-                                                                              .textMuted,
+                                                                          color:
+                                                                              AppColors.textMuted,
                                                                         ),
                                                                       ),
                                                                     ),
@@ -1768,14 +1813,16 @@ class _ReportsPageState extends State<ReportsPage> {
                                                                     Container(
                                                                       padding: const EdgeInsets.symmetric(
                                                                         horizontal:
-                                                                          5,
+                                                                            5,
                                                                         vertical:
                                                                             2,
                                                                       ),
                                                                       decoration: BoxDecoration(
                                                                         color: AppColors
                                                                             .accent
-                                                                            .withOpacity(0.12),
+                                                                            .withOpacity(
+                                                                              0.12,
+                                                                            ),
                                                                         borderRadius:
                                                                             BorderRadius.circular(
                                                                               4,
@@ -1786,8 +1833,8 @@ class _ReportsPageState extends State<ReportsPage> {
                                                                         style: const TextStyle(
                                                                           fontSize:
                                                                               9,
-                                                                          color: AppColors
-                                                                              .accent,
+                                                                          color:
+                                                                              AppColors.accent,
                                                                           fontWeight:
                                                                               FontWeight.w600,
                                                                         ),
@@ -2011,7 +2058,8 @@ class _ReportsPageState extends State<ReportsPage> {
                                     Expanded(
                                       child: _isLoading
                                           ? const Center(
-                                              child: CircularProgressIndicator(),
+                                              child:
+                                                  CircularProgressIndicator(),
                                             )
                                           : _loadError != null
                                           ? Center(
@@ -2255,8 +2303,8 @@ class _ReportsPageState extends State<ReportsPage> {
                                                           ),
                                                           style:
                                                               const TextStyle(
-                                                                color: Colors
-                                                                    .blue,
+                                                                color:
+                                                                    Colors.blue,
                                                                 fontSize: 12,
                                                                 fontWeight:
                                                                     FontWeight
@@ -2332,9 +2380,8 @@ class _ReportsPageState extends State<ReportsPage> {
                                                       Expanded(
                                                         flex: 2,
                                                         child: Align(
-                                                          alignment:
-                                                              Alignment
-                                                                  .centerRight,
+                                                          alignment: Alignment
+                                                              .centerRight,
                                                           child: OutlinedButton.icon(
                                                             onPressed: () =>
                                                                 _showWorkerDetails(
@@ -2355,8 +2402,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                                                   const EdgeInsets.symmetric(
                                                                     horizontal:
                                                                         10,
-                                                                    vertical:
-                                                                        6,
+                                                                    vertical: 6,
                                                                   ),
                                                             ),
                                                           ),
@@ -2549,9 +2595,14 @@ class _ReportsPageState extends State<ReportsPage> {
       borderRadius: BorderRadius.circular(12),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: AppSpacing.sm),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: AppSpacing.sm,
+        ),
         decoration: BoxDecoration(
-          color: isActive ? AppColors.accent.withOpacity(0.15) : Colors.transparent,
+          color: isActive
+              ? AppColors.accent.withOpacity(0.15)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -2660,7 +2711,7 @@ class _ReportsPageState extends State<ReportsPage> {
         builder: (context, setModalState) {
           final effectiveDeduction = isSalaryDay ? editableDeduction : 0.0;
           final liveTotalDeductions =
-            r.totalGovernmentDeductions + effectiveDeduction;
+              r.totalGovernmentDeductions + effectiveDeduction;
           final liveNetSalary = r.grossPay - liveTotalDeductions;
 
           return Container(
@@ -2675,412 +2726,433 @@ class _ReportsPageState extends State<ReportsPage> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                // Handle bar
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Worker header
-                Row(
-                  children: [
-                    Container(
-                      width: 60,
-                      height: 60,
-                      decoration: BoxDecoration(
-                        color: accent.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Center(
-                        child: Text(
-                          r.name
-                              .split(' ')
-                              .map((s) => s.isNotEmpty ? s[0] : '')
-                              .take(2)
-                              .join(),
-                          style: TextStyle(
-                            color: accent,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 20,
-                          ),
+                    // Handle bar
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[300],
+                          borderRadius: BorderRadius.circular(2),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            r.name,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 18,
+                    const SizedBox(height: 20),
+
+                    // Worker header
+                    Row(
+                      children: [
+                        Container(
+                          width: 60,
+                          height: 60,
+                          decoration: BoxDecoration(
+                            color: accent.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Center(
+                            child: Text(
+                              r.name
+                                  .split(' ')
+                                  .map((s) => s.isNotEmpty ? s[0] : '')
+                                  .take(2)
+                                  .join(),
+                              style: TextStyle(
+                                color: accent,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 20,
+                              ),
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade100,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                r.name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 18,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  r.role,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Attendance info
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _detailItem(
+                            'Days',
+                            '${r.totalDaysPresent}',
+                            Icons.calendar_today,
+                          ),
+                          _detailItem(
+                            'Hours',
+                            '${r.totalHours.toStringAsFixed(1)}',
+                            Icons.access_time,
+                          ),
+                          _detailItem(
+                            'OT',
+                            '${r.overtimeHours.toStringAsFixed(1)}',
+                            Icons.add_circle_outline,
+                          ),
+                          _detailItem(
+                            'Rate',
+                            '${_money.format(r.hourlyRate)}/hr',
+                            Icons.attach_money,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF9FAFB),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                      ),
+                      child: Text(
+                        'Summary period: ${_dateFmt.format(_effectiveReportStart)} to ${_dateFmt.format(_weekEnd)} | Salary date: ${_dateFmt.format(_salaryDate)}',
+                        style: TextStyle(
+                          color: Colors.grey[700],
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Cash advance controls
+                    const Text(
+                      'Cash Advance Controls',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF7ED),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFFFD7A8)),
+                      ),
+                      child: Column(
+                        children: [
+                          Align(
+                            alignment: Alignment.centerLeft,
                             child: Text(
-                              r.role,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
+                              'Current Balance: ${_money.format(editableCashAdvance)}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: Colors.grey[800],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          if (!isSalaryDay)
+                            TextField(
+                              controller: cashAdvanceController,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              decoration: InputDecoration(
+                                labelText: 'Cash Advance Request (PHP)',
+                                prefixText: '₱ ',
+                                isDense: true,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              onChanged: (val) {
+                                final parsed = _toDouble(val);
+                                setModalState(() {
+                                  cashAdvanceRequest = parsed < 0 ? 0 : parsed;
+                                });
+                              },
+                            ),
+                          if (!isSalaryDay) const SizedBox(height: 10),
+                          if (isSalaryDay)
+                            TextField(
+                              controller: deductionController,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              decoration: InputDecoration(
+                                labelText: 'Deduction Per Salary (PHP)',
+                                prefixText: '₱ ',
+                                isDense: true,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              onChanged: (val) {
+                                final parsed = _toDouble(val);
+                                setModalState(() {
+                                  final normalized = parsed < 0 ? 0.0 : parsed;
+                                  editableDeduction =
+                                      normalized > editableCashAdvance
+                                      ? editableCashAdvance
+                                      : normalized;
+                                });
+                              },
+                            ),
+                          if (isSalaryDay)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  'Deduction is available only on salary day and cannot exceed current balance.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[700],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          if (!isSalaryDay)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  'Deduction will be available on salary day.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[700],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          const SizedBox(height: 10),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: ElevatedButton.icon(
+                              onPressed: isSaving
+                                  ? null
+                                  : () async {
+                                      setModalState(() {
+                                        isSaving = true;
+                                      });
+                                      try {
+                                        final nextBalance = isSalaryDay
+                                            ? (editableCashAdvance -
+                                                  effectiveDeduction)
+                                            : (editableCashAdvance +
+                                                  cashAdvanceRequest);
+                                        if (!isSalaryDay &&
+                                            cashAdvanceRequest <= 0) {
+                                          throw Exception(
+                                            'Enter a cash advance request amount greater than zero.',
+                                          );
+                                        }
+
+                                        await _updateWorkerCashAdvanceSettings(
+                                          workerId: r.fieldWorkerId,
+                                          cashAdvanceBalance: nextBalance < 0
+                                              ? 0
+                                              : nextBalance,
+                                          deductionPerSalary:
+                                              effectiveDeduction,
+                                        );
+                                        setModalState(() {
+                                          editableCashAdvance = nextBalance < 0
+                                              ? 0
+                                              : nextBalance;
+                                          if (!isSalaryDay) {
+                                            cashAdvanceRequest = 0;
+                                            cashAdvanceController.text = '0.00';
+                                          }
+                                        });
+                                        await _refreshReports();
+                                        if (!mounted) return;
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              isSalaryDay
+                                                  ? 'Salary-day deduction saved'
+                                                  : 'Cash advance request added to balance',
+                                            ),
+                                          ),
+                                        );
+                                      } catch (e) {
+                                        if (!mounted) return;
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(content: Text(e.toString())),
+                                        );
+                                      } finally {
+                                        if (!mounted) return;
+                                        setModalState(() {
+                                          isSaving = false;
+                                        });
+                                      }
+                                    },
+                              icon: isSaving
+                                  ? const SizedBox(
+                                      width: 14,
+                                      height: 14,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Icon(Icons.save, size: 16),
+                              label: Text(
+                                isSaving ? 'Saving...' : 'Save',
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: accent,
                               ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
+                    const SizedBox(height: 20),
 
-                // Attendance info
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _detailItem(
-                        'Days',
-                        '${r.totalDaysPresent}',
-                        Icons.calendar_today,
+                    // Salary breakdown
+                    const Text(
+                      'Salary Breakdown',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
                       ),
-                      _detailItem(
-                        'Hours',
-                        '${r.totalHours.toStringAsFixed(1)}',
-                        Icons.access_time,
-                      ),
-                      _detailItem(
-                        'OT',
-                        '${r.overtimeHours.toStringAsFixed(1)}',
-                        Icons.add_circle_outline,
-                      ),
-                      _detailItem(
-                        'Rate',
-                        '${_money.format(r.hourlyRate)}/hr',
-                        Icons.attach_money,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF9FAFB),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFE5E7EB)),
-                  ),
-                  child: Text(
-                    'Summary period: ${_dateFmt.format(_effectiveReportStart)} to ${_dateFmt.format(_weekEnd)} | Salary date: ${_dateFmt.format(_salaryDate)}',
-                    style: TextStyle(
-                      color: Colors.grey[700],
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
                     ),
-                  ),
-                ),
-                const SizedBox(height: 20),
+                    const SizedBox(height: 12),
 
-                // Cash advance controls
-                const Text(
-                  'Cash Advance Controls',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFF7ED),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFFFD7A8)),
-                  ),
-                  child: Column(
-                    children: [
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          'Current Balance: ${_money.format(editableCashAdvance)}',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: Colors.grey[800],
-                          ),
-                        ),
+                    _salaryRow(
+                      'Gross Pay',
+                      _money.format(r.grossPay),
+                      Colors.black,
+                      isBold: true,
+                    ),
+                    const SizedBox(height: 8),
+                    Divider(height: 1, color: Colors.grey[300]),
+                    const SizedBox(height: 8),
+
+                    const Text(
+                      'Deductions',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey,
                       ),
-                      const SizedBox(height: 10),
-                      if (!isSalaryDay)
-                      TextField(
-                        controller: cashAdvanceController,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        decoration: InputDecoration(
-                          labelText: 'Cash Advance Request (PHP)',
-                          prefixText: '₱ ',
-                          isDense: true,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        onChanged: (val) {
-                          final parsed = _toDouble(val);
-                          setModalState(() {
-                            cashAdvanceRequest = parsed < 0 ? 0 : parsed;
-                          });
-                        },
+                    ),
+                    const SizedBox(height: 8),
+                    _salaryRow(
+                      'SSS',
+                      '- ${_money.format(r.sssDeduction)}',
+                      Colors.blue,
+                    ),
+                    _salaryRow(
+                      'PhilHealth',
+                      '- ${_money.format(r.philhealthDeduction)}',
+                      Colors.blue,
+                    ),
+                    _salaryRow(
+                      'Pag-IBIG',
+                      '- ${_money.format(r.pagibigDeduction)}',
+                      Colors.lightBlue,
+                    ),
+                    _salaryRow(
+                      'Cash Advance Balance',
+                      _money.format(editableCashAdvance),
+                      Colors.orange,
+                    ),
+                    _salaryRow(
+                      'Deduction Per Salary',
+                      '- ${_money.format(effectiveDeduction)}',
+                      Colors.redAccent,
+                    ),
+
+                    const SizedBox(height: 12),
+                    Divider(height: 1, thickness: 2, color: Colors.grey[400]),
+                    const SizedBox(height: 12),
+
+                    _salaryRow(
+                      'Total Deductions',
+                      _money.format(liveTotalDeductions),
+                      Colors.redAccent,
+                      isBold: true,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Net salary
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.green, width: 2),
                       ),
-                      if (!isSalaryDay) const SizedBox(height: 10),
-                      if (isSalaryDay)
-                      TextField(
-                        controller: deductionController,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        decoration: InputDecoration(
-                          labelText: 'Deduction Per Salary (PHP)',
-                          prefixText: '₱ ',
-                          isDense: true,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        onChanged: (val) {
-                          final parsed = _toDouble(val);
-                          setModalState(() {
-                            final normalized = parsed < 0 ? 0.0 : parsed;
-                            editableDeduction = normalized > editableCashAdvance
-                                ? editableCashAdvance
-                                : normalized;
-                          });
-                        },
-                      ),
-                      if (isSalaryDay)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              'Deduction is available only on salary day and cannot exceed current balance.',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[700],
-                              ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Net Salary',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
-                        ),
-                      if (!isSalaryDay)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              'Deduction will be available on salary day.',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[700],
-                              ),
+                          Text(
+                            _money.format(liveNetSalary),
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.green,
                             ),
                           ),
-                        ),
-                      const SizedBox(height: 10),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: ElevatedButton.icon(
-                          onPressed: isSaving
-                              ? null
-                              : () async {
-                                  setModalState(() {
-                                    isSaving = true;
-                                  });
-                                  try {
-                                    final nextBalance = isSalaryDay
-                                        ? (editableCashAdvance - effectiveDeduction)
-                                        : (editableCashAdvance + cashAdvanceRequest);
-                                    if (!isSalaryDay && cashAdvanceRequest <= 0) {
-                                      throw Exception(
-                                        'Enter a cash advance request amount greater than zero.',
-                                      );
-                                    }
-
-                                    await _updateWorkerCashAdvanceSettings(
-                                      workerId: r.fieldWorkerId,
-                                      cashAdvanceBalance: nextBalance < 0 ? 0 : nextBalance,
-                                      deductionPerSalary: effectiveDeduction,
-                                    );
-                                    setModalState(() {
-                                      editableCashAdvance = nextBalance < 0 ? 0 : nextBalance;
-                                      if (!isSalaryDay) {
-                                        cashAdvanceRequest = 0;
-                                        cashAdvanceController.text = '0.00';
-                                      }
-                                    });
-                                    await _refreshReports();
-                                    if (!mounted) return;
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          isSalaryDay
-                                              ? 'Salary-day deduction saved'
-                                              : 'Cash advance request added to balance',
-                                        ),
-                                      ),
-                                    );
-                                  } catch (e) {
-                                    if (!mounted) return;
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text(e.toString())),
-                                    );
-                                  } finally {
-                                    if (!mounted) return;
-                                    setModalState(() {
-                                      isSaving = false;
-                                    });
-                                  }
-                                },
-                          icon: isSaving
-                              ? const SizedBox(
-                                  width: 14,
-                                  height: 14,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Icon(Icons.save, size: 16),
-                          label: Text(
-                            isSaving ? 'Saving...' : 'Save',
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: accent,
-                          ),
-                        ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Salary breakdown
-                const Text(
-                  'Salary Breakdown',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 12),
-
-                _salaryRow(
-                  'Gross Pay',
-                  _money.format(r.grossPay),
-                  Colors.black,
-                  isBold: true,
-                ),
-                const SizedBox(height: 8),
-                Divider(height: 1, color: Colors.grey[300]),
-                const SizedBox(height: 8),
-
-                const Text(
-                  'Deductions',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _salaryRow(
-                  'SSS',
-                  '- ${_money.format(r.sssDeduction)}',
-                  Colors.blue,
-                ),
-                _salaryRow(
-                  'PhilHealth',
-                  '- ${_money.format(r.philhealthDeduction)}',
-                  Colors.blue,
-                ),
-                _salaryRow(
-                  'Pag-IBIG',
-                  '- ${_money.format(r.pagibigDeduction)}',
-                  Colors.lightBlue,
-                ),
-                _salaryRow(
-                  'Cash Advance Balance',
-                  _money.format(editableCashAdvance),
-                  Colors.orange,
-                ),
-                _salaryRow(
-                  'Deduction Per Salary',
-                  '- ${_money.format(effectiveDeduction)}',
-                  Colors.redAccent,
-                ),
-
-                const SizedBox(height: 12),
-                Divider(height: 1, thickness: 2, color: Colors.grey[400]),
-                const SizedBox(height: 12),
-
-                _salaryRow(
-                  'Total Deductions',
-                  _money.format(liveTotalDeductions),
-                  Colors.redAccent,
-                  isBold: true,
-                ),
-                const SizedBox(height: 16),
-
-                // Net salary
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.green, width: 2),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Net Salary',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      Text(
-                        _money.format(liveNetSalary),
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.green,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
+                    ),
+                    const SizedBox(height: 12),
                   ],
                 ),
               ),

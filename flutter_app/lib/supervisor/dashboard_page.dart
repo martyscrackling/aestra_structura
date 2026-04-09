@@ -379,6 +379,9 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
     switch (page) {
       case 'Dashboard':
         return; // Already on dashboard
+      case 'Projects':
+        context.go('/supervisor/projects');
+        break;
       case 'Workers':
       case 'Worker Management':
         context.go('/supervisor/workers');

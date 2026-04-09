@@ -78,6 +78,9 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
       case 'Dashboard':
         context.go('/supervisor');
         break;
+      case 'Projects':
+        context.go('/supervisor/projects');
+        break;
       case 'Workers':
       case 'Worker Management':
         context.go('/supervisor/workers');
@@ -1155,9 +1158,14 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
       borderRadius: BorderRadius.circular(12),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: AppSpacing.sm),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: AppSpacing.sm,
+        ),
         decoration: BoxDecoration(
-          color: isActive ? AppColors.accent.withOpacity(0.15) : Colors.transparent,
+          color: isActive
+              ? AppColors.accent.withOpacity(0.15)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
