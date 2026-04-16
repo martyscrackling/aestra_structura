@@ -1266,8 +1266,12 @@ class _AttendancePageState extends State<AttendancePage> {
   Widget _buildBottomNavBar() {
     return SupervisorMobileBottomNav(
       activeTab: SupervisorMobileTab.more,
+<<<<<<< HEAD
       activeMorePage: 'Attendance',
+=======
+>>>>>>> parent of df03275 (Revert "push ko na par")
       onSelect: _navigateToPage,
+      activeMorePage: 'Attendance',
     );
   }
 

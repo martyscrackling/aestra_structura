@@ -25,12 +25,20 @@ class _AllProjectsPageState extends State<AllProjectsPage> {
       case 'Projects':
         return; // Already on projects
       case 'Workers':
+<<<<<<< HEAD
+=======
+      case 'Worker Management':
+>>>>>>> parent of df03275 (Revert "push ko na par")
         context.go('/supervisor/workers');
         break;
       case 'Attendance':
         context.go('/supervisor/attendance');
         break;
       case 'Tasks':
+<<<<<<< HEAD
+=======
+      case 'Task Progress':
+>>>>>>> parent of df03275 (Revert "push ko na par")
         context.go('/supervisor/task-progress');
         break;
       case 'Reports':
@@ -52,21 +60,21 @@ class _AllProjectsPageState extends State<AllProjectsPage> {
   }
 
   Widget _buildMobileLayout() {
-    return SingleChildScrollView(
+    return Padding(
       padding: const EdgeInsets.all(12),
       child: ActiveProject(key: _activeProjectKey, enableSelection: false),
     );
   }
 
   Widget _buildTabletLayout() {
-    return SingleChildScrollView(
+    return Padding(
       padding: const EdgeInsets.all(20),
       child: ActiveProject(key: _activeProjectKey, enableSelection: false),
     );
   }
 
   Widget _buildDesktopLayout() {
-    return SingleChildScrollView(
+    return Padding(
       padding: const EdgeInsets.all(24),
       child: ActiveProject(key: _activeProjectKey, enableSelection: false),
     );

@@ -80,6 +80,16 @@ class _WorkerTotals {
   double overtimeHours = 0;
 }
 
+class _SupervisorProjectOption {
+  _SupervisorProjectOption({
+    required this.projectId,
+    required this.projectName,
+  });
+
+  final int projectId;
+  final String projectName;
+}
+
 class ReportsPage extends StatefulWidget {
   final bool initialSidebarVisible;
 
@@ -98,6 +108,7 @@ class _ReportsPageState extends State<ReportsPage> {
 
   bool _isLoading = false;
   bool _isLoadingHistory = false;
+  bool _isLoadingProjects = false;
   String? _loadError;
   late DateTime _liveNow;
   Timer? _liveClockTimer;
@@ -118,8 +129,7 @@ class _ReportsPageState extends State<ReportsPage> {
     _weekStart = _weekEnd;
     _salaryDate = _weekEnd;
     _effectiveReportStart = _weekStart;
-    _refreshReports();
-    _loadReportsHistory();
+    _initializeReportScope();
   }
 
   @override
@@ -164,6 +174,8 @@ class _ReportsPageState extends State<ReportsPage> {
 
   List<AttendanceReport> _rows = [];
   List<ReportHistoryEntry> _history = [];
+  List<_SupervisorProjectOption> _supervisorProjects = [];
+  int? _selectedProjectId;
 
   final _money = NumberFormat.currency(
     locale: 'en_PH',
@@ -171,13 +183,142 @@ class _ReportsPageState extends State<ReportsPage> {
     decimalDigits: 2,
   );
 
+  Future<void> _initializeReportScope() async {
+    await _loadSupervisorProjects();
+    await _refreshReports();
+    await _loadReportsHistory();
+  }
+
+  int? _activeProjectId() {
+    if (_selectedProjectId != null) return _selectedProjectId;
+    final authService = Provider.of<AuthService>(context, listen: false);
+    return _toInt(authService.currentUser?['project_id']);
+  }
+
+  String _activeProjectName() {
+    for (final project in _supervisorProjects) {
+      if (project.projectId == _activeProjectId()) {
+        return project.projectName;
+      }
+    }
+
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentUser = authService.currentUser ?? <String, dynamic>{};
+    return (currentUser['project_name'] ??
+            currentUser['assigned_project_name'] ??
+            '')
+        .toString()
+        .trim();
+  }
+
+  Future<void> _loadSupervisorProjects() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoadingProjects = true;
+    });
+
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final currentUser = authService.currentUser ?? <String, dynamic>{};
+      final userId = _toInt(currentUser['user_id']);
+      final typeOrRole = (currentUser['type'] ?? currentUser['role'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
+      final supervisorId =
+          _toInt(currentUser['supervisor_id']) ??
+          ((typeOrRole == 'supervisor') ? userId : null);
+
+      final Uri url;
+      if (supervisorId != null) {
+        url = AppConfig.apiUri('projects/?supervisor_id=$supervisorId');
+      } else if (userId != null) {
+        url = AppConfig.apiUri('projects/?user_id=$userId');
+      } else {
+        url = AppConfig.apiUri('projects/');
+      }
+
+      final response = await http.get(url);
+      final options = <_SupervisorProjectOption>[];
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        final rawProjects = decoded is List
+            ? decoded
+            : (decoded is Map<String, dynamic> && decoded['results'] is List
+                  ? decoded['results'] as List<dynamic>
+                  : const <dynamic>[]);
+
+        for (final item in rawProjects) {
+          if (item is! Map) continue;
+          final project = Map<String, dynamic>.from(item);
+          final id = _toInt(project['project_id'] ?? project['id']);
+          final name = (project['project_name'] ?? project['name'] ?? '')
+              .toString()
+              .trim();
+          if (id != null && name.isNotEmpty) {
+            options.add(
+              _SupervisorProjectOption(projectId: id, projectName: name),
+            );
+          }
+        }
+      }
+
+      final currentProjectId = _toInt(currentUser['project_id']);
+      final currentProjectName =
+          (currentUser['project_name'] ??
+                  currentUser['assigned_project_name'] ??
+                  '')
+              .toString()
+              .trim();
+      if (currentProjectId != null &&
+          options.every((p) => p.projectId != currentProjectId)) {
+        options.add(
+          _SupervisorProjectOption(
+            projectId: currentProjectId,
+            projectName: currentProjectName.isEmpty
+                ? 'Project #$currentProjectId'
+                : currentProjectName,
+          ),
+        );
+      }
+
+      options.sort(
+        (a, b) =>
+            a.projectName.toLowerCase().compareTo(b.projectName.toLowerCase()),
+      );
+
+      int? selected = _selectedProjectId;
+      if (selected == null && currentProjectId != null) {
+        selected = currentProjectId;
+      }
+      if (selected != null && options.every((p) => p.projectId != selected)) {
+        selected = options.isEmpty ? null : options.first.projectId;
+      }
+      selected ??= options.isEmpty ? null : options.first.projectId;
+
+      if (!mounted) return;
+      setState(() {
+        _supervisorProjects = options;
+        _selectedProjectId = selected;
+      });
+    } catch (_) {
+      // Keep fallback behavior.
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingProjects = false;
+      });
+    }
+  }
+
   Future<void> _submitToPM() async {
     await _refreshReports();
     if (!mounted) return;
 
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentUser = authService.currentUser ?? <String, dynamic>{};
-    final projectId = _toInt(authService.currentUser?['project_id']);
+    final projectId = _activeProjectId();
     if (projectId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No project assigned to submit report.')),
@@ -188,11 +329,15 @@ class _ReportsPageState extends State<ReportsPage> {
     final payload = <String, dynamic>{
       'submission_id': '$projectId:${_dateString(_salaryDate)}',
       'project_id': projectId,
+<<<<<<< HEAD
       'project_name':
           (currentUser['project_name'] ??
                   currentUser['assigned_project_name'] ??
                   '')
               .toString(),
+=======
+      'project_name': _activeProjectName(),
+>>>>>>> parent of df03275 (Revert "push ko na par")
       'supervisor_id':
           _toInt(currentUser['supervisor_id']) ?? _toInt(currentUser['id']),
       'supervisor_name':
@@ -823,10 +968,9 @@ class _ReportsPageState extends State<ReportsPage> {
     });
 
     try {
-      final authService = Provider.of<AuthService>(context, listen: false);
-      final projectId = _toInt(authService.currentUser?['project_id']);
+      final projectId = _activeProjectId();
       if (projectId == null) {
-        throw Exception('No project assigned to your account.');
+        throw Exception('No project selected for this report.');
       }
 
       DateTime start = _weekStart;
@@ -869,8 +1013,7 @@ class _ReportsPageState extends State<ReportsPage> {
     });
 
     try {
-      final authService = Provider.of<AuthService>(context, listen: false);
-      final projectId = _toInt(authService.currentUser?['project_id']);
+      final projectId = _activeProjectId();
       if (projectId == null) {
         if (!mounted) return;
         setState(() {
@@ -1138,6 +1281,15 @@ class _ReportsPageState extends State<ReportsPage> {
         _salaryDate = DateTime(d.year, d.month, d.day);
       });
     }
+  }
+
+  Future<void> _onProjectChanged(int? projectId) async {
+    if (projectId == null || projectId == _selectedProjectId) return;
+    setState(() {
+      _selectedProjectId = projectId;
+    });
+    await _refreshReports();
+    await _loadReportsHistory();
   }
 
   Widget _kpiCard(String title, String value, {Color? color, IconData? icon}) {
@@ -1422,6 +1574,58 @@ class _ReportsPageState extends State<ReportsPage> {
                                 ),
                               ),
                             ),
+                            const SizedBox(width: 10),
+                            Card(
+                              elevation: 1,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.apartment, size: 18),
+                                    const SizedBox(width: 8),
+                                    SizedBox(
+                                      width: 200,
+                                      child: DropdownButtonHideUnderline(
+                                        child: DropdownButton<int>(
+                                          value: _selectedProjectId,
+                                          isExpanded: true,
+                                          isDense: true,
+                                          hint: Text(
+                                            _isLoadingProjects
+                                                ? 'Loading projects...'
+                                                : 'Select Project',
+                                          ),
+                                          items: _supervisorProjects
+                                              .map(
+                                                (project) =>
+                                                    DropdownMenuItem<int>(
+                                                      value: project.projectId,
+                                                      child: Text(
+                                                        project.projectName,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                              )
+                                              .toList(),
+                                          onChanged: _isLoadingProjects
+                                              ? null
+                                              : (value) {
+                                                  _onProjectChanged(value);
+                                                },
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                             if (_isSalaryDayMode) const SizedBox(width: 10),
                             if (_isSalaryDayMode)
                               ElevatedButton.icon(
@@ -1510,6 +1714,59 @@ class _ReportsPageState extends State<ReportsPage> {
                                               ),
                                             ),
                                           ],
+                                        ),
+                                        const SizedBox(height: 6),
+                                        DropdownButtonFormField<int>(
+                                          value: _selectedProjectId,
+                                          isExpanded: true,
+                                          decoration: InputDecoration(
+                                            labelText: 'Project',
+                                            prefixIcon: const Icon(
+                                              Icons.apartment,
+                                              size: 18,
+                                            ),
+                                            isDense: true,
+                                            filled: true,
+                                            fillColor: Colors.white,
+                                            contentPadding:
+                                                const EdgeInsets.symmetric(
+                                                  horizontal: 10,
+                                                  vertical: 10,
+                                                ),
+                                            border: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                              borderSide: const BorderSide(
+                                                color: Color(0xFFE5E7EB),
+                                              ),
+                                            ),
+                                            enabledBorder: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                              borderSide: const BorderSide(
+                                                color: Color(0xFFE5E7EB),
+                                              ),
+                                            ),
+                                          ),
+                                          hint: const Text('Select Project'),
+                                          items: _supervisorProjects
+                                              .map(
+                                                (project) =>
+                                                    DropdownMenuItem<int>(
+                                                      value: project.projectId,
+                                                      child: Text(
+                                                        project.projectName,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                              )
+                                              .toList(),
+                                          onChanged: _isLoadingProjects
+                                              ? null
+                                              : (value) {
+                                                  _onProjectChanged(value);
+                                                },
                                         ),
                                         if (_isSalaryDayMode)
                                           const SizedBox(height: 6),
@@ -3093,7 +3350,11 @@ class _ReportsPageState extends State<ReportsPage> {
                     _salaryRow(
                       'PhilHealth',
                       '- ${_money.format(r.philhealthDeduction)}',
+<<<<<<< HEAD
                       Colors.blue,
+=======
+                      Colors.green,
+>>>>>>> parent of df03275 (Revert "push ko na par")
                     ),
                     _salaryRow(
                       'Pag-IBIG',
@@ -3151,8 +3412,115 @@ class _ReportsPageState extends State<ReportsPage> {
                           ),
                         ],
                       ),
+<<<<<<< HEAD
                     ),
                     const SizedBox(height: 12),
+=======
+<<<<<<< HEAD
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Salary breakdown
+                const Text(
+                  'Salary Breakdown',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 12),
+
+                _salaryRow(
+                  'Gross Pay',
+                  _money.format(r.grossPay),
+                  Colors.black,
+                  isBold: true,
+                ),
+                const SizedBox(height: 8),
+                Divider(height: 1, color: Colors.grey[300]),
+                const SizedBox(height: 8),
+
+                const Text(
+                  'Deductions',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _salaryRow(
+                  'SSS',
+                  '- ${_money.format(r.sssDeduction)}',
+                  Colors.blue,
+                ),
+                _salaryRow(
+                  'PhilHealth',
+                  '- ${_money.format(r.philhealthDeduction)}',
+                  Colors.blue,
+                ),
+                _salaryRow(
+                  'Pag-IBIG',
+                  '- ${_money.format(r.pagibigDeduction)}',
+                  Colors.lightBlue,
+                ),
+                _salaryRow(
+                  'Cash Advance Balance',
+                  _money.format(editableCashAdvance),
+                  Colors.orange,
+                ),
+                _salaryRow(
+                  'Deduction Per Salary',
+                  '- ${_money.format(effectiveDeduction)}',
+                  Colors.redAccent,
+                ),
+
+                const SizedBox(height: 12),
+                Divider(height: 1, thickness: 2, color: Colors.grey[400]),
+                const SizedBox(height: 12),
+
+                _salaryRow(
+                  'Total Deductions',
+                  _money.format(liveTotalDeductions),
+                  Colors.redAccent,
+                  isBold: true,
+                ),
+                const SizedBox(height: 16),
+
+                // Net salary
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.green, width: 2),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Net Salary',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        _money.format(liveNetSalary),
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.green,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+=======
+                    ),
+                    const SizedBox(height: 12),
+>>>>>>> 6ef192be550f2109846fb19ae90c5384886a8533
+>>>>>>> parent of df03275 (Revert "push ko na par")
                   ],
                 ),
               ),
