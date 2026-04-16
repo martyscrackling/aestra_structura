@@ -91,87 +91,77 @@ class _AttendancePageState extends State<AttendancePage> {
     }
   }
 
-  Future<void> _saveAttendance(
+  Future<bool> _saveAttendance(
     Map<String, dynamic> attendanceData, {
     DateTime? attendanceDate,
   }) async {
-    try {
-      final authService = Provider.of<AuthService>(context, listen: false);
-      final projectId = authService.currentUser?['project_id'];
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final projectId = authService.currentUser?['project_id'];
+    if (projectId == null) {
+      throw Exception('No project assigned to supervisor');
+    }
 
-      attendanceData['project'] = projectId;
-        final effectiveDate = attendanceDate ?? selectedDate;
-        attendanceData['attendance_date'] =
-          '${effectiveDate.year}-${effectiveDate.month.toString().padLeft(2, '0')}-${effectiveDate.day.toString().padLeft(2, '0')}';
+    final effectiveDate = attendanceDate ?? selectedDate;
+    final dateStr =
+        '${effectiveDate.year}-${effectiveDate.month.toString().padLeft(2, '0')}-${effectiveDate.day.toString().padLeft(2, '0')}';
 
-      // Check if attendance record exists
-      final existingRecords = await http.get(
-        AppConfig.apiUri(
-          'attendance/?field_worker_id=${attendanceData['field_worker']}&attendance_date=${attendanceData['attendance_date']}',
-        ),
-      );
+    final payload = Map<String, dynamic>.from(attendanceData)
+      ..['project'] = projectId
+      ..['attendance_date'] = dateStr;
 
-      if (existingRecords.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(existingRecords.body);
-        if (data.isNotEmpty) {
-          // Update existing
-          final attendanceId = data[0]['attendance_id'];
-          final updateResponse = await http.patch(
-            AppConfig.apiUri('attendance/$attendanceId/'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode(attendanceData),
-          );
-          
-          if (!mounted) return;
-          
-          // Check for subscription expiry
-          if (SubscriptionHelper.handleResponse(context, updateResponse)) {
-            return;
-          }
+    // Scope lookup to current project to avoid cross-project record rewrites.
+    final existingRecords = await http.get(
+      AppConfig.apiUri(
+        'attendance/?project_id=$projectId&field_worker_id=${payload['field_worker']}&attendance_date=$dateStr',
+      ),
+    );
 
-          if (updateResponse.statusCode < 200 || updateResponse.statusCode >= 300) {
-            throw Exception(
-              'Failed to update attendance (${updateResponse.statusCode}): ${updateResponse.body}',
-            );
-          }
-        } else {
-          // Create new
-          final createResponse = await http.post(
-            AppConfig.apiUri('attendance/'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode(attendanceData),
-          );
-          
-          if (!mounted) return;
-          
-          // Check for subscription expiry
-          if (SubscriptionHelper.handleResponse(context, createResponse)) {
-            return;
-          }
-
-          if (createResponse.statusCode < 200 || createResponse.statusCode >= 300) {
-            throw Exception(
-              'Failed to create attendance (${createResponse.statusCode}): ${createResponse.body}',
-            );
-          }
-        }
-      } else {
-        throw Exception(
-          'Failed to query attendance (${existingRecords.statusCode}): ${existingRecords.body}',
-        );
-      }
-
-      // Refresh attendance records
-      setState(() {
-        _attendanceRecordsFuture = _fetchAttendanceRecords();
-      });
-    } catch (e) {
-      print('Error saving attendance: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save attendance: $e')),
+    if (existingRecords.statusCode != 200) {
+      throw Exception(
+        'Failed to query attendance (${existingRecords.statusCode}).',
       );
     }
+
+    final List<dynamic> data = jsonDecode(existingRecords.body);
+    if (data.isNotEmpty) {
+      final attendanceId = data[0]['attendance_id'];
+      final updateResponse = await http.patch(
+        AppConfig.apiUri('attendance/$attendanceId/'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      );
+
+      if (!mounted) return false;
+
+      if (SubscriptionHelper.handleResponse(context, updateResponse)) {
+        return false;
+      }
+
+      if (updateResponse.statusCode < 200 || updateResponse.statusCode >= 300) {
+        throw Exception(_extractApiErrorMessage(updateResponse));
+      }
+    } else {
+      final createResponse = await http.post(
+        AppConfig.apiUri('attendance/'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      );
+
+      if (!mounted) return false;
+
+      if (SubscriptionHelper.handleResponse(context, createResponse)) {
+        return false;
+      }
+
+      if (createResponse.statusCode < 200 || createResponse.statusCode >= 300) {
+        throw Exception(_extractApiErrorMessage(createResponse));
+      }
+    }
+
+    setState(() {
+      _attendanceRecordsFuture = _fetchAttendanceRecords();
+    });
+    return true;
   }
 
   int? _parseFieldWorkerIdFromQr(String raw) {
@@ -252,11 +242,7 @@ class _AttendancePageState extends State<AttendancePage> {
       };
     }
 
-    return {
-      'first_name': 'Unknown',
-      'last_name': '',
-      'role': 'N/A',
-    };
+    return {'first_name': 'Unknown', 'last_name': '', 'role': 'N/A'};
   }
 
   int? _timeStringToMinutes(String? raw) {
@@ -282,15 +268,61 @@ class _AttendancePageState extends State<AttendancePage> {
     return hour * 60 + minute;
   }
 
+  String _extractApiErrorMessage(http.Response response) {
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) {
+        final detail = decoded['detail'];
+        if (detail is String && detail.trim().isNotEmpty) {
+          return detail.trim();
+        }
+
+        final nonFieldErrors = decoded['non_field_errors'];
+        if (nonFieldErrors is List && nonFieldErrors.isNotEmpty) {
+          final first = nonFieldErrors.first?.toString().trim();
+          if (first != null && first.isNotEmpty) {
+            return first;
+          }
+        }
+      }
+    } catch (_) {
+      // Fall back to generic message below.
+    }
+    return 'Request failed (${response.statusCode}).';
+  }
+
+  Future<void> _showAttendanceConflictModal(String message) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Worker Already Timed In'),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<Map<String, dynamic>?> _fetchExistingAttendanceRecord({
     required int fieldWorkerId,
     required DateTime attendanceDate,
   }) async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final projectId = authService.currentUser?['project_id'];
+    if (projectId == null) return null;
+
     final dateStr =
         '${attendanceDate.year}-${attendanceDate.month.toString().padLeft(2, '0')}-${attendanceDate.day.toString().padLeft(2, '0')}';
     final existingRecords = await http.get(
       AppConfig.apiUri(
-        'attendance/?field_worker_id=$fieldWorkerId&attendance_date=$dateStr',
+        'attendance/?project_id=$projectId&field_worker_id=$fieldWorkerId&attendance_date=$dateStr',
       ),
     );
 
@@ -314,9 +346,9 @@ class _AttendancePageState extends State<AttendancePage> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(context).colorScheme.copyWith(
-              primary: primary,
-            ),
+            colorScheme: Theme.of(
+              context,
+            ).colorScheme.copyWith(primary: primary),
           ),
           child: child!,
         );
@@ -370,9 +402,7 @@ class _AttendancePageState extends State<AttendancePage> {
       if (outMinutes == null || outMinutes <= inMinutes) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Time Out must be later than Time In.'),
-          ),
+          const SnackBar(content: Text('Time Out must be later than Time In.')),
         );
         return;
       }
@@ -407,15 +437,35 @@ class _AttendancePageState extends State<AttendancePage> {
       });
     }
 
-    await _saveAttendance(attendanceData, attendanceDate: scanDate);
-    if (!mounted) return;
+    try {
+      final saved = await _saveAttendance(
+        attendanceData,
+        attendanceDate: scanDate,
+      );
+      if (!mounted || !saved) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('✓ $action recorded for worker #$fieldWorkerId'),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✓ $action recorded for worker #$fieldWorkerId'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final errorMessage = e.toString().replaceFirst('Exception: ', '').trim();
+      final isCrossProjectTimeInConflict =
+          action == 'Time In' &&
+          errorMessage.toLowerCase().contains('currently timed in on');
+
+      if (isCrossProjectTimeInConflict) {
+        await _showAttendanceConflictModal(errorMessage);
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save attendance: $errorMessage')),
+      );
+    }
   }
 
   void _navigateToPage(String page) {
@@ -472,8 +522,9 @@ class _AttendancePageState extends State<AttendancePage> {
               .toLowerCase();
       final matchesSearch =
           searchQuery.isEmpty || fullName.contains(searchQuery.toLowerCase());
-        final matchesStatus =
-          statusFilter == 'All' || _statusLabelForRecord(record) == statusFilter;
+      final matchesStatus =
+          statusFilter == 'All' ||
+          _statusLabelForRecord(record) == statusFilter;
       final matchesRole = roleFilter == 'All' || worker['role'] == roleFilter;
 
       return matchesSearch && matchesStatus && matchesRole;
@@ -854,14 +905,14 @@ class _AttendancePageState extends State<AttendancePage> {
                                       flex: 2,
                                       child: Wrap(
                                         spacing: 8,
-                                        children: [
+                                        children:
+                                            [
                                               'All',
                                               'On Site',
                                               'On Break',
                                               'Checked Out',
                                               'Absent',
-                                            ]
-                                            .map((s) {
+                                            ].map((s) {
                                               final sel = statusFilter == s;
                                               return ChoiceChip(
                                                 label: Text(
@@ -880,8 +931,7 @@ class _AttendancePageState extends State<AttendancePage> {
                                                   () => statusFilter = s,
                                                 ),
                                               );
-                                            })
-                                            .toList(),
+                                            }).toList(),
                                       ),
                                     ),
                                     const SizedBox(width: 12),
@@ -1086,6 +1136,7 @@ class _AttendancePageState extends State<AttendancePage> {
     List<Map<String, dynamic>> fieldWorkers,
   ) {
     return Card(
+      color: Colors.white,
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Column(
@@ -1160,7 +1211,9 @@ class _AttendancePageState extends State<AttendancePage> {
                             ),
                             decoration: BoxDecoration(
                               color: Colors.white,
-                              border: Border.all(color: const Color(0xFFE5E7EB)),
+                              border: Border.all(
+                                color: const Color(0xFFE5E7EB),
+                              ),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
@@ -1176,6 +1229,7 @@ class _AttendancePageState extends State<AttendancePage> {
                         Expanded(
                           flex: 1,
                           child: PopupMenuButton<String>(
+                            color: Colors.white,
                             onSelected: (v) {
                               if (v == 'edit') {
                                 _showEditAttendanceDialog(record, worker);
@@ -1212,6 +1266,10 @@ class _AttendancePageState extends State<AttendancePage> {
   Widget _buildBottomNavBar() {
     return SupervisorMobileBottomNav(
       activeTab: SupervisorMobileTab.more,
+<<<<<<< HEAD
+      activeMorePage: 'Attendance',
+=======
+>>>>>>> parent of df03275 (Revert "push ko na par")
       onSelect: _navigateToPage,
       activeMorePage: 'Attendance',
     );
@@ -1231,9 +1289,14 @@ class _AttendancePageState extends State<AttendancePage> {
       borderRadius: BorderRadius.circular(12),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: AppSpacing.sm),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: AppSpacing.sm,
+        ),
         decoration: BoxDecoration(
-          color: isActive ? AppColors.accent.withOpacity(0.15) : Colors.transparent,
+          color: isActive
+              ? AppColors.accent.withOpacity(0.15)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -1324,6 +1387,7 @@ class _AttendancePageState extends State<AttendancePage> {
         final statusLabel = _statusLabelForRecord(record);
 
         return Card(
+          color: Colors.white,
           margin: const EdgeInsets.only(bottom: 12),
           elevation: 2,
           shape: RoundedRectangleBorder(

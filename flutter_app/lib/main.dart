@@ -644,14 +644,27 @@ class HeroSection extends StatelessWidget {
               onPressed: () {},
               style: OutlinedButton.styleFrom(
                 side: const BorderSide(color: Colors.white),
+                backgroundColor: Colors.transparent,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
+              ).copyWith(
+                backgroundColor: MaterialStateProperty.resolveWith((states) {
+                  if (states.contains(MaterialState.hovered)) {
+                    return Colors.white;
+                  }
+                  return Colors.transparent;
+                }),
+                foregroundColor: MaterialStateProperty.resolveWith((states) {
+                  if (states.contains(MaterialState.hovered)) {
+                    return const Color(0xFFFF5A1F);
+                  }
+                  return Colors.white;
+                }),
               ),
               child: const Text(
                 'See Features',
-                style: TextStyle(color: Colors.white),
               ),
             ),
           ),
@@ -690,14 +703,27 @@ class HeroSection extends StatelessWidget {
             onPressed: () {},
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: Colors.white),
+              backgroundColor: Colors.transparent,
               padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 16),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
+            ).copyWith(
+              backgroundColor: MaterialStateProperty.resolveWith((states) {
+                if (states.contains(MaterialState.hovered)) {
+                  return Colors.white;
+                }
+                return Colors.transparent;
+              }),
+              foregroundColor: MaterialStateProperty.resolveWith((states) {
+                if (states.contains(MaterialState.hovered)) {
+                  return const Color(0xFFFF5A1F);
+                }
+                return Colors.white;
+              }),
             ),
             child: const Text(
               'See Features',
-              style: TextStyle(color: Colors.white),
             ),
           ),
           const SizedBox(width: 20),

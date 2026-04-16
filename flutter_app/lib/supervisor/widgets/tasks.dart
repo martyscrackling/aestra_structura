@@ -146,6 +146,7 @@ class _TasksState extends State<Tasks> {
   @override
   Widget build(BuildContext context) {
     return Card(
+      color: Colors.white,
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
@@ -284,6 +285,7 @@ class _TasksState extends State<Tasks> {
                                     ),
                                   ),
                                   PopupMenuButton<int>(
+                                    color: Colors.white,
                                     padding: EdgeInsets.zero,
                                     icon: const Icon(
                                       Icons.more_horiz,

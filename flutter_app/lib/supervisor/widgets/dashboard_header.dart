@@ -63,6 +63,7 @@ class _DashboardHeaderState extends State<DashboardHeader> {
                     context.go('/login');
                   }
                 },
+                color: Colors.white,
                 offset: const Offset(0, 48),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -251,6 +252,7 @@ class _SupervisorNotificationMenuState
 
     return PopupMenuButton<int>(
       tooltip: 'Notifications',
+      color: Colors.white,
       offset: const Offset(0, 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       onOpened: _refresh,

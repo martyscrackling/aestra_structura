@@ -105,6 +105,7 @@ class _PhasesWidgetState extends State<PhasesWidget> {
                   final daysLeft = phase['days_duration'] ?? 0;
 
                   return Card(
+                    color: Colors.white,
                     margin: const EdgeInsets.only(bottom: 12),
                     child: ListTile(
                       leading: Container(

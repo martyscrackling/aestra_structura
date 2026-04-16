@@ -329,7 +329,15 @@ class _ReportsPageState extends State<ReportsPage> {
     final payload = <String, dynamic>{
       'submission_id': '$projectId:${_dateString(_salaryDate)}',
       'project_id': projectId,
+<<<<<<< HEAD
+      'project_name':
+          (currentUser['project_name'] ??
+                  currentUser['assigned_project_name'] ??
+                  '')
+              .toString(),
+=======
       'project_name': _activeProjectName(),
+>>>>>>> parent of df03275 (Revert "push ko na par")
       'supervisor_id':
           _toInt(currentUser['supervisor_id']) ?? _toInt(currentUser['id']),
       'supervisor_name':
@@ -1287,6 +1295,7 @@ class _ReportsPageState extends State<ReportsPage> {
   Widget _kpiCard(String title, String value, {Color? color, IconData? icon}) {
     return Expanded(
       child: Card(
+        color: Colors.white,
         elevation: 2,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
@@ -1376,6 +1385,7 @@ class _ReportsPageState extends State<ReportsPage> {
     final deductionStr = _money.format(r.deduction);
     final cashAdvanceStr = _money.format(r.cashAdvance);
     return Card(
+      color: Colors.white,
       elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -1516,6 +1526,7 @@ class _ReportsPageState extends State<ReportsPage> {
                           children: [
                             // report date selector
                             Card(
+                              color: Colors.white,
                               elevation: 1,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -1541,6 +1552,7 @@ class _ReportsPageState extends State<ReportsPage> {
                             ),
                             const SizedBox(width: 10),
                             Card(
+                              color: Colors.white,
                               elevation: 1,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -1935,6 +1947,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                                   .join();
 
                                               return Card(
+                                                color: Colors.white,
                                                 margin: const EdgeInsets.only(
                                                   bottom: 8,
                                                 ),
@@ -2152,6 +2165,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                 ],
                               )
                             : Card(
+                                color: Colors.white,
                                 elevation: 2,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
@@ -2546,8 +2560,8 @@ class _ReportsPageState extends State<ReportsPage> {
                                                           ),
                                                           style:
                                                               const TextStyle(
-                                                                color: Colors
-                                                                    .green,
+                                                                color:
+                                                                    Colors.blue,
                                                                 fontSize: 12,
                                                                 fontWeight:
                                                                     FontWeight
@@ -2718,7 +2732,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                                 style: const TextStyle(
                                                   fontWeight: FontWeight.w700,
                                                   fontSize: 13,
-                                                  color: Colors.green,
+                                                  color: Colors.blue,
                                                 ),
                                               ),
                                             ],
@@ -3336,7 +3350,11 @@ class _ReportsPageState extends State<ReportsPage> {
                     _salaryRow(
                       'PhilHealth',
                       '- ${_money.format(r.philhealthDeduction)}',
+<<<<<<< HEAD
+                      Colors.blue,
+=======
                       Colors.green,
+>>>>>>> parent of df03275 (Revert "push ko na par")
                     ),
                     _salaryRow(
                       'Pag-IBIG',
@@ -3394,8 +3412,115 @@ class _ReportsPageState extends State<ReportsPage> {
                           ),
                         ],
                       ),
+<<<<<<< HEAD
                     ),
                     const SizedBox(height: 12),
+=======
+<<<<<<< HEAD
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Salary breakdown
+                const Text(
+                  'Salary Breakdown',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 12),
+
+                _salaryRow(
+                  'Gross Pay',
+                  _money.format(r.grossPay),
+                  Colors.black,
+                  isBold: true,
+                ),
+                const SizedBox(height: 8),
+                Divider(height: 1, color: Colors.grey[300]),
+                const SizedBox(height: 8),
+
+                const Text(
+                  'Deductions',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _salaryRow(
+                  'SSS',
+                  '- ${_money.format(r.sssDeduction)}',
+                  Colors.blue,
+                ),
+                _salaryRow(
+                  'PhilHealth',
+                  '- ${_money.format(r.philhealthDeduction)}',
+                  Colors.blue,
+                ),
+                _salaryRow(
+                  'Pag-IBIG',
+                  '- ${_money.format(r.pagibigDeduction)}',
+                  Colors.lightBlue,
+                ),
+                _salaryRow(
+                  'Cash Advance Balance',
+                  _money.format(editableCashAdvance),
+                  Colors.orange,
+                ),
+                _salaryRow(
+                  'Deduction Per Salary',
+                  '- ${_money.format(effectiveDeduction)}',
+                  Colors.redAccent,
+                ),
+
+                const SizedBox(height: 12),
+                Divider(height: 1, thickness: 2, color: Colors.grey[400]),
+                const SizedBox(height: 12),
+
+                _salaryRow(
+                  'Total Deductions',
+                  _money.format(liveTotalDeductions),
+                  Colors.redAccent,
+                  isBold: true,
+                ),
+                const SizedBox(height: 16),
+
+                // Net salary
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.green, width: 2),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Net Salary',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        _money.format(liveNetSalary),
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.green,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+=======
+                    ),
+                    const SizedBox(height: 12),
+>>>>>>> 6ef192be550f2109846fb19ae90c5384886a8533
+>>>>>>> parent of df03275 (Revert "push ko na par")
                   ],
                 ),
               ),

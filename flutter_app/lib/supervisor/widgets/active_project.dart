@@ -1229,6 +1229,7 @@ class _ProjectTypeFilterDropdown extends StatelessWidget {
       return SizedBox(
         height: 36,
         child: PopupMenuButton<String>(
+          color: Colors.white,
           onSelected: (selected) {
             onChanged(selected == _allValue ? null : selected);
           },

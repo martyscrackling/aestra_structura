@@ -37,11 +37,77 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav> {
 
   @override
   Widget build(BuildContext context) {
+<<<<<<< HEAD
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+
+=======
+>>>>>>> parent of df03275 (Revert "push ko na par")
     return AnimatedSize(
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeOutCubic,
       child: Container(
         width: double.infinity,
+<<<<<<< HEAD
+        decoration: BoxDecoration(color: AppColors.navSurface),
+        padding: EdgeInsets.fromLTRB(0, 8, 0, 8 + bottomPadding),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRect(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
+                height: _isMoreExpanded ? 58 : 0,
+                child: _buildMoreHorizontalRail(context),
+              ),
+            ),
+            if (_isMoreExpanded) const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildNavItem(
+                    context,
+                    icon: Icons.dashboard_rounded,
+                    label: 'Dashboard',
+                    isActive: widget.activeTab == SupervisorMobileTab.dashboard,
+                    onTap: () => widget.onSelect('Dashboard'),
+                  ),
+                ),
+                Expanded(
+                  child: _buildNavItem(
+                    context,
+                    icon: Icons.folder_open_rounded,
+                    label: 'Projects',
+                    isActive: widget.activeTab == SupervisorMobileTab.projects,
+                    onTap: () => widget.onSelect('Projects'),
+                  ),
+                ),
+                Expanded(
+                  child: _buildNavItem(
+                    context,
+                    icon: Icons.groups_rounded,
+                    label: 'Workers',
+                    isActive: widget.activeTab == SupervisorMobileTab.workers,
+                    onTap: () => widget.onSelect('Workers'),
+                  ),
+                ),
+                Expanded(
+                  child: _buildNavItem(
+                    context,
+                    icon: _isMoreExpanded
+                        ? Icons.close_rounded
+                        : Icons.grid_view_rounded,
+                    label: _isMoreExpanded ? 'Close' : 'More',
+                    isActive:
+                        _isMoreExpanded ||
+                        widget.activeTab == SupervisorMobileTab.more,
+                    onTap: _toggleMore,
+                  ),
+                ),
+              ],
+            ),
+          ],
+=======
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -124,6 +190,7 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav> {
               ),
             ],
           ),
+>>>>>>> parent of df03275 (Revert "push ko na par")
         ),
       ),
     );
@@ -143,9 +210,15 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav> {
     required bool isActive,
     required VoidCallback onTap,
   }) {
+<<<<<<< HEAD
+    final textColor = isActive
+        ? const Color(0xFF4A9FD8) // Light blue for active
+        : Colors.white.withOpacity(0.7);
+=======
     final color = isActive
         ? const Color.fromRGBO(74, 159, 216, 1)
         : Colors.white.withOpacity(0.78);
+>>>>>>> parent of df03275 (Revert "push ko na par")
     final bgColor = isActive ? Colors.white : Colors.transparent;
 
     return InkWell(
@@ -153,23 +226,31 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav> {
         HapticFeedback.selectionClick();
         onTap();
       },
-      borderRadius: BorderRadius.circular(14),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: const Duration(milliseconds: 220),
         curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: bgColor,
+<<<<<<< HEAD
+          borderRadius: isActive ? BorderRadius.circular(8) : BorderRadius.zero,
+=======
           borderRadius: BorderRadius.circular(14),
+>>>>>>> parent of df03275 (Revert "push ko na par")
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: color, size: isActive ? 20 : 19),
-            const SizedBox(height: 2),
+            Icon(icon, color: textColor, size: 20),
+            const SizedBox(height: 4),
             Text(
               label,
-              style: AppTypography.mobileNavLabel(color, isActive: isActive),
+              style: TextStyle(
+                color: textColor,
+                fontSize: 11,
+                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -183,12 +264,21 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav> {
         color: Colors.white.withOpacity(0.05),
         borderRadius: BorderRadius.circular(12),
       ),
-      padding: const EdgeInsets.symmetric(vertical: 5),
+      padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 8),
       child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 6),
         children: [
+<<<<<<< HEAD
+          _buildMoreChip(
+            context,
+            Icons.fact_check_rounded,
+            'Attendance',
+            'Attendance',
+          ),
+=======
           _buildMoreChip(context, Icons.fact_check_rounded, 'Attendance', 'Attendance'),
+>>>>>>> parent of df03275 (Revert "push ko na par")
           _buildMoreChip(context, Icons.show_chart, 'Task Progress', 'Tasks'),
           _buildMoreChip(context, Icons.file_copy, 'Reports', 'Reports'),
           _buildMoreChip(context, Icons.inventory, 'Inventory', 'Inventory'),
@@ -204,9 +294,15 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav> {
     String page,
   ) {
     final isActive = widget.activeMorePage == page;
+<<<<<<< HEAD
+    final chipColor = isActive
+        ? const Color(0xFF4A9FD8)
+        : Colors.white; // Light blue for active
+=======
     final color = isActive
         ? const Color.fromRGBO(74, 159, 216, 1)
         : Colors.white;
+>>>>>>> parent of df03275 (Revert "push ko na par")
 
     return InkWell(
       onTap: () {
@@ -221,14 +317,20 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav> {
           color: isActive ? Colors.white : Colors.white.withOpacity(0.05),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
+<<<<<<< HEAD
+            color: isActive
+                ? const Color(0xFF4A9FD8).withOpacity(0.45) // Light blue border
+                : Colors.white.withOpacity(0.1),
+=======
             color: isActive ? Colors.white : Colors.white.withOpacity(0.1),
+>>>>>>> parent of df03275 (Revert "push ko na par")
           ),
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: Row(
             children: [
-              Icon(icon, color: color, size: 16),
+              Icon(icon, color: chipColor, size: 16),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -236,7 +338,7 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: color,
+                    color: chipColor,
                     fontSize: 11,
                     fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
                   ),

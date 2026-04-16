@@ -56,6 +56,7 @@ class _CalendarPanelState extends State<CalendarPanel> {
     }
 
     return Card(
+      color: Colors.white,
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(

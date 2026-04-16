@@ -976,6 +976,51 @@ class AttendanceSerializer(serializers.ModelSerializer):
     def get_field_worker_name(self, obj):
         return f"{obj.field_worker.first_name} {obj.field_worker.last_name}"
 
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+
+        field_worker = attrs.get(
+            'field_worker',
+            self.instance.field_worker if self.instance is not None else None,
+        )
+        project = attrs.get(
+            'project',
+            self.instance.project if self.instance is not None else None,
+        )
+        incoming_check_in = attrs.get('check_in_time', serializers.empty)
+
+        # Only guard when this request is attempting to time in.
+        if field_worker is None or project is None or incoming_check_in in (serializers.empty, None):
+            return attrs
+
+        open_attendance_qs = models.Attendance.objects.filter(
+            field_worker=field_worker,
+            check_in_time__isnull=False,
+            check_out_time__isnull=True,
+        ).exclude(project=project)
+
+        if self.instance is not None:
+            open_attendance_qs = open_attendance_qs.exclude(pk=self.instance.pk)
+
+        conflicting_open_record = open_attendance_qs.select_related('project').order_by('-attendance_date').first()
+        if conflicting_open_record is not None:
+            project_name = conflicting_open_record.project.project_name if conflicting_open_record.project else 'another project'
+            raise serializers.ValidationError(
+                {
+                    'non_field_errors': [
+                        (
+                            'This worker is currently timed in on '
+                            f'"{project_name}". Please time out first before '
+                            'timing in to another project.'
+                        )
+                    ],
+                    'conflict_project_name': project_name,
+                    'conflict_project_id': conflicting_open_record.project_id,
+                }
+            )
+
+        return attrs
+
 
 class InventoryUsageSerializer(serializers.ModelSerializer):
     supervisor_name = serializers.SerializerMethodField()
