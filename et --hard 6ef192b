@@ -1,0 +1,132 @@
+[33ma2b4aa7[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{0}: merge origin/main: Fast-forward
+[33m6ef192b[m HEAD@{1}: reset: moving to ORIG_HEAD
+[33ma2b4aa7[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{2}: commit: Reapply "push ko na par"
+[33mf1688f8[m HEAD@{3}: pull: Fast-forward
+[33m6ef192b[m HEAD@{4}: commit: undo
+[33m44911f5[m HEAD@{5}: commit: dot
+[33md5dbd4f[m HEAD@{6}: commit: add status
+[33mfa13b56[m HEAD@{7}: commit: authenticate validation
+[33md2e4c5e[m HEAD@{8}: commit: fix
+[33md1081db[m HEAD@{9}: commit: filter label
+[33mb459f12[m HEAD@{10}: pull: Fast-forward
+[33mf2c07d6[m HEAD@{11}: commit: status
+[33med10f64[m HEAD@{12}: pull --rebase origin main (finish): returning to refs/heads/main
+[33med10f64[m HEAD@{13}: pull --rebase origin main (pick): default Active
+[33m636a81b[m HEAD@{14}: pull --rebase origin main (start): checkout 636a81b7f31d047940a938d71558ef01f759f308
+[33m81b5705[m HEAD@{15}: commit: default Active
+[33m211535c[m HEAD@{16}: commit: custom phase
+[33m4af024d[m HEAD@{17}: commit: validation
+[33mb0d7d9b[m HEAD@{18}: commit: Deactivate, On Hold, Activate Projects
+[33m50b7b18[m HEAD@{19}: pull: Fast-forward
+[33m4db53cb[m HEAD@{20}: reset: moving to origin/main
+[33m4db53cb[m HEAD@{21}: commit: deact
+[33m49707c5[m HEAD@{22}: commit: show fieldworker's active projects/phase
+[33m9de676e[m HEAD@{23}: pull: Merge made by the 'ort' strategy.
+[33m456dc53[m HEAD@{24}: commit: icon
+[33mb1c3034[m HEAD@{25}: commit: assigned and available for field workers
+[33mb58a283[m HEAD@{26}: commit: worker show
+[33me1ef387[m HEAD@{27}: pull origin main: Merge made by the 'ort' strategy.
+[33m5c3cb4c[m HEAD@{28}: commit: navbar issue fix
+[33mb669b47[m HEAD@{29}: commit: sundays and holidays not included in the expected due date
+[33m1293617[m HEAD@{30}: pull origin main: Merge made by the 'ort' strategy.
+[33m3194bc3[m HEAD@{31}: commit: multiple supervisor to one project
+[33mcbdda9a[m HEAD@{32}: pull: Merge made by the 'ort' strategy.
+[33m98b0df3[m HEAD@{33}: commit: PHASES
+[33mbfd8f1c[m HEAD@{34}: pull: Merge made by the 'ort' strategy.
+[33m2ec9338[m HEAD@{35}: commit: workers attendance
+[33mfea8f76[m HEAD@{36}: commit: supervisor
+[33m26aa7aa[m HEAD@{37}: pull origin main: Fast-forward
+[33mb4c7e0d[m HEAD@{38}: commit: another fx for supervisor
+[33mb1d5b20[m HEAD@{39}: pull origin main: Merge made by the 'ort' strategy.
+[33mfca734c[m HEAD@{40}: commit: supervisor project tasks
+[33m8440bc8[m HEAD@{41}: commit: supervisor's view project infos
+[33m04c7314[m HEAD@{42}: commit: supervisor ui fix
+[33m3054916[m HEAD@{43}: commit: supervisor projects fix
+[33m9bd8497[m HEAD@{44}: commit: show fieldworkers
+[33m2a80836[m HEAD@{45}: commit: some changes
+[33md7cfa8f[m HEAD@{46}: commit: Resolve Django migration conflict
+[33m3adb272[m HEAD@{47}: merge origin/super-admin: Merge made by the 'ort' strategy.
+[33m641c7d4[m HEAD@{48}: commit: update add_client_modal
+[33m9cb6e69[m HEAD@{49}: checkout: moving from main to main
+[33m9cb6e69[m HEAD@{50}: commit: client form update
+[33m7d1c981[m HEAD@{51}: commit: fieldworker form update
+[33m03e22a1[m HEAD@{52}: commit: supervisor form update
+[33m0b155c7[m HEAD@{53}: pull origin main: Fast-forward
+[33mc8dd069[m HEAD@{54}: commit: supervisor profile
+[33m59c2bf9[m HEAD@{55}: commit: worker picture viewing
+[33m331194f[m HEAD@{56}: commit (merge): images uploads
+[33m207c7f3[m HEAD@{57}: commit: images upload client, supervisor, fieldworker
+[33m458b277[m HEAD@{58}: commit: field worker image upload
+[33m132b331[m HEAD@{59}: commit: percent update
+[33mcfcef1f[m HEAD@{60}: commit: change password
+[33m2f15ea2[m HEAD@{61}: commit: try fix
+[33me686f86[m HEAD@{62}: commit: fixed bugs/updates
+[33m37745d8[m HEAD@{63}: commit: project page updated
+[33m662521f[m HEAD@{64}: commit: Fix clients and project page
+[33me7b4f21[m HEAD@{65}: commit: image saves in online hosting
+[33m6c071e4[m HEAD@{66}: commit: days duration
+[33m29b2340[m HEAD@{67}: commit: address default zamboanga
+[33m281fb33[m HEAD@{68}: commit: photo uploading
+[33m463556f[m HEAD@{69}: pull origin main --rebase (finish): returning to refs/heads/main
+[33m463556f[m HEAD@{70}: pull origin main --rebase (pick): supa
+[33mc6f3b30[m HEAD@{71}: pull origin main --rebase (start): checkout c6f3b30830c0aa29bead795bb91f39b81fb8d356
+[33mb2e84e6[m HEAD@{72}: commit: supa
+[33m58d22c8[m HEAD@{73}: commit: Tune DB settings for Supabase pooler
+[33mc16b53e[m HEAD@{74}: commit: Fix Render deploy: force IPv4 DB option
+[33m0bfe583[m HEAD@{75}: commit: Clean generated artifacts and secure configs
+[33maead68a[m HEAD@{76}: commit: Fix: Add database connection health check and improve production diagnostics
+[33m22d664a[m HEAD@{77}: commit: Fix: Remove hardcoded credentials from render.yaml and use proper migration handling
+[33m7808d1a[m HEAD@{78}: commit: Fix: make all name fields optional in models and serializers
+[33m25401ef[m HEAD@{79}: commit: Fix: make first_name and last_name optional in UserSerializer
+[33ma976811[m HEAD@{80}: commit: Fix: properly hash passwords in UserSerializer create and update
+[33mc948152[m HEAD@{81}: commit: Fix: add CORS for GitHub Pages
+[33m95bad1e[m HEAD@{82}: commit: Deploy: rebuild Flutter web with Render backend URL
+[33me954ec0[m HEAD@{83}: commit: Fix: add correct Supabase password to DATABASE_URL
+[33m5e6d5cc[m HEAD@{84}: commit: Add Supabase DATABASE_URL
+[33m7947dea[m HEAD@{85}: commit: Fix: remove migrate from build, use gunicorn startup
+[33m93f552a[m HEAD@{86}: commit: Fix: use Gunicorn directly instead of broken start.sh
+[33m28ff95d[m HEAD@{87}: commit: Fix: add python-dotenv to requirements
+[33mfbfbcc0[m HEAD@{88}: commit: Deploy updates
+[33mda465bc[m HEAD@{89}: commit: Render: bind gunicorn to "
+[33m8c0f5ae[m HEAD@{90}: commit: Initial commit
+[33m2cf7974[m HEAD@{91}: commit: Initial commit
+[33m4e5c771[m HEAD@{92}: commit: Remove DATABASE_URL from render.yaml - use dashboard env vars
+[33m9296a0f[m HEAD@{93}: commit: Update render.yaml: remove frontend service, use GitHub Pages
+[33m335bb3b[m HEAD@{94}: Branch: renamed refs/heads/main to refs/heads/main
+[33m335bb3b[m HEAD@{96}: commit: sana gumana na
+[33m01bcd42[m HEAD@{97}: commit: Require DATABASE_URL in production
+[33m4f7e98c[m HEAD@{98}: commit: Fix: Supabase DATABASE_URL on Render + fieldworker create
+[33md515c89[m HEAD@{99}: commit: Deploy: Render + Flutter web + QR attendance
+[33m18f2e9b[m HEAD@{100}: commit: Run migrations on Render startup
+[33m4713d75[m HEAD@{101}: commit: Add SendGrid email fallback
+[33m3649bc6[m HEAD@{102}: commit: Send invitations async to avoid fetch timeouts
+[33m91f7c99[m HEAD@{103}: commit: Harden SMTP password + log SMTP context
+[33m0e78824[m HEAD@{104}: commit: Fix CORS+TLS env vars and email fallback
+[33md592005[m HEAD@{105}: commit: Log invitation email send result
+[33m9b27c6e[m HEAD@{106}: commit: Match invitation email template
+[33m65bd9f1[m HEAD@{107}: commit: Invitation emails + pre-project account creation
+[33m3954f6a[m HEAD@{108}: commit: pk18
+[33m36d26de[m HEAD@{109}: commit: Fix fieldworker project selection
+[33m179c510[m HEAD@{110}: commit: Update dashboards and notifications
+[33mf672821[m HEAD@{111}: pull --rebase origin main: Fast-forward
+[33mbe73251[m HEAD@{112}: reset: moving to HEAD
+[33mbe73251[m HEAD@{113}: rebase (finish): returning to refs/heads/main
+[33mbe73251[m HEAD@{114}: rebase (continue): Deploy Flutter web via GitHub Pages
+[33m1781154[m[33m ([m[1;33mtag: [m[1;33mv1.0.0[m[33m)[m HEAD@{115}: pull --rebase (start): checkout 17811541b6529e6ee91257a2271f1058478cabd1
+[33mebdeb9a[m HEAD@{116}: commit: Deploy Flutter web via GitHub Pages
+[33md0f50ad[m HEAD@{117}: commit: Fix localhost CORS regex for Flutter web
+[33m29850c0[m HEAD@{118}: commit: Fix CORS for localhost Flutter web; centralize API base URL
+[33m393dc52[m HEAD@{119}: commit: Allow Render external hostname
+[33m510ff76[m HEAD@{120}: pull --rebase origin main (finish): returning to refs/heads/main
+[33m510ff76[m HEAD@{121}: pull --rebase origin main (pick): Add Render blueprint
+[33mb37aa8c[m HEAD@{122}: pull --rebase origin main (pick): Prepare deployment (env db, gunicorn, api base url)
+[33m3a71a08[m HEAD@{123}: pull --rebase origin main (start): checkout 3a71a081d372d074004f045a316df14c36d7a4e6
+[33m7648443[m HEAD@{124}: commit: Add Render blueprint
+[33mbbc6d80[m HEAD@{125}: commit: Prepare deployment (env db, gunicorn, api base url)
+[33mb82e637[m HEAD@{126}: Branch: renamed refs/heads/main to refs/heads/main
+[33mb82e637[m HEAD@{128}: Branch: renamed refs/heads/main to refs/heads/main
+[33mb82e637[m HEAD@{130}: Branch: renamed refs/heads/main to refs/heads/main
+[33mb82e637[m HEAD@{132}: commit: Overwrite repo with local files
+[33m41775fa[m HEAD@{133}: commit: supa
+[33mf596b65[m HEAD@{134}: commit: latest
+[33m537c939[m HEAD@{135}: clone: from https://github.com/martyscrackling/aestra_structura.git
