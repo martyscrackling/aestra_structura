@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
+import '../utils/philippine_phone_input.dart';
 
 class InfosPage extends StatefulWidget {
   const InfosPage({super.key});
@@ -17,6 +19,7 @@ class _InfosPageState extends State<InfosPage> {
   final TextEditingController _lastnameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   bool _isLoading = false;
+  bool _phoneTouched = false;
 
   @override
   void dispose() {
@@ -57,6 +60,16 @@ class _InfosPageState extends State<InfosPage> {
       return;
     }
 
+    if (!PhilippinePhoneInputFormatter.isValidFormattedPhone(phone)) {
+      setState(() {
+        _phoneTouched = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Use phone format 09XX-XXX-XXXX")),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -66,7 +79,9 @@ class _InfosPageState extends State<InfosPage> {
         middleName: middleName.isNotEmpty ? middleName : null,
         lastName: lastName,
         birthdate: birthday.isNotEmpty ? birthday : null,
-        phone: phone.isNotEmpty ? phone : null,
+        phone: phone.isNotEmpty
+            ? PhilippinePhoneInputFormatter.normalizeDigits(phone)
+            : null,
       );
 
       if (!mounted) return;
@@ -269,10 +284,23 @@ class _InfosPageState extends State<InfosPage> {
 
         // Phone Number
         _buildTextField(
-          label: 'Phone Number',
+          label: 'Phone Number (09XX-XXX-XXXX)',
           icon: Icons.phone_outlined,
           keyboardType: TextInputType.phone,
           controller: _phoneController,
+          inputFormatters: [PhilippinePhoneInputFormatter()],
+          onChanged: (_) {
+            if (!_phoneTouched) {
+              setState(() => _phoneTouched = true);
+            } else {
+              setState(() {});
+            }
+          },
+          hasError:
+              _phoneTouched &&
+              !PhilippinePhoneInputFormatter.isValidFormattedPhone(
+                _phoneController.text.trim(),
+              ),
         ),
         const SizedBox(height: 25),
 
@@ -332,6 +360,9 @@ class _InfosPageState extends State<InfosPage> {
     TextInputType? keyboardType,
     bool readOnly = false,
     VoidCallback? onTap,
+    List<TextInputFormatter>? inputFormatters,
+    ValueChanged<String>? onChanged,
+    bool hasError = false,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -348,7 +379,9 @@ class _InfosPageState extends State<InfosPage> {
         controller: controller,
         readOnly: readOnly,
         onTap: onTap,
+        onChanged: onChanged,
         keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
         style: const TextStyle(fontSize: 16),
         decoration: InputDecoration(
           labelText: label,
@@ -361,15 +394,23 @@ class _InfosPageState extends State<InfosPage> {
           fillColor: Colors.white,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey[300]!),
+            borderSide: BorderSide(
+              color: hasError ? Colors.red : Colors.grey[300]!,
+            ),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey[300]!),
+            borderSide: BorderSide(
+              color: hasError ? Colors.red : Colors.grey[300]!,
+              width: hasError ? 1.5 : 1,
+            ),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFFFF6B2C), width: 2),
+            borderSide: BorderSide(
+              color: hasError ? Colors.red : const Color(0xFFFF6B2C),
+              width: 2,
+            ),
           ),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
