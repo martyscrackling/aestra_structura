@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:typed_data';
 import 'dart:math' as math;
 import 'package:image_picker/image_picker.dart';
@@ -8,6 +9,7 @@ import '../../services/app_config.dart';
 import '../../services/auth_service.dart';
 import '../../services/subscription_helper.dart';
 import '../../services/photo_verifier.dart';
+import '../../utils/philippine_phone_input.dart';
 
 class AddFieldWorkerModal extends StatefulWidget {
   final String workerType;
@@ -246,15 +248,17 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
     BuildContext context,
     TextEditingController controller,
   ) async {
+    final today = DateTime.now();
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2030),
+      initialDate: DateTime(2000),
+      firstDate: DateTime(1900),
+      lastDate: today,
     );
     if (picked != null) {
       setState(() {
-        controller.text = picked.toIso8601String().split('T')[0];
+        controller.text =
+            '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
       });
     }
   }
@@ -483,7 +487,9 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
               ? null
               : _middleNameController.text.trim(),
           'last_name': _lastNameController.text.trim(),
-          'phone_number': _phoneNumberController.text.trim(),
+          'phone_number': PhilippinePhoneInputFormatter.normalizeDigits(
+            _phoneNumberController.text.trim(),
+          ),
           'birthdate': _birthdateController.text.trim().isEmpty
               ? null
               : _birthdateController.text.trim(),
@@ -914,11 +920,18 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
       SizedBox(height: spacing),
       _buildTextField(
         controller: _phoneNumberController,
-        hintText: 'Phone Number',
+        hintText: 'Phone Number (09XX-XXX-XXXX)',
         keyboardType: TextInputType.phone,
+        inputFormatters: [PhilippinePhoneInputFormatter()],
+        autovalidateMode: AutovalidateMode.onUserInteraction,
         validator: (value) {
-          if (value == null || value.isEmpty) {
+          if (value == null || value.trim().isEmpty) {
             return 'Required';
+          }
+          if (!PhilippinePhoneInputFormatter.isValidFormattedPhone(
+            value.trim(),
+          )) {
+            return 'Use 09XX-XXX-XXXX';
           }
           return null;
         },
@@ -1382,6 +1395,8 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
     VoidCallback? onTap,
     String? Function(String?)? validator,
     Function(String)? onChanged,
+    List<TextInputFormatter>? inputFormatters,
+    AutovalidateMode? autovalidateMode,
   }) {
     return TextFormField(
       controller: controller,
@@ -1389,6 +1404,8 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
       readOnly: readOnly,
       onTap: onTap,
       onChanged: onChanged,
+      inputFormatters: inputFormatters,
+      autovalidateMode: autovalidateMode,
       decoration: InputDecoration(
         labelText: hintText,
         labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
@@ -1408,6 +1425,14 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(color: Color(0xFF0C1935), width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Colors.red, width: 1.5),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Colors.red, width: 2),
         ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,

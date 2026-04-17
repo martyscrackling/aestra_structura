@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
@@ -7,6 +8,7 @@ import '../../services/app_config.dart';
 import '../../services/auth_service.dart';
 import '../../services/subscription_helper.dart';
 import '../../services/photo_verifier.dart';
+import '../../utils/philippine_phone_input.dart';
 
 class AddClientModal extends StatefulWidget {
   const AddClientModal({super.key});
@@ -276,15 +278,17 @@ class _AddClientModalState extends State<AddClientModal> {
     BuildContext context,
     TextEditingController controller,
   ) async {
+    final today = DateTime.now();
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2030),
+      initialDate: DateTime(2000),
+      firstDate: DateTime(1900),
+      lastDate: today,
     );
     if (picked != null) {
       setState(() {
-        controller.text = picked.toIso8601String().split('T')[0];
+        controller.text =
+            '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
       });
     }
   }
@@ -382,6 +386,8 @@ class _AddClientModalState extends State<AddClientModal> {
     String? Function(String?)? validator,
     ValueChanged<String>? onChanged,
     VoidCallback? onTap,
+    List<TextInputFormatter>? inputFormatters,
+    AutovalidateMode? autovalidateMode,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -392,6 +398,8 @@ class _AddClientModalState extends State<AddClientModal> {
           keyboardType: keyboardType,
           onChanged: onChanged,
           onTap: onTap,
+          inputFormatters: inputFormatters,
+          autovalidateMode: autovalidateMode,
           decoration: InputDecoration(
             labelText: hintText,
             labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
@@ -408,6 +416,14 @@ class _AddClientModalState extends State<AddClientModal> {
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: const BorderSide(color: Color(0xFF0C1935), width: 2),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Colors.red, width: 1.5),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Colors.red, width: 2),
             ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 12,
@@ -455,7 +471,9 @@ class _AddClientModalState extends State<AddClientModal> {
           'email': _generatedEmailController.text.trim(),
           'password_hash': _passwordController.text
               .trim(), // Include password for hashing
-          'phone_number': _phoneNumberController.text.trim(),
+          'phone_number': PhilippinePhoneInputFormatter.normalizeDigits(
+            _phoneNumberController.text.trim(),
+          ),
           'birthdate': _birthdateController.text.trim().isEmpty
               ? null
               : _birthdateController.text.trim(),
@@ -710,11 +728,20 @@ class _AddClientModalState extends State<AddClientModal> {
                                 // Phone Number
                                 _buildTextField(
                                   controller: _phoneNumberController,
-                                  hintText: 'Phone Number',
+                                  hintText: 'Phone Number (09XX-XXX-XXXX)',
                                   keyboardType: TextInputType.phone,
+                                  inputFormatters: [
+                                    PhilippinePhoneInputFormatter(),
+                                  ],
+                                  autovalidateMode:
+                                      AutovalidateMode.onUserInteraction,
                                   validator: (value) {
-                                    if (value == null || value.isEmpty) {
+                                    if (value == null || value.trim().isEmpty) {
                                       return 'Required';
+                                    }
+                                    if (!PhilippinePhoneInputFormatter
+                                        .isValidFormattedPhone(value.trim())) {
+                                      return 'Use 09XX-XXX-XXXX';
                                     }
                                     return null;
                                   },
@@ -1050,11 +1077,23 @@ class _AddClientModalState extends State<AddClientModal> {
                                   // Phone Number
                                   _buildTextField(
                                     controller: _phoneNumberController,
-                                    hintText: 'Phone Number',
+                                    hintText: 'Phone Number (09XX-XXX-XXXX)',
                                     keyboardType: TextInputType.phone,
+                                    inputFormatters: [
+                                      PhilippinePhoneInputFormatter(),
+                                    ],
+                                    autovalidateMode:
+                                        AutovalidateMode.onUserInteraction,
                                     validator: (value) {
-                                      if (value == null || value.isEmpty) {
+                                      if (value == null ||
+                                          value.trim().isEmpty) {
                                         return 'Required';
+                                      }
+                                      if (!PhilippinePhoneInputFormatter
+                                          .isValidFormattedPhone(
+                                            value.trim(),
+                                          )) {
+                                        return 'Use 09XX-XXX-XXXX';
                                       }
                                       return null;
                                     },
