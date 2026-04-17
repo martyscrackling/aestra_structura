@@ -5,8 +5,7 @@ from pathlib import Path
 import os
 from django.core.exceptions import ImproperlyConfigured
 from urllib.parse import urlparse
-from dotenv import load_dotenv
-load_dotenv()
+from dotenv import load_dotenv, dotenv_values
 
 from corsheaders.defaults import default_headers
 
@@ -14,6 +13,8 @@ import dj_database_url
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+# Load .env next to manage.py so DATABASE_URL is set regardless of shell cwd.
+load_dotenv(BASE_DIR / ".env", override=True)
 
 # Define DEBUG FIRST
 DEBUG = os.getenv("DEBUG", "1") == "1"
@@ -131,6 +132,9 @@ WSGI_APPLICATION = 'structura_backend.wsgi.application'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+if not DATABASE_URL:
+    # Local fallback for teams that keep a sample URL in .env.example.
+    DATABASE_URL = dotenv_values(BASE_DIR / ".env.example").get("DATABASE_URL", "").strip()
 if DATABASE_URL:
     parsed_db_for_pooler = urlparse(DATABASE_URL)
     is_supabase_pooler = (

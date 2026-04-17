@@ -37,17 +37,12 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav> {
 
   @override
   Widget build(BuildContext context) {
-<<<<<<< HEAD
     final bottomPadding = MediaQuery.of(context).padding.bottom;
-
-=======
->>>>>>> parent of df03275 (Revert "push ko na par")
     return AnimatedSize(
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeOutCubic,
       child: Container(
         width: double.infinity,
-<<<<<<< HEAD
         decoration: BoxDecoration(color: AppColors.navSurface),
         padding: EdgeInsets.fromLTRB(0, 8, 0, 8 + bottomPadding),
         child: Column(
@@ -107,90 +102,6 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav> {
               ],
             ),
           ],
-=======
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [AppColors.navyHover, AppColors.navSurface],
-          ),
-          border: Border.all(color: Colors.white.withOpacity(0.08)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.16),
-              blurRadius: 22,
-              offset: const Offset(0, 8),
-            ),
-            BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ClipRect(
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeOutCubic,
-                  height: _isMoreExpanded ? 58 : 0,
-                  child: _buildMoreHorizontalRail(context),
-                ),
-              ),
-              if (_isMoreExpanded) const SizedBox(height: 2),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildNavItem(
-                      context,
-                      icon: Icons.dashboard_rounded,
-                      label: 'Dashboard',
-                      isActive:
-                          widget.activeTab == SupervisorMobileTab.dashboard,
-                      onTap: () => widget.onSelect('Dashboard'),
-                    ),
-                  ),
-                  Expanded(
-                    child: _buildNavItem(
-                      context,
-                      icon: Icons.folder_rounded,
-                      label: 'Projects',
-                      isActive:
-                          widget.activeTab == SupervisorMobileTab.projects,
-                      onTap: () => widget.onSelect('Projects'),
-                    ),
-                  ),
-                  Expanded(
-                    child: _buildNavItem(
-                      context,
-                      icon: Icons.groups_rounded,
-                      label: 'Workers',
-                      isActive: widget.activeTab == SupervisorMobileTab.workers,
-                      onTap: () => widget.onSelect('Workers'),
-                    ),
-                  ),
-                  Expanded(
-                    child: _buildNavItem(
-                      context,
-                      icon: _isMoreExpanded
-                          ? Icons.close_rounded
-                          : Icons.grid_view_rounded,
-                      label: _isMoreExpanded ? 'Close' : 'More',
-                      isActive:
-                          _isMoreExpanded ||
-                          widget.activeTab == SupervisorMobileTab.more,
-                      onTap: _toggleMore,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
->>>>>>> parent of df03275 (Revert "push ko na par")
         ),
       ),
     );
@@ -210,15 +121,9 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav> {
     required bool isActive,
     required VoidCallback onTap,
   }) {
-<<<<<<< HEAD
     final textColor = isActive
         ? const Color(0xFF4A9FD8) // Light blue for active
         : Colors.white.withOpacity(0.7);
-=======
-    final color = isActive
-        ? const Color.fromRGBO(74, 159, 216, 1)
-        : Colors.white.withOpacity(0.78);
->>>>>>> parent of df03275 (Revert "push ko na par")
     final bgColor = isActive ? Colors.white : Colors.transparent;
 
     return InkWell(
@@ -232,11 +137,7 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: bgColor,
-<<<<<<< HEAD
           borderRadius: isActive ? BorderRadius.circular(8) : BorderRadius.zero,
-=======
-          borderRadius: BorderRadius.circular(14),
->>>>>>> parent of df03275 (Revert "push ko na par")
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -269,16 +170,12 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav> {
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 6),
         children: [
-<<<<<<< HEAD
           _buildMoreChip(
             context,
             Icons.fact_check_rounded,
             'Attendance',
             'Attendance',
           ),
-=======
-          _buildMoreChip(context, Icons.fact_check_rounded, 'Attendance', 'Attendance'),
->>>>>>> parent of df03275 (Revert "push ko na par")
           _buildMoreChip(context, Icons.show_chart, 'Task Progress', 'Tasks'),
           _buildMoreChip(context, Icons.file_copy, 'Reports', 'Reports'),
           _buildMoreChip(context, Icons.inventory, 'Inventory', 'Inventory'),
@@ -294,15 +191,9 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav> {
     String page,
   ) {
     final isActive = widget.activeMorePage == page;
-<<<<<<< HEAD
     final chipColor = isActive
         ? const Color(0xFF4A9FD8)
         : Colors.white; // Light blue for active
-=======
-    final color = isActive
-        ? const Color.fromRGBO(74, 159, 216, 1)
-        : Colors.white;
->>>>>>> parent of df03275 (Revert "push ko na par")
 
     return InkWell(
       onTap: () {
@@ -317,13 +208,9 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav> {
           color: isActive ? Colors.white : Colors.white.withOpacity(0.05),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-<<<<<<< HEAD
             color: isActive
                 ? const Color(0xFF4A9FD8).withOpacity(0.45) // Light blue border
                 : Colors.white.withOpacity(0.1),
-=======
-            color: isActive ? Colors.white : Colors.white.withOpacity(0.1),
->>>>>>> parent of df03275 (Revert "push ko na par")
           ),
         ),
         child: Padding(

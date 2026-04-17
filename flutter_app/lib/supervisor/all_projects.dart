@@ -25,20 +25,14 @@ class _AllProjectsPageState extends State<AllProjectsPage> {
       case 'Projects':
         return; // Already on projects
       case 'Workers':
-<<<<<<< HEAD
-=======
       case 'Worker Management':
->>>>>>> parent of df03275 (Revert "push ko na par")
         context.go('/supervisor/workers');
         break;
       case 'Attendance':
         context.go('/supervisor/attendance');
         break;
       case 'Tasks':
-<<<<<<< HEAD
-=======
       case 'Task Progress':
->>>>>>> parent of df03275 (Revert "push ko na par")
         context.go('/supervisor/task-progress');
         break;
       case 'Reports':
