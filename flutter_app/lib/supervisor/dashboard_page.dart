@@ -184,6 +184,7 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
 
   Widget _buildDashboardProgressChart(bool isMobile) {
     return Card(
+      color: Colors.white,
       elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(

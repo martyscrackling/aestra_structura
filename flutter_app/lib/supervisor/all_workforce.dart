@@ -363,6 +363,62 @@ class _AllWorkforcePageState extends State<AllWorkforcePage> {
     return (hour * 60) + minute;
   }
 
+  String _extractApiErrorMessage(http.Response response) {
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) {
+        final detail = decoded['detail'];
+        if (detail is String && detail.trim().isNotEmpty) {
+          return detail.trim();
+        }
+
+        final nonFieldErrors = decoded['non_field_errors'];
+        if (nonFieldErrors is List && nonFieldErrors.isNotEmpty) {
+          final first = nonFieldErrors.first?.toString().trim();
+          if (first != null && first.isNotEmpty) {
+            return first;
+          }
+        }
+
+        for (final value in decoded.values) {
+          if (value is List && value.isNotEmpty) {
+            final first = value.first?.toString().trim();
+            if (first != null && first.isNotEmpty) {
+              return first;
+            }
+          }
+          if (value is String && value.trim().isNotEmpty) {
+            return value.trim();
+          }
+        }
+      }
+    } catch (_) {
+      // Fall back to generic message below.
+    }
+
+    return 'Request failed (${response.statusCode}).';
+  }
+
+  Future<void> _showAttendanceConflictModal(String message) async {
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Worker Already Timed In'),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<Map<String, dynamic>?> _fetchExistingAttendanceRecord({
     required int fieldWorkerId,
     required DateTime attendanceDate,
@@ -419,7 +475,7 @@ class _AllWorkforcePageState extends State<AllWorkforcePage> {
         body: jsonEncode(payload),
       );
       if (updateResponse.statusCode < 200 || updateResponse.statusCode >= 300) {
-        throw Exception('Failed to update attendance record.');
+        throw Exception(_extractApiErrorMessage(updateResponse));
       }
       return;
     }
@@ -430,7 +486,7 @@ class _AllWorkforcePageState extends State<AllWorkforcePage> {
       body: jsonEncode(payload),
     );
     if (createResponse.statusCode < 200 || createResponse.statusCode >= 300) {
-      throw Exception('Failed to create attendance record.');
+      throw Exception(_extractApiErrorMessage(createResponse));
     }
   }
 
@@ -446,9 +502,9 @@ class _AllWorkforcePageState extends State<AllWorkforcePage> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(context).colorScheme.copyWith(
-              primary: const Color(0xFFFF6F00),
-            ),
+            colorScheme: Theme.of(
+              context,
+            ).colorScheme.copyWith(primary: const Color(0xFFFF6F00)),
           ),
           child: child!,
         );
@@ -492,7 +548,9 @@ class _AllWorkforcePageState extends State<AllWorkforcePage> {
         if (outMinutes == null || outMinutes <= inMinutes) {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Time Out must be later than Time In.')),
+            const SnackBar(
+              content: Text('Time Out must be later than Time In.'),
+            ),
           );
           return;
         }
@@ -529,8 +587,17 @@ class _AllWorkforcePageState extends State<AllWorkforcePage> {
       );
     } catch (e) {
       if (!mounted) return;
+      final errorMessage = e.toString().replaceFirst('Exception: ', '').trim();
+      final isCrossProjectTimeInConflict =
+          action == 'Time In' &&
+          errorMessage.toLowerCase().contains('currently timed in on');
+
+      if (isCrossProjectTimeInConflict) {
+        await _showAttendanceConflictModal(errorMessage);
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to record attendance: $e')),
+        SnackBar(content: Text('Failed to record attendance: $errorMessage')),
       );
     }
   }

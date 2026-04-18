@@ -530,7 +530,7 @@ class Attendance(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('field_worker', 'attendance_date')
+        unique_together = ('field_worker', 'project', 'attendance_date')
         ordering = ['-attendance_date']
 
     def __str__(self):

@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'widgets/sidebar.dart';
 import 'widgets/dashboard_header.dart';
 import 'widgets/responsive_page_layout.dart';
+import 'worker_profile_page.dart';
+import 'workforce_page.dart';
 import '../services/app_config.dart';
 import '../services/auth_service.dart';
 
@@ -473,6 +475,42 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
     final firstName = worker['first_name'] ?? '';
     final lastName = worker['last_name'] ?? '';
     return '$firstName $lastName'.trim();
+  }
+
+  WorkerInfo _mapToWorkerInfo(Map<String, dynamic> worker) {
+    final firstName = worker['first_name'] ?? '';
+    final lastName = worker['last_name'] ?? '';
+    final fullName = '$firstName $lastName'.trim();
+    final photoUrl = _resolveMediaUrl(worker['photo']);
+
+    return WorkerInfo(
+      fieldWorkerId: worker['id'] ?? worker['fieldworker_id'],
+      userId: worker['user_id'],
+      name: fullName,
+      email: worker['email'] ?? 'N/A',
+      phone: worker['phone_number'] ?? 'N/A',
+      role: worker['role'] ?? 'Field Worker',
+      avatarUrl: photoUrl ?? 'https://randomuser.me/api/portraits/men/1.jpg',
+      type: 'Field Worker',
+    );
+  }
+
+  WorkerInfo _mapToSupervisorInfo(Map<String, dynamic> supervisor) {
+    final firstName = supervisor['first_name'] ?? '';
+    final lastName = supervisor['last_name'] ?? '';
+    final fullName = '$firstName $lastName'.trim();
+    final photoUrl = _resolveMediaUrl(supervisor['photo']);
+
+    return WorkerInfo(
+      supervisorId: supervisor['id'] ?? supervisor['supervisor_id'],
+      userId: supervisor['user_id'],
+      name: fullName,
+      email: supervisor['email'] ?? 'N/A',
+      phone: supervisor['phone_number'] ?? 'N/A',
+      role: supervisor['role'] ?? 'Supervisor',
+      avatarUrl: photoUrl ?? 'https://randomuser.me/api/portraits/men/1.jpg',
+      type: 'Supervisor',
+    );
   }
 
   void _showExistingSupervisorsDialog() {
@@ -1254,6 +1292,15 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
           ElevatedButton(
             onPressed: () {
               // TODO: Navigate to worker details
+
+              final workerInfo = _mapToWorkerInfo(worker);
+              Navigator.of(context).push(
+                PageRouteBuilder(
+                  pageBuilder: (context, animation, secondaryAnimation) =>
+                      WorkerProfilePage(worker: workerInfo),
+                  transitionDuration: Duration.zero,
+                ),
+              );
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFFF7A18),
@@ -1377,6 +1424,14 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
           ElevatedButton(
             onPressed: () {
               // TODO: Navigate to supervisor details
+              final supervisorInfo = _mapToSupervisorInfo(supervisor);
+              Navigator.of(context).push(
+                PageRouteBuilder(
+                  pageBuilder: (context, animation, secondaryAnimation) =>
+                      WorkerProfilePage(worker: supervisorInfo),
+                  transitionDuration: Duration.zero,
+                ),
+              );
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF2196F3),

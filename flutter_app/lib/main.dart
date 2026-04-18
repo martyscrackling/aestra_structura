@@ -642,17 +642,33 @@ class HeroSection extends StatelessWidget {
           Expanded(
             child: OutlinedButton(
               onPressed: () {},
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Colors.white),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: const Text(
-                'See Features',
-                style: TextStyle(color: Colors.white),
-              ),
+              style:
+                  OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.white),
+                    backgroundColor: Colors.transparent,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ).copyWith(
+                    backgroundColor: MaterialStateProperty.resolveWith((
+                      states,
+                    ) {
+                      if (states.contains(MaterialState.hovered)) {
+                        return Colors.white;
+                      }
+                      return Colors.transparent;
+                    }),
+                    foregroundColor: MaterialStateProperty.resolveWith((
+                      states,
+                    ) {
+                      if (states.contains(MaterialState.hovered)) {
+                        return const Color(0xFFFF5A1F);
+                      }
+                      return Colors.white;
+                    }),
+                  ),
+              child: const Text('See Features'),
             ),
           ),
           const SizedBox(width: 12),
@@ -688,16 +704,33 @@ class HeroSection extends StatelessWidget {
         children: [
           OutlinedButton(
             onPressed: () {},
-            style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: Colors.white),
-              padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
+            style:
+                OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Colors.white),
+                  backgroundColor: Colors.transparent,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 30,
+                    vertical: 16,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ).copyWith(
+                  backgroundColor: MaterialStateProperty.resolveWith((states) {
+                    if (states.contains(MaterialState.hovered)) {
+                      return Colors.white;
+                    }
+                    return Colors.transparent;
+                  }),
+                  foregroundColor: MaterialStateProperty.resolveWith((states) {
+                    if (states.contains(MaterialState.hovered)) {
+                      return const Color(0xFFFF5A1F);
+                    }
+                    return Colors.white;
+                  }),
+                ),
             child: const Text(
               'See Features',
-              style: TextStyle(color: Colors.white),
             ),
           ),
           const SizedBox(width: 20),

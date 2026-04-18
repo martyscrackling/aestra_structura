@@ -50,17 +50,23 @@ class _ProjectsPageState extends State<ProjectsPage> {
 
   List<ProjectOverviewData> get _visibleProjects {
     final query = _searchQuery.trim().toLowerCase();
-    print('🔍 _visibleProjects called: typeFilter=$_projectTypeFilter, statusFilter=$_statusFilter, searchQuery=$_searchQuery');
+    print(
+      '🔍 _visibleProjects called: typeFilter=$_projectTypeFilter, statusFilter=$_statusFilter, searchQuery=$_searchQuery',
+    );
     final filteredByType = (_projectTypeFilter == null)
         ? List<ProjectOverviewData>.from(_projects)
         : _projects.where((p) => p.projectType == _projectTypeFilter).toList();
-    
+
     print('🔍 After type filter: ${filteredByType.length} projects');
-    
+
     final filteredByStatus = (_statusFilter == null)
         ? filteredByType
-        : filteredByType.where((p) => p.status.toLowerCase() == _statusFilter!.toLowerCase()).toList();
-    
+        : filteredByType
+              .where(
+                (p) => p.status.toLowerCase() == _statusFilter!.toLowerCase(),
+              )
+              .toList();
+
     print('🔍 After status filter: ${filteredByStatus.length} projects');
 
     final filtered = query.isEmpty
@@ -98,8 +104,8 @@ class _ProjectsPageState extends State<ProjectsPage> {
     return filtered;
   }
 
-  // Calculate progress based on subtasks (matching task_progress.dart)
-  Future<double> _calculateProjectProgress(int projectId) async {
+  // Calculate progress and assigned workforce based on subtasks.
+  Future<_ProjectMetrics> _calculateProjectMetrics(int projectId) async {
     try {
       final response = await http.get(
         AppConfig.apiUri('phases/?project_id=$projectId'),
@@ -110,6 +116,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
 
         int totalSubtasks = 0;
         int completedSubtasks = 0;
+        final Set<int> assignedWorkerIds = <int>{};
 
         for (var phase in phases) {
           final phaseMap = phase as Map<String, dynamic>;
@@ -121,16 +128,75 @@ class _ProjectsPageState extends State<ProjectsPage> {
             if (subtaskMap['status'] == 'completed') {
               completedSubtasks++;
             }
+            final assignedWorkers = subtaskMap['assigned_workers'];
+            if (assignedWorkers is List) {
+              for (final worker in assignedWorkers) {
+                if (worker is! Map<String, dynamic>) continue;
+                final workerId =
+                    _parseInt(worker['fieldworker_id']) ??
+                    _parseInt(worker['field_worker']) ??
+                    _parseInt(worker['id']);
+                if (workerId != null && workerId > 0) {
+                  assignedWorkerIds.add(workerId);
+                }
+              }
+            }
           }
         }
 
-        if (totalSubtasks == 0) return 0.0;
-        return completedSubtasks / totalSubtasks;
+        final progress = totalSubtasks == 0
+            ? 0.0
+            : completedSubtasks / totalSubtasks;
+        return _ProjectMetrics(
+          progress: progress,
+          assignedCrewCount: assignedWorkerIds.length,
+        );
       }
     } catch (e) {
-      print('⚠️ Error calculating progress for project $projectId: $e');
+      print('⚠️ Error calculating project metrics for project $projectId: $e');
     }
-    return 0.0;
+    return const _ProjectMetrics(progress: 0.0, assignedCrewCount: 0);
+  }
+
+  int? _parseInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    return int.tryParse(value.toString());
+  }
+
+  Future<int> _fetchProjectWorkforceCount({
+    required int projectId,
+    required dynamic userId,
+  }) async {
+    try {
+      final response = await http.get(
+        AppConfig.apiUri(
+          'field-workers/?project_id=$projectId&user_id=$userId',
+        ),
+      );
+
+      if (response.statusCode != 200) return 0;
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is List) {
+        return decoded.length;
+      }
+      if (decoded is Map<String, dynamic>) {
+        final results = decoded['results'];
+        if (results is List) {
+          return results.length;
+        }
+        final data = decoded['data'];
+        if (data is List) {
+          return data.length;
+        }
+      }
+      return 0;
+    } catch (e) {
+      print('⚠️ Error fetching workforce count for project $projectId: $e');
+      return 0;
+    }
   }
 
   Future<void> _fetchProjects() async {
@@ -161,7 +227,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
         print('📊 Projects fetched: ${data.length}');
-        
+
         // Debug: Print all unique status values from API
         final uniqueStatuses = <String>{};
         for (var project in data) {
@@ -188,11 +254,25 @@ class _ProjectsPageState extends State<ProjectsPage> {
             final String createdAt = (project['created_at'] as String?) ?? '';
             final String projectType =
                 (project['project_type'] as String?) ?? '';
+            final metrics = await _calculateProjectMetrics(projectId);
+            final int projectWorkforceCount = await _fetchProjectWorkforceCount(
+              projectId: projectId,
+              userId: userId,
+            );
+            final int workforceCount = projectWorkforceCount > 0
+                ? projectWorkforceCount
+                : _parseInt(project['workforce']) ??
+                      _parseInt(project['workforce_count']) ??
+                      _parseInt(project['crew_count']) ??
+                      _parseInt(project['assigned_workers_count']) ??
+                      (metrics.assignedCrewCount > 0
+                          ? metrics.assignedCrewCount
+                          : 0);
 
             print('✅ Project ID: $projectId, Name: $projectName');
 
-            // Calculate progress based on subtasks (matching task_progress.dart)
-            final progress = await _calculateProjectProgress(projectId);
+            // // Calculate progress based on subtasks (matching task_progress.dart)
+            // final progress = await _calculateProjectProgress(projectId);
 
             projects.add(
               ProjectOverviewData(
@@ -202,8 +282,8 @@ class _ProjectsPageState extends State<ProjectsPage> {
                 location: _buildLocation(project),
                 startDate: _formatDate(startDateStr),
                 endDate: _formatDate(endDateStr),
-                progress: progress,
-                crewCount: 0,
+                progress: metrics.progress,
+                crewCount: workforceCount,
                 image: _getProjectImage(project),
                 budget: budget,
                 createdAt: createdAt,
@@ -405,7 +485,9 @@ class _ProjectsPageState extends State<ProjectsPage> {
                       _projectTypeFilter = value;
                     });
                     Future.delayed(const Duration(milliseconds: 100), () {
-                      print('📊 Visible projects after filter: ${_visibleProjects.length}');
+                      print(
+                        '📊 Visible projects after filter: ${_visibleProjects.length}',
+                      );
                     });
                   },
                   statusFilter: _statusFilter,
@@ -417,7 +499,9 @@ class _ProjectsPageState extends State<ProjectsPage> {
                       _statusFilter = value;
                     });
                     Future.delayed(const Duration(milliseconds: 100), () {
-                      print('📊 Visible projects after filter: ${_visibleProjects.length}');
+                      print(
+                        '📊 Visible projects after filter: ${_visibleProjects.length}',
+                      );
                     });
                   },
                 ),
@@ -658,7 +742,11 @@ class _ProjectsHeader extends StatelessWidget {
           children: [
             const Text(
               'Project Type',
-              style: TextStyle(fontSize: 12, color: Color(0xFF6B7280), fontWeight: FontWeight.w500),
+              style: TextStyle(
+                fontSize: 12,
+                color: Color(0xFF6B7280),
+                fontWeight: FontWeight.w500,
+              ),
             ),
             const SizedBox(height: 4),
             _ProjectTypeFilterDropdown(
@@ -675,7 +763,11 @@ class _ProjectsHeader extends StatelessWidget {
           children: [
             const Text(
               'Status',
-              style: TextStyle(fontSize: 12, color: Color(0xFF6B7280), fontWeight: FontWeight.w500),
+              style: TextStyle(
+                fontSize: 12,
+                color: Color(0xFF6B7280),
+                fontWeight: FontWeight.w500,
+              ),
             ),
             const SizedBox(height: 4),
             _StatusFilterDropdown(
@@ -692,7 +784,11 @@ class _ProjectsHeader extends StatelessWidget {
           children: [
             const Text(
               'Sort By',
-              style: TextStyle(fontSize: 12, color: Color(0xFF6B7280), fontWeight: FontWeight.w500),
+              style: TextStyle(
+                fontSize: 12,
+                color: Color(0xFF6B7280),
+                fontWeight: FontWeight.w500,
+              ),
             ),
             const SizedBox(height: 4),
             _SortOrderDropdown(
@@ -786,7 +882,8 @@ class _StatusFilterDropdown extends StatelessWidget {
           itemBuilder: (BuildContext context) => <PopupMenuEntry<String?>>[
             const PopupMenuItem<String?>(value: 'ALL', child: Text('All')),
             ..._statuses.map(
-              (status) => PopupMenuItem<String?>(value: status, child: Text(status)),
+              (status) =>
+                  PopupMenuItem<String?>(value: status, child: Text(status)),
             ),
           ],
           child: Container(
@@ -799,7 +896,11 @@ class _StatusFilterDropdown extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.check_circle_outline, size: 16, color: Color(0xFF0C1935)),
+                const Icon(
+                  Icons.check_circle_outline,
+                  size: 16,
+                  color: Color(0xFF0C1935),
+                ),
                 const SizedBox(width: 4),
                 Flexible(
                   child: Text(
@@ -832,7 +933,8 @@ class _StatusFilterDropdown extends StatelessWidget {
         itemBuilder: (BuildContext context) => <PopupMenuEntry<String?>>[
           const PopupMenuItem<String?>(value: 'ALL', child: const Text('All')),
           ..._statuses.map(
-            (status) => PopupMenuItem<String?>(value: status, child: Text(status)),
+            (status) =>
+                PopupMenuItem<String?>(value: status, child: Text(status)),
           ),
         ],
         child: Container(
@@ -843,7 +945,11 @@ class _StatusFilterDropdown extends StatelessWidget {
           ),
           child: Row(
             children: [
-              const Icon(Icons.check_circle_outline, size: 16, color: Color(0xFF0C1935)),
+              const Icon(
+                Icons.check_circle_outline,
+                size: 16,
+                color: Color(0xFF0C1935),
+              ),
               const SizedBox(width: 6),
               Text(
                 displayText,
@@ -901,7 +1007,10 @@ class _ProjectTypeFilterDropdown extends StatelessWidget {
             onChanged(result);
           },
           itemBuilder: (BuildContext context) => <PopupMenuEntry<String?>>[
-            const PopupMenuItem<String?>(value: 'ALL', child: const Text('All')),
+            const PopupMenuItem<String?>(
+              value: 'ALL',
+              child: const Text('All'),
+            ),
             ..._types.map(
               (type) => PopupMenuItem<String?>(value: type, child: Text(type)),
             ),
@@ -1292,7 +1401,10 @@ class ProjectOverviewCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: _getStatusColor(data.status, isBackground: false),
+                          color: _getStatusColor(
+                            data.status,
+                            isBackground: false,
+                          ),
                         ),
                       ),
                     ),
@@ -1543,4 +1655,14 @@ class ProjectOverviewData {
   final String projectType;
   final String? budget;
   final String createdAt;
+}
+
+class _ProjectMetrics {
+  const _ProjectMetrics({
+    required this.progress,
+    required this.assignedCrewCount,
+  });
+
+  final double progress;
+  final int assignedCrewCount;
 }

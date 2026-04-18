@@ -1531,6 +1531,7 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
         final worker = filteredWorkers[index];
         final roleColor = _roleColor(worker['role']);
         return Card(
+          color: Colors.white,
           margin: const EdgeInsets.only(bottom: 12),
           elevation: 2,
           shape: RoundedRectangleBorder(
@@ -1686,6 +1687,7 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
     List<Map<String, dynamic>> filteredWorkers,
   ) {
     return Card(
+      color: Colors.white,
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Column(
@@ -1889,6 +1891,7 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                             if (!isTablet) const SizedBox(width: 8),
                             if (!isTablet)
                               PopupMenuButton<String>(
+                                color: Colors.white,
                                 onSelected: (v) {
                                   if (v == 'toggle') {
                                     setState(() {
@@ -2036,6 +2039,7 @@ class _WorkersHeaderState extends State<WorkersHeader> {
                 ),
                 const SizedBox(width: 24),
                 PopupMenuButton<String>(
+                  color: Colors.white,
                   onSelected: (value) async {
                     if (value == 'switch') {
                       ScaffoldMessenger.of(context).showSnackBar(

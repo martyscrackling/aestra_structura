@@ -42,8 +42,19 @@ class _CalendarPanelState extends State<CalendarPanel> {
   Widget build(BuildContext context) {
     final daysInMonth = _getDaysInMonth(_currentMonth);
     final firstDay = _getFirstDayOfMonth(_currentMonth);
-    final monthName = ['January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
+    final monthName = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
     ][_currentMonth.month - 1];
 
     // Generate calendar days
@@ -56,6 +67,7 @@ class _CalendarPanelState extends State<CalendarPanel> {
     }
 
     return Card(
+      color: Colors.white,
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
@@ -70,7 +82,10 @@ class _CalendarPanelState extends State<CalendarPanel> {
               children: [
                 Text(
                   '$monthName ${_currentMonth.year}',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 Row(
                   children: [
@@ -97,19 +112,21 @@ class _CalendarPanelState extends State<CalendarPanel> {
               children: [
                 TableRow(
                   children: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-                      .map((day) => Center(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: Text(
-                            day,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: Colors.grey[600],
-                              fontSize: 12,
+                      .map(
+                        (day) => Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Text(
+                              day,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: Colors.grey[600],
+                                fontSize: 12,
+                              ),
                             ),
                           ),
                         ),
-                      ))
+                      )
                       .toList(),
                 ),
               ],
@@ -119,67 +136,73 @@ class _CalendarPanelState extends State<CalendarPanel> {
             // Calendar grid using Table
             Table(
               defaultColumnWidth: const FlexColumnWidth(1),
-              children: List.generate(
-                (calendarDays.length / 7).ceil(),
-                (rowIndex) {
-                  final startIdx = rowIndex * 7;
-                  final endIdx = (startIdx + 7 > calendarDays.length)
-                      ? calendarDays.length
-                      : startIdx + 7;
-                  final row = calendarDays.sublist(startIdx, endIdx);
+              children: List.generate((calendarDays.length / 7).ceil(), (
+                rowIndex,
+              ) {
+                final startIdx = rowIndex * 7;
+                final endIdx = (startIdx + 7 > calendarDays.length)
+                    ? calendarDays.length
+                    : startIdx + 7;
+                final row = calendarDays.sublist(startIdx, endIdx);
 
-                  return TableRow(
-                    children: List.generate(7, (colIndex) {
-                      final day = colIndex < row.length ? row[colIndex] : 0;
-                      final date = day > 0
-                          ? DateTime(_currentMonth.year, _currentMonth.month, day)
-                          : null;
+                return TableRow(
+                  children: List.generate(7, (colIndex) {
+                    final day = colIndex < row.length ? row[colIndex] : 0;
+                    final date = day > 0
+                        ? DateTime(_currentMonth.year, _currentMonth.month, day)
+                        : null;
 
-                      final isSelected = date != null &&
-                          _selectedDate.year == date.year &&
-                          _selectedDate.month == date.month &&
-                          _selectedDate.day == date.day;
-                      final isToday = date != null &&
-                          date.year == DateTime.now().year &&
-                          date.month == DateTime.now().month &&
-                          date.day == DateTime.now().day;
+                    final isSelected =
+                        date != null &&
+                        _selectedDate.year == date.year &&
+                        _selectedDate.month == date.month &&
+                        _selectedDate.day == date.day;
+                    final isToday =
+                        date != null &&
+                        date.year == DateTime.now().year &&
+                        date.month == DateTime.now().month &&
+                        date.day == DateTime.now().day;
 
-                      return GestureDetector(
-                        onTap: date != null ? () {
-                          setState(() => _selectedDate = date);
-                        } : null,
-                        child: Container(
-                          margin: const EdgeInsets.all(4),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? const Color(0xFF1396E9)
-                                : isToday
-                                    ? const Color(0xFF1396E9).withOpacity(0.1)
-                                    : Colors.transparent,
-                            borderRadius: BorderRadius.circular(8),
-                            border: isToday && !isSelected
-                                ? Border.all(color: const Color(0xFF1396E9), width: 1.5)
-                                : null,
-                          ),
-                          child: Center(
-                            child: Text(
-                              day > 0 ? day.toString() : '',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: day > 0
-                                    ? (isSelected ? Colors.white : Colors.black)
-                                    : Colors.transparent,
-                                fontSize: 12,
-                              ),
+                    return GestureDetector(
+                      onTap: date != null
+                          ? () {
+                              setState(() => _selectedDate = date);
+                            }
+                          : null,
+                      child: Container(
+                        margin: const EdgeInsets.all(4),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? const Color(0xFF1396E9)
+                              : isToday
+                              ? const Color(0xFF1396E9).withOpacity(0.1)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                          border: isToday && !isSelected
+                              ? Border.all(
+                                  color: const Color(0xFF1396E9),
+                                  width: 1.5,
+                                )
+                              : null,
+                        ),
+                        child: Center(
+                          child: Text(
+                            day > 0 ? day.toString() : '',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: day > 0
+                                  ? (isSelected ? Colors.white : Colors.black)
+                                  : Colors.transparent,
+                              fontSize: 12,
                             ),
                           ),
                         ),
-                      );
-                    }),
-                  );
-                },
-              ),
+                      ),
+                    );
+                  }),
+                );
+              }),
             ),
             const SizedBox(height: 16),
 
@@ -197,7 +220,10 @@ class _CalendarPanelState extends State<CalendarPanel> {
                   Expanded(
                     child: Text(
                       '${_selectedDate.day} ${monthName} ${_selectedDate.year}',
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 ],

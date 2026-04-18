@@ -915,6 +915,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
 
   Widget _buildProjectProgressChart(bool isMobile) {
     return Card(
+      color: Colors.white,
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
@@ -1157,9 +1158,14 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
       borderRadius: BorderRadius.circular(12),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: AppSpacing.sm),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: AppSpacing.sm,
+        ),
         decoration: BoxDecoration(
-          color: isActive ? AppColors.accent.withOpacity(0.15) : Colors.transparent,
+          color: isActive
+              ? AppColors.accent.withOpacity(0.15)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
