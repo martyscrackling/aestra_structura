@@ -142,25 +142,28 @@ class _ProjectGrid extends StatelessWidget {
     return Column(
       children: [
         for (final row in rows) ...[
-          Row(
-            children: [
-              for (final project in row) ...[
-                Expanded(
-                  child: ProjectCard(
-                    title: project.name,
-                    location: project.location,
-                    progress: project.progress,
-                    tasksCompleted: project.tasksCompleted,
-                    totalTasks: project.totalTasks,
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final project in row) ...[
+                  Expanded(
+                    child: ProjectCard(
+                      title: project.name,
+                      location: project.location,
+                      progress: project.progress,
+                      tasksCompleted: project.tasksCompleted,
+                      totalTasks: project.totalTasks,
+                    ),
                   ),
-                ),
-                if (project != row.last) SizedBox(width: spacing),
+                  if (project != row.last) SizedBox(width: spacing),
+                ],
+                for (var i = row.length; i < columns; i++) ...[
+                  SizedBox(width: spacing),
+                  const Expanded(child: SizedBox.shrink()),
+                ],
               ],
-              for (var i = row.length; i < columns; i++) ...[
-                SizedBox(width: spacing),
-                const Expanded(child: SizedBox.shrink()),
-              ],
-            ],
+            ),
           ),
           if (row != rows.last) SizedBox(height: spacing),
         ],
@@ -190,18 +193,15 @@ class ProjectCard extends StatelessWidget {
     final screenWidth = MediaQuery.of(context).size.width;
     final isExtraSmallPhone = screenWidth <= 320;
     final isSmallPhone = screenWidth < 375;
+    final isDesktopOrTablet = screenWidth >= 768;
     final padding = isExtraSmallPhone
         ? 10.0
         : isSmallPhone
         ? 12.0
-        : 16.0;
+        : 14.0;
 
     return Container(
-      constraints: BoxConstraints(
-        minWidth: isExtraSmallPhone
-            ? 150
-            : 200, // Adjust for very small screens
-      ),
+      constraints: BoxConstraints(minHeight: isDesktopOrTablet ? 170 : 0),
       padding: EdgeInsets.all(padding),
       decoration: BoxDecoration(
         color: Colors.white,
