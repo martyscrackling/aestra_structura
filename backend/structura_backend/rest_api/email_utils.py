@@ -4,6 +4,7 @@ import logging
 import json
 import os
 import threading
+import html as html_module
 from email.utils import formataddr, parseaddr
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
@@ -50,10 +51,18 @@ def _generate_html_template(
 ) -> str:
     """Generate a professional HTML email template."""
     
+    # Escape HTML content to prevent injection issues
+    greeting = html_module.escape(greeting)
+    main_content = html_module.escape(main_content)
+    app_name = html_module.escape(app_name)
+    call_to_action_text = html_module.escape(call_to_action_text)
+    
     details_html = ""
     if details:
         details_html = '<div style="background-color: #f8f9fa; padding: 20px; border-radius: 6px; margin: 20px 0;">'
         for label, value in details:
+            label = html_module.escape(label)
+            value = html_module.escape(value)
             details_html += f'''
             <div style="margin-bottom: 12px;">
                 <span style="font-weight: 600; color: #333;">{label}:</span>
@@ -64,9 +73,11 @@ def _generate_html_template(
 
     cta_button = ""
     if call_to_action_url:
+        # Escape URL for HTML attribute
+        safe_url = html_module.escape(call_to_action_url, quote=True)
         cta_button = f'''
         <div style="text-align: center; margin: 30px 0;">
-            <a href="{call_to_action_url}" style="display: inline-block; padding: 12px 32px; background-color: #0066cc; color: white; text-decoration: none; border-radius: 6px; font-weight: 600;">
+            <a href="{safe_url}" style="display: inline-block; padding: 12px 32px; background-color: #0066cc; color: white; text-decoration: none; border-radius: 6px; font-weight: 600;">
                 {call_to_action_text}
             </a>
         </div>
@@ -366,18 +377,22 @@ def send_invitation_email(
 
     message = "\n".join(lines)
 
-    # Generate HTML version
-    html_content = _generate_html_template(
-        greeting=greeting,
-        main_content=added_sentence + " Your account has been created and you can now access the system.",
-        details=[
-            ("Email", to_email),
-            ("Temporary Password", temp_password),
-        ],
-        app_name=app_name,
-        call_to_action_url=f"{frontend_url}/login" if frontend_url else None,
-        call_to_action_text="Log In Now",
-    )
+    # Generate HTML version (with fallback if it fails)
+    html_content = None
+    try:
+        html_content = _generate_html_template(
+            greeting=greeting,
+            main_content=added_sentence + " Your account has been created and you can now access the system.",
+            details=[
+                ("Email", to_email),
+                ("Temporary Password", temp_password),
+            ],
+            app_name=app_name,
+            call_to_action_url=f"{frontend_url}/login" if frontend_url else None,
+            call_to_action_text="Log In Now",
+        )
+    except Exception:
+        logger.exception("Failed to generate HTML email template")
 
     _send_email_best_effort(
         to_email=to_email,
@@ -432,14 +447,18 @@ def send_project_assignment_email(
     lines.extend(["", "Thanks,", f"{app_name} Team"])
     message = "\n".join(lines)
 
-    # Generate HTML version
-    html_content = _generate_html_template(
-        greeting=greeting,
-        main_content=added_sentence,
-        app_name=app_name,
-        call_to_action_url=f"{frontend_url}/login" if frontend_url else None,
-        call_to_action_text="Go to Project",
-    )
+    # Generate HTML version (with fallback if it fails)
+    html_content = None
+    try:
+        html_content = _generate_html_template(
+            greeting=greeting,
+            main_content=added_sentence,
+            app_name=app_name,
+            call_to_action_url=f"{frontend_url}/login" if frontend_url else None,
+            call_to_action_text="Go to Project",
+        )
+    except Exception:
+        logger.exception("Failed to generate HTML email template")
 
     _send_email_best_effort(
         to_email=to_email,
