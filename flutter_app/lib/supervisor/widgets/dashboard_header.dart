@@ -258,7 +258,7 @@ class _SupervisorNotificationMenuState
       onOpened: _refresh,
       onSelected: (value) {
         if (value == 1) {
-          context.go('/supervisor/task-progress');
+          context.go('/supervisor/reports');
         }
       },
       itemBuilder: (context) {
@@ -335,7 +335,7 @@ class _SupervisorNotificationMenuState
                 Icon(Icons.open_in_new, size: 16, color: Color(0xFF2563EB)),
                 SizedBox(width: 8),
                 Text(
-                  'View all tasks',
+                  'View reports',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,

@@ -6,7 +6,6 @@ import '../dashboard_page.dart';
 import '../all_projects.dart';
 import '../workers_management.dart';
 import '../attendance_page.dart';
-import '../task_progress.dart';
 import '../reports.dart';
 import '../inventory.dart';
 
@@ -47,9 +46,6 @@ class _SidebarState extends State<Sidebar> {
       case "Attendance":
         context.go('/supervisor/attendance');
         break;
-      case "Task Progress":
-        context.go('/supervisor/task-progress');
-        break;
       case "Reports":
         context.go('/supervisor/reports');
         break;
@@ -68,7 +64,6 @@ class _SidebarState extends State<Sidebar> {
       {"label": "Projects", "icon": Icons.folder_open},
       {"label": "Worker Management", "icon": Icons.people},
       {"label": "Attendance", "icon": Icons.check_circle},
-      {"label": "Task Progress", "icon": Icons.show_chart},
       {"label": "Reports", "icon": Icons.file_copy},
       {"label": "Inventory", "icon": Icons.inventory},
     ];

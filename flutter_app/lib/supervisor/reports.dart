@@ -153,10 +153,6 @@ class _ReportsPageState extends State<ReportsPage> {
       case 'Attendance':
         context.go('/supervisor/attendance');
         break;
-      case 'Tasks':
-      case 'Task Progress':
-        context.go('/supervisor/task-progress');
-        break;
       case 'Reports':
         return; // Already on reports page
       case 'Inventory':
@@ -2896,12 +2892,6 @@ class _ReportsPageState extends State<ReportsPage> {
                 ),
               ),
               const SizedBox(height: 20),
-              _buildMoreOption(
-                Icons.show_chart,
-                'Task Progress',
-                'Tasks',
-                false,
-              ),
               _buildMoreOption(Icons.file_copy, 'Reports', 'Reports', true),
               _buildMoreOption(
                 Icons.inventory,

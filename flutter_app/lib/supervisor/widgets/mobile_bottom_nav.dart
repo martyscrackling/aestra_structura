@@ -176,7 +176,6 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav> {
             'Attendance',
             'Attendance',
           ),
-          _buildMoreChip(context, Icons.show_chart, 'Task Progress', 'Tasks'),
           _buildMoreChip(context, Icons.file_copy, 'Reports', 'Reports'),
           _buildMoreChip(context, Icons.inventory, 'Inventory', 'Inventory'),
         ],

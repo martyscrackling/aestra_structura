@@ -225,10 +225,6 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
       case 'Attendance':
         context.go('/supervisor/attendance');
         break;
-      case 'Tasks':
-      case 'Task Progress':
-        context.go('/supervisor/task-progress');
-        break;
       case 'Reports':
         context.go('/supervisor/reports');
         break;
@@ -1492,7 +1488,6 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                 ),
               ),
               const SizedBox(height: 20),
-              _buildMoreOption(Icons.show_chart, 'Task Progress', 'Tasks'),
               _buildMoreOption(Icons.file_copy, 'Reports', 'Reports'),
               _buildMoreOption(Icons.inventory, 'Inventory', 'Inventory'),
               const SizedBox(height: 20),

@@ -75,10 +75,6 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
       case 'Attendance':
         context.go('/supervisor/attendance');
         break;
-      case 'Tasks':
-      case 'Task Progress':
-        context.go('/supervisor/task-progress');
-        break;
       case 'Reports':
         context.go('/supervisor/reports');
         break;

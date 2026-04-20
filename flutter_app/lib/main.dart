@@ -18,7 +18,6 @@ import 'supervisor/dashboard_page.dart' as supervisor;
 import 'supervisor/all_projects.dart' as supervisor;
 import 'supervisor/workers_management.dart' as supervisor;
 import 'supervisor/attendance_page.dart' as supervisor;
-import 'supervisor/task_progress.dart' as supervisor;
 import 'supervisor/reports.dart' as supervisor;
 import 'supervisor/inventory.dart' as supervisor;
 import 'client/cl_dashboard.dart' as client;
@@ -213,14 +212,6 @@ class StructuraApp extends StatelessWidget {
                 child: const supervisor.AttendancePage(),
               ),
               name: 'supervisor-attendance',
-            ),
-            GoRoute(
-              path: 'task-progress',
-              pageBuilder: (context, state) => _buildSmoothPage(
-                state: state,
-                child: const supervisor.TaskProgressPage(),
-              ),
-              name: 'supervisor-task-progress',
             ),
             GoRoute(
               path: 'reports',

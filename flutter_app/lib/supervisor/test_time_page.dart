@@ -110,10 +110,6 @@ class _TestTimePageState extends State<TestTimePage> {
       case 'Attendance':
         context.go('/supervisor/attendance');
         break;
-      case 'Tasks':
-      case 'Task Progress':
-        context.go('/supervisor/task-progress');
-        break;
       case 'Reports':
         context.go('/supervisor/reports');
         break;
@@ -241,7 +237,9 @@ class _TestTimePageState extends State<TestTimePage> {
                                       TextButton.icon(
                                         onPressed: _clearOverride,
                                         icon: const Icon(Icons.restore),
-                                        label: const Text('Reset to Device Time'),
+                                        label: const Text(
+                                          'Reset to Device Time',
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -276,9 +274,7 @@ class _TestTimePageState extends State<TestTimePage> {
         ],
       ),
       drawer: !isDesktop
-          ? Drawer(
-              child: Sidebar(activePage: 'Test Time', keepVisible: false),
-            )
+          ? Drawer(child: Sidebar(activePage: 'Test Time', keepVisible: false))
           : null,
       floatingActionButton: !isDesktop
           ? FloatingActionButton(

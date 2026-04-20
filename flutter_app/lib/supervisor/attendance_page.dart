@@ -482,10 +482,6 @@ class _AttendancePageState extends State<AttendancePage> {
         break;
       case 'Attendance':
         return; // Already on attendance page
-      case 'Tasks':
-      case 'Task Progress':
-        context.go('/supervisor/task-progress');
-        break;
       case 'Reports':
         context.go('/supervisor/reports');
         break;
@@ -1333,7 +1329,6 @@ class _AttendancePageState extends State<AttendancePage> {
                 ),
               ),
               const SizedBox(height: 20),
-              _buildMoreOption(Icons.show_chart, 'Task Progress', 'Tasks'),
               _buildMoreOption(Icons.file_copy, 'Reports', 'Reports'),
               _buildMoreOption(Icons.inventory, 'Inventory', 'Inventory'),
               const SizedBox(height: 20),
