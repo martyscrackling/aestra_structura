@@ -248,6 +248,9 @@ class _ProjectsPageState extends State<ProjectsPage> {
             final String projectType =
                 (project['project_type'] as String?) ?? '';
             final metrics = await _calculateProjectMetrics(projectId);
+            final String computedStatus = metrics.progress >= 1.0
+              ? 'Completed'
+              : status;
             final int projectWorkforceCount = await _fetchProjectWorkforceCount(
               projectId: projectId,
               userId: userId,
@@ -269,7 +272,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
               ProjectOverviewData(
                 projectId: projectId,
                 title: projectName,
-                status: status,
+                status: computedStatus,
                 location: _buildLocation(project),
                 startDate: _formatDate(startDateStr),
                 endDate: _formatDate(endDateStr),
