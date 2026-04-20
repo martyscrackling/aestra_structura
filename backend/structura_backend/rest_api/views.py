@@ -2219,6 +2219,43 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
                     logger.warning(f'Field worker not found: {e}')
                     return Response({'error': f'Field worker {field_worker_id_int} not found.'}, status=404)
 
+            selected_project = None
+            project_id_raw = request.data.get('project_id')
+            if project_id_raw not in (None, '', 'null', 'None'):
+                try:
+                    selected_project_id = int(project_id_raw)
+                except (TypeError, ValueError):
+                    return Response({'error': f'Invalid project_id format: {project_id_raw}'}, status=400)
+
+                if selected_project_id not in supervisor_project_ids:
+                    return Response({'error': 'Selected project is not assigned to this supervisor.'}, status=403)
+
+                if field_worker is not None:
+                    worker_project_ids = set()
+                    if field_worker.project_id_id is not None:
+                        worker_project_ids.add(field_worker.project_id_id)
+
+                    assigned_worker_project_ids = (
+                        models.SubtaskFieldWorker.objects
+                        .filter(
+                            field_worker_id=field_worker.fieldworker_id,
+                            subtask__phase__project_id__isnull=False,
+                        )
+                        .values_list('subtask__phase__project_id', flat=True)
+                        .distinct()
+                    )
+                    worker_project_ids.update(assigned_worker_project_ids)
+
+                    if selected_project_id not in worker_project_ids:
+                        return Response(
+                            {'error': 'Selected project is not one of this worker\'s assignments.'},
+                            status=400,
+                        )
+
+                selected_project = models.Project.objects.filter(project_id=selected_project_id).first()
+                if selected_project is None:
+                    return Response({'error': 'Invalid project_id.'}, status=404)
+
             unit_id = request.data.get('unit_id')
             if unit_id:
                 try:
@@ -2239,7 +2276,7 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
             
             logger.info(f'Using unit {unit.unit_id} ({unit.unit_code})')
 
-            project = unit.current_project or item.project
+            project = selected_project or unit.current_project or item.project
 
             # Optional: expected return date - convert empty string to None
             expected_return_date = request.data.get('expected_return_date')

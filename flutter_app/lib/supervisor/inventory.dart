@@ -1236,8 +1236,10 @@ class _UseItemModalState extends State<_UseItemModal> {
   bool _isLoadingData = true;
 
   List<Map<String, dynamic>> _fieldWorkers = [];
+  final Map<int, String> _projectNamesById = {};
 
   int? _selectedFieldWorkerId;
+  int? _selectedProjectId;
   int? _selectedUnitId;
   DateTime _checkoutDate = DateTime.now();
   DateTime? _expectedReturnDate;
@@ -1270,10 +1272,29 @@ class _UseItemModalState extends State<_UseItemModal> {
         InventoryService.getFieldWorkersForSupervisor(
           supervisorId: widget.supervisorId,
         ),
+        InventoryService.getProjectsForSupervisor(
+          supervisorId: widget.supervisorId,
+        ),
       ]);
       if (mounted) {
         setState(() {
           _fieldWorkers = results[0];
+          final rawProjects = results[1] as List<Map<String, dynamic>>;
+          _projectNamesById
+            ..clear()
+            ..addEntries(
+              rawProjects.map((p) {
+                final id = _toInt(p['project_id'] ?? p['id']);
+                final name = (p['project_name'] ?? p['name'] ?? '')
+                    .toString()
+                    .trim();
+                if (id == null || name.isEmpty) {
+                  return null;
+                }
+                return MapEntry(id, name);
+              }).whereType<MapEntry<int, String>>(),
+            );
+          _syncProjectSelectionForItem();
           _isLoadingData = false;
         });
       }
@@ -1285,6 +1306,206 @@ class _UseItemModalState extends State<_UseItemModal> {
         ).showSnackBar(SnackBar(content: Text('Failed to load data: $e')));
       }
     }
+  }
+
+  int? _toInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value.trim());
+    return null;
+  }
+
+  Map<String, dynamic>? _workerById(int? workerId) {
+    if (workerId == null) return null;
+    for (final worker in _fieldWorkers) {
+      if (_toInt(worker['fieldworker_id']) == workerId) {
+        return worker;
+      }
+    }
+    return null;
+  }
+
+  List<Map<String, dynamic>> _projectsForWorker(Map<String, dynamic>? worker) {
+    if (worker == null) return const [];
+
+    final projectsById = <int, String>{};
+
+    void addProject(dynamic idRaw, dynamic nameRaw) {
+      final id = _toInt(idRaw);
+      if (id == null) return;
+      final name = (nameRaw ?? '').toString().trim();
+      final knownProjectName = (_projectNamesById[id] ?? '').trim();
+      final existingName = (projectsById[id] ?? '').trim();
+      projectsById[id] = name.isNotEmpty
+          ? name
+          : knownProjectName.isNotEmpty
+          ? knownProjectName
+          : existingName.isNotEmpty
+          ? existingName
+          : 'Project #$id';
+    }
+
+    final assignedProjects = worker['assigned_projects'];
+    if (assignedProjects is List) {
+      for (final project in assignedProjects) {
+        if (project is Map) {
+          final map = Map<String, dynamic>.from(project);
+          addProject(
+            map['project_id'] ?? map['id'],
+            map['project_name'] ?? map['name'],
+          );
+        }
+      }
+    }
+
+    addProject(worker['project_id'], worker['project_name']);
+
+    final nestedProject = worker['project'];
+    if (nestedProject is Map) {
+      final map = Map<String, dynamic>.from(nestedProject);
+      addProject(
+        map['project_id'] ?? map['id'],
+        map['project_name'] ?? map['name'],
+      );
+    }
+
+    final projects =
+        projectsById.entries
+            .map(
+              (entry) => <String, dynamic>{
+                'project_id': entry.key,
+                'project_name': entry.value,
+              },
+            )
+            .toList()
+          ..sort(
+            (a, b) => (a['project_name'] as String).toLowerCase().compareTo(
+              (b['project_name'] as String).toLowerCase(),
+            ),
+          );
+
+    return projects;
+  }
+
+  List<Map<String, dynamic>> get _itemProjects {
+    final sourceUnits = _availableUnits.isNotEmpty
+        ? _availableUnits
+        : widget.tool.units;
+    final projectsById = <int, String>{};
+
+    for (final unit in sourceUnits) {
+      final id = _toInt(unit['current_project'] ?? unit['current_project_id']);
+      if (id == null) continue;
+      final nameFromUnit = (unit['current_project_name'] ?? '')
+          .toString()
+          .trim();
+      final nameFromMap = (_projectNamesById[id] ?? '').trim();
+      projectsById[id] = nameFromUnit.isNotEmpty
+          ? nameFromUnit
+          : nameFromMap.isNotEmpty
+          ? nameFromMap
+          : 'Project #$id';
+    }
+
+    final projects =
+        projectsById.entries
+            .map(
+              (entry) => <String, dynamic>{
+                'project_id': entry.key,
+                'project_name': entry.value,
+              },
+            )
+            .toList()
+          ..sort(
+            (a, b) => (a['project_name'] as String).toLowerCase().compareTo(
+              (b['project_name'] as String).toLowerCase(),
+            ),
+          );
+
+    return projects;
+  }
+
+  bool _workerAssignedToProject(Map<String, dynamic> worker, int? projectId) {
+    if (projectId == null) return true;
+    final workerProjectIds = _projectsForWorker(
+      worker,
+    ).map((p) => _toInt(p['project_id'])).whereType<int>().toSet();
+    return workerProjectIds.contains(projectId);
+  }
+
+  List<Map<String, dynamic>> get _filteredFieldWorkers {
+    if (_selectedProjectId == null) return _fieldWorkers;
+    return _fieldWorkers
+        .where((worker) => _workerAssignedToProject(worker, _selectedProjectId))
+        .toList();
+  }
+
+  List<Map<String, dynamic>> get _projectFilteredUnits {
+    if (_selectedProjectId == null) return _availableUnits;
+    return _availableUnits.where((u) {
+      final unitProjectId = _toInt(
+        u['current_project'] ?? u['current_project_id'],
+      );
+      return unitProjectId == _selectedProjectId;
+    }).toList();
+  }
+
+  void _syncUnitSelectionForProject() {
+    final units = _projectFilteredUnits;
+    final unitIds = units
+        .map((u) => _toInt(u['unit_id']))
+        .whereType<int>()
+        .toSet();
+
+    if (_selectedUnitId != null && !unitIds.contains(_selectedUnitId)) {
+      _selectedUnitId = null;
+    }
+
+    if (_selectedUnitId == null && units.isNotEmpty) {
+      _selectedUnitId = _toInt(units.first['unit_id']);
+    }
+  }
+
+  void _syncProjectSelectionForItem() {
+    final projects = _itemProjects;
+    final projectIds = projects
+        .map((p) => _toInt(p['project_id']))
+        .whereType<int>()
+        .toSet();
+
+    if (_selectedProjectId != null &&
+        !projectIds.contains(_selectedProjectId)) {
+      _selectedProjectId = null;
+    }
+
+    if (_selectedProjectId == null && projects.isNotEmpty) {
+      _selectedProjectId = _toInt(projects.first['project_id']);
+    }
+
+    if (_selectedFieldWorkerId != null) {
+      final selectedWorker = _workerById(_selectedFieldWorkerId);
+      final isSelectedWorkerValid =
+          selectedWorker != null &&
+          _workerAssignedToProject(selectedWorker, _selectedProjectId);
+      if (!isSelectedWorkerValid) {
+        _selectedFieldWorkerId = null;
+      }
+    }
+
+    _syncUnitSelectionForProject();
+  }
+
+  void _onFieldWorkerChanged(int? workerId) {
+    setState(() {
+      _selectedFieldWorkerId = workerId;
+    });
+  }
+
+  void _onProjectChanged(int? projectId) {
+    setState(() {
+      _selectedProjectId = projectId;
+      _syncProjectSelectionForItem();
+    });
   }
 
   Future<void> _submit() async {
@@ -1301,6 +1522,15 @@ class _UseItemModalState extends State<_UseItemModal> {
       );
       return;
     }
+
+    final itemProjects = _itemProjects;
+    if (itemProjects.isNotEmpty && _selectedProjectId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a project first')),
+      );
+      return;
+    }
+    final selectedProjectId = _selectedProjectId;
 
     final checkoutDateOnly = DateTime(
       _checkoutDate.year,
@@ -1334,6 +1564,7 @@ class _UseItemModalState extends State<_UseItemModal> {
         userId: widget.supervisorId,
         fieldWorkerId: _selectedFieldWorkerId,
         unitId: _selectedUnitId,
+        projectId: selectedProjectId,
         expectedReturnDate: _expectedReturnDate != null
             ? '${_expectedReturnDate!.year}-${_expectedReturnDate!.month.toString().padLeft(2, '0')}-${_expectedReturnDate!.day.toString().padLeft(2, '0')}'
             : null,
@@ -1398,6 +1629,10 @@ class _UseItemModalState extends State<_UseItemModal> {
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 600;
     final dateFormat = DateFormat('MMM dd, yyyy');
+    final itemProjects = _itemProjects;
+    final hasMultipleItemProjects = itemProjects.length > 1;
+    final filteredWorkers = _filteredFieldWorkers;
+    final projectFilteredUnits = _projectFilteredUnits;
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -1482,6 +1717,113 @@ class _UseItemModalState extends State<_UseItemModal> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // Item project selection
+                          Text(
+                            hasMultipleItemProjects
+                                ? 'Select Project for Assignment *'
+                                : 'Assigned Project',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF374151),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          if (itemProjects.isEmpty)
+                            Text(
+                              'No project assignment found for this item.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.orange[700],
+                              ),
+                            )
+                          else
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: itemProjects.map((project) {
+                                final projectId = _toInt(project['project_id']);
+                                final isSelected =
+                                    projectId != null &&
+                                    projectId == _selectedProjectId;
+                                final isSelectable =
+                                    hasMultipleItemProjects &&
+                                    projectId != null &&
+                                    !_isLoading;
+                                final badge = AnimatedContainer(
+                                  duration: const Duration(milliseconds: 140),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? const Color(0xFFE0F2FE)
+                                        : const Color(0xFFF3F4F6),
+                                    borderRadius: BorderRadius.circular(999),
+                                    border: Border.all(
+                                      color: isSelected
+                                          ? widget.accent
+                                          : const Color(0xFFD1D5DB),
+                                      width: isSelected ? 1.6 : 1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        project['project_name']
+                                                    ?.toString()
+                                                    .trim()
+                                                    .isNotEmpty ==
+                                                true
+                                            ? project['project_name'].toString()
+                                            : 'Project',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: isSelected
+                                              ? FontWeight.w700
+                                              : FontWeight.w600,
+                                          color: isSelected
+                                              ? const Color(0xFF0C4A6E)
+                                              : const Color(0xFF374151),
+                                        ),
+                                      ),
+                                      if (isSelected) ...[
+                                        const SizedBox(width: 6),
+                                        const Icon(
+                                          Icons.check_circle,
+                                          size: 14,
+                                          color: Color(0xFF0284C7),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                );
+                                if (!isSelectable) {
+                                  return badge;
+                                }
+                                return InkWell(
+                                  borderRadius: BorderRadius.circular(999),
+                                  onTap: () => _onProjectChanged(projectId),
+                                  child: badge,
+                                );
+                              }).toList(),
+                            ),
+                          if (hasMultipleItemProjects)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Text(
+                                'Tap a project badge to filter workers for that project.',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ),
+
+                          const SizedBox(height: 16),
+
                           // Field Worker dropdown
                           const Text(
                             'Assign to Field Worker *',
@@ -1520,7 +1862,7 @@ class _UseItemModalState extends State<_UseItemModal> {
                                 vertical: 12,
                               ),
                             ),
-                            items: _fieldWorkers.map((fw) {
+                            items: filteredWorkers.map((fw) {
                               final id = fw['fieldworker_id'] as int;
                               final name =
                                   '${fw['first_name'] ?? ''} ${fw['last_name'] ?? ''}'
@@ -1536,15 +1878,26 @@ class _UseItemModalState extends State<_UseItemModal> {
                             }).toList(),
                             onChanged: _isLoading
                                 ? null
-                                : (v) => setState(
-                                    () => _selectedFieldWorkerId = v,
-                                  ),
+                                : _onFieldWorkerChanged,
                           ),
                           if (_fieldWorkers.isEmpty && !_isLoadingData)
                             Padding(
                               padding: const EdgeInsets.only(top: 4),
                               child: Text(
                                 'No field workers found for your projects',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.orange[700],
+                                ),
+                              ),
+                            ),
+                          if (_fieldWorkers.isNotEmpty &&
+                              filteredWorkers.isEmpty &&
+                              _selectedProjectId != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                'No field workers assigned to this project.',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: Colors.orange[700],
@@ -1592,7 +1945,7 @@ class _UseItemModalState extends State<_UseItemModal> {
                                 vertical: 12,
                               ),
                             ),
-                            items: _availableUnits.map((unit) {
+                            items: projectFilteredUnits.map((unit) {
                               final id = unit['unit_id'] as int;
                               final code =
                                   unit['unit_code']?.toString() ?? 'Unit $id';
@@ -1608,11 +1961,13 @@ class _UseItemModalState extends State<_UseItemModal> {
                                 ? null
                                 : (v) => setState(() => _selectedUnitId = v),
                           ),
-                          if (_availableUnits.isEmpty)
+                          if (projectFilteredUnits.isEmpty)
                             Padding(
                               padding: const EdgeInsets.only(top: 4),
                               child: Text(
-                                'No available units for this item',
+                                _selectedProjectId == null
+                                    ? 'No available units for this item'
+                                    : 'No available units for the selected project',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: Colors.red[700],
