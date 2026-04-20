@@ -28,10 +28,6 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
   final _birthdateController = TextEditingController();
   final _generatedEmailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _sssIdController = TextEditingController();
-  final _philHealthIdController = TextEditingController();
-  final _pagIbigIdController = TextEditingController();
-  final _payrateController = TextEditingController();
 
   // Address hierarchy state
   int? _selectedRegionId;
@@ -67,10 +63,6 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
     _birthdateController.dispose();
     _generatedEmailController.dispose();
     _passwordController.dispose();
-    _sssIdController.dispose();
-    _philHealthIdController.dispose();
-    _pagIbigIdController.dispose();
-    _payrateController.dispose();
     super.dispose();
   }
 
@@ -359,7 +351,7 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
 
       try {
         final currentUserId = AuthService().currentUser?['user_id'];
-        // Build payload with ALL fields including optional ones
+        // Build payload for supervisor creation.
         final Map<String, dynamic> supervisorData = {
           if (currentUserId != null) 'user_id': currentUserId,
           'invited_by_email': AuthService().currentUser?['email'],
@@ -383,18 +375,6 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
           'province': _selectedProvinceId,
           'city': _selectedCityId,
           'barangay': _selectedBarangayId,
-          'sss_id': _sssIdController.text.trim().isEmpty
-              ? null
-              : _sssIdController.text.trim(),
-          'philhealth_id': _philHealthIdController.text.trim().isEmpty
-              ? null
-              : _philHealthIdController.text.trim(),
-          'pagibig_id': _pagIbigIdController.text.trim().isEmpty
-              ? null
-              : _pagIbigIdController.text.trim(),
-          'payrate': _payrateController.text.trim().isEmpty
-              ? null
-              : double.tryParse(_payrateController.text.trim()),
         };
 
         debugPrint('Sending supervisor data: $supervisorData');
@@ -1055,36 +1035,6 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
         },
       ),
       SizedBox(height: spacing),
-      // SSS ID
-      const Text(
-        'ID Numbers (Optional)',
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: Color(0xFF0C1935),
-        ),
-      ),
-      SizedBox(height: spacing),
-      _buildTextField(controller: _sssIdController, hintText: 'SSS ID'),
-      SizedBox(height: spacing),
-
-      // PhilHealth ID
-      _buildTextField(
-        controller: _philHealthIdController,
-        hintText: 'PhilHealth ID',
-      ),
-      SizedBox(height: spacing),
-
-      // PagIbig ID
-      _buildTextField(controller: _pagIbigIdController, hintText: 'PagIbig ID'),
-      SizedBox(height: spacing),
-
-      // Payrate
-      _buildTextField(
-        controller: _payrateController,
-        hintText: 'Payrate',
-        keyboardType: TextInputType.number,
-      ),
     ];
   }
 

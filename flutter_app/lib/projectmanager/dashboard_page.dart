@@ -236,7 +236,7 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
   }
 
   Widget _buildBody({required double screenWidth, required LayoutType layout}) {
-    if (_isLoadingPrefs) {
+    if (_isLoadingPrefs || _isLoadingSummary) {
       return const Center(
         child: Padding(
           padding: EdgeInsets.symmetric(vertical: 24),
@@ -245,7 +245,10 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
       );
     }
 
-    if (_showWelcome) {
+    final totalProjects = _summary?.totalProjects ?? 0;
+    final shouldShowWelcome = _showWelcome && totalProjects <= 0;
+
+    if (shouldShowWelcome) {
       return _buildWelcomeEmptyState(layout: layout);
     }
 
@@ -294,7 +297,7 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Your dashboard is empty because this is a new account. Start by creating your first project, then add clients and workers to track progress here.',
+            'Your dashboard is empty because this is a new account. Add clients and workers to start building your project team and tracking progress here.',
             style: TextStyle(
               height: 1.3,
               color: Colors.grey[700],
@@ -307,10 +310,9 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
             runSpacing: 10,
             children: [
               ElevatedButton.icon(
-                onPressed: () =>
-                    _setHasSeenWelcomeAndMaybeNavigate('/projects'),
-                icon: const Icon(Icons.add),
-                label: const Text('Create Project'),
+                onPressed: () => _setHasSeenWelcomeAndMaybeNavigate('/clients'),
+                icon: const Icon(Icons.person_add_alt_1_outlined),
+                label: const Text('Add Clients'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF0C1935),
                   foregroundColor: Colors.white,
@@ -319,11 +321,6 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
                     vertical: 10,
                   ),
                 ),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => _setHasSeenWelcomeAndMaybeNavigate('/clients'),
-                icon: const Icon(Icons.person_add_alt_1_outlined),
-                label: const Text('Add Clients'),
               ),
               OutlinedButton.icon(
                 onPressed: () =>
