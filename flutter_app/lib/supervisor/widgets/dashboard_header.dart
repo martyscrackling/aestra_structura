@@ -26,6 +26,23 @@ class DashboardHeader extends StatefulWidget {
 class _DashboardHeaderState extends State<DashboardHeader> {
   // Notifications are handled by _SupervisorNotificationMenu.
 
+  String _supervisorFirstName() {
+    final user = AuthService().currentUser;
+    final first = (user?['first_name'] as String? ?? '').trim();
+    if (first.isNotEmpty) return first;
+
+    final email = (user?['email'] as String? ?? '').trim();
+    if (email.isNotEmpty) {
+      final local = email.split('@').first.trim();
+      if (local.isNotEmpty) {
+        return local.substring(0, 1).toUpperCase() +
+            (local.length > 1 ? local.substring(1) : '');
+      }
+    }
+
+    return 'Supervisor';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -103,14 +120,33 @@ class _DashboardHeaderState extends State<DashboardHeader> {
                 child: MouseRegion(
                   cursor: SystemMouseCursors.click,
                   child: Container(
-                    padding: const EdgeInsets.all(6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: AppColors.surfaceMuted,
                       borderRadius: BorderRadius.circular(999),
                     ),
-                    child: const SupervisorUserBadge(
-                      showName: false,
-                      avatarSize: 34,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SupervisorUserBadge(
+                          showName: false,
+                          avatarSize: 34,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _supervisorFirstName(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),

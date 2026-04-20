@@ -23,6 +23,13 @@ class AttendancePage extends StatefulWidget {
   State<AttendancePage> createState() => _AttendancePageState();
 }
 
+class _SupervisorProjectOption {
+  _SupervisorProjectOption({required this.projectId, required this.projectName});
+
+  final int projectId;
+  final String projectName;
+}
+
 class _AttendancePageState extends State<AttendancePage> {
   final Color primary = AppColors.accent;
   final Color primaryLight = const Color(0xFFFFF3E0);
@@ -36,22 +43,146 @@ class _AttendancePageState extends State<AttendancePage> {
   String statusFilter = 'All';
   String roleFilter = 'All';
 
+  bool _isLoadingProjects = false;
+  List<_SupervisorProjectOption> _supervisorProjects = [];
+  int? _selectedProjectId;
+
   @override
   void initState() {
     super.initState();
     _fieldWorkersFuture = _fetchFieldWorkers();
     _attendanceRecordsFuture = _fetchAttendanceRecords();
+    unawaited(_loadSupervisorProjects());
+  }
+
+  int? _activeProjectId() {
+    if (_selectedProjectId != null) return _selectedProjectId;
+    final authService = Provider.of<AuthService>(context, listen: false);
+    return _asInt(authService.currentUser?['project_id']);
+  }
+
+  int? _activeSupervisorId() {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentUser = authService.currentUser ?? <String, dynamic>{};
+    final userId = _asInt(currentUser['user_id']);
+    final typeOrRole = (currentUser['type'] ?? currentUser['role'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+
+    return _asInt(currentUser['supervisor_id']) ??
+        ((typeOrRole == 'supervisor') ? userId : null);
+  }
+
+  Future<void> _loadSupervisorProjects() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoadingProjects = true;
+    });
+
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final currentUser = authService.currentUser ?? <String, dynamic>{};
+      final userId = _asInt(currentUser['user_id']);
+      final typeOrRole = (currentUser['type'] ?? currentUser['role'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
+      final supervisorId =
+          _asInt(currentUser['supervisor_id']) ??
+          ((typeOrRole == 'supervisor') ? userId : null);
+
+      final Uri? url = supervisorId != null
+          ? AppConfig.apiUri('projects/?supervisor_id=$supervisorId')
+          : null;
+      final options = <_SupervisorProjectOption>[];
+
+      if (url != null) {
+        final response = await http.get(url);
+        if (response.statusCode != 200) {
+          throw Exception('Failed to load supervisor projects');
+        }
+
+        final decoded = jsonDecode(response.body);
+        final rawProjects = decoded is List
+            ? decoded
+            : (decoded is Map<String, dynamic> && decoded['results'] is List
+                  ? decoded['results'] as List<dynamic>
+                  : const <dynamic>[]);
+
+        for (final item in rawProjects) {
+          if (item is! Map) continue;
+          final project = Map<String, dynamic>.from(item);
+          final id = _asInt(project['project_id'] ?? project['id']);
+          final name = (project['project_name'] ?? project['name'] ?? '')
+              .toString()
+              .trim();
+          if (id != null && name.isNotEmpty) {
+            options.add(
+              _SupervisorProjectOption(projectId: id, projectName: name),
+            );
+          }
+        }
+      }
+
+      final fallbackProjectId = _asInt(currentUser['project_id']);
+      if (mounted) {
+        setState(() {
+          _supervisorProjects = options;
+
+          final hasSelected = options.any(
+            (project) => project.projectId == _selectedProjectId,
+          );
+          if (!hasSelected) {
+            final hasFallback = options.any(
+              (project) => project.projectId == fallbackProjectId,
+            );
+            if (hasFallback) {
+              _selectedProjectId = fallbackProjectId;
+            } else if (options.isNotEmpty) {
+              _selectedProjectId = options.first.projectId;
+            }
+          }
+
+          _isLoadingProjects = false;
+          _fieldWorkersFuture = _fetchFieldWorkers();
+          _attendanceRecordsFuture = _fetchAttendanceRecords();
+        });
+      }
+    } catch (e) {
+      print('Error loading projects: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingProjects = false;
+        });
+      }
+    }
+  }
+
+  void _onProjectChanged(int? projectId) {
+    if (projectId == null || projectId == _selectedProjectId) return;
+    setState(() {
+      _selectedProjectId = projectId;
+      _fieldWorkersFuture = _fetchFieldWorkers();
+      _attendanceRecordsFuture = _fetchAttendanceRecords();
+    });
   }
 
   Future<List<Map<String, dynamic>>> _fetchFieldWorkers() async {
     try {
-      final authService = Provider.of<AuthService>(context, listen: false);
-      final projectId = authService.currentUser?['project_id'];
+      final projectId = _activeProjectId();
+      final supervisorId = _activeSupervisorId();
 
       if (projectId == null) return [];
 
+      final url = supervisorId != null
+          ? AppConfig.apiUri(
+              'field-workers/?supervisor_id=$supervisorId&project_id=$projectId',
+            )
+          : AppConfig.apiUri('field-workers/?project_id=$projectId');
+
       final response = await http.get(
-        AppConfig.apiUri('field-workers/?project_id=$projectId'),
+        url,
       );
 
       if (response.statusCode == 200) {
@@ -67,8 +198,7 @@ class _AttendancePageState extends State<AttendancePage> {
 
   Future<List<Map<String, dynamic>>> _fetchAttendanceRecords() async {
     try {
-      final authService = Provider.of<AuthService>(context, listen: false);
-      final projectId = authService.currentUser?['project_id'];
+      final projectId = _activeProjectId();
 
       if (projectId == null) return [];
 
@@ -95,10 +225,9 @@ class _AttendancePageState extends State<AttendancePage> {
     Map<String, dynamic> attendanceData, {
     DateTime? attendanceDate,
   }) async {
-    final authService = Provider.of<AuthService>(context, listen: false);
-    final projectId = authService.currentUser?['project_id'];
+    final projectId = _activeProjectId();
     if (projectId == null) {
-      throw Exception('No project assigned to supervisor');
+      throw Exception('No project selected for attendance');
     }
 
     final effectiveDate = attendanceDate ?? selectedDate;
@@ -314,8 +443,7 @@ class _AttendancePageState extends State<AttendancePage> {
     required int fieldWorkerId,
     required DateTime attendanceDate,
   }) async {
-    final authService = Provider.of<AuthService>(context, listen: false);
-    final projectId = authService.currentUser?['project_id'];
+    final projectId = _activeProjectId();
     if (projectId == null) return null;
 
     final dateStr =
@@ -332,6 +460,24 @@ class _AttendancePageState extends State<AttendancePage> {
     return data.first is Map<String, dynamic>
         ? data.first as Map<String, dynamic>
         : null;
+  }
+
+  bool _workerIsInActiveProject(
+    int fieldWorkerId,
+    List<Map<String, dynamic>> workers,
+  ) {
+    for (final worker in workers) {
+      final workerId = _asInt(
+        worker['fieldworker_id'] ??
+            worker['field_worker_id'] ??
+            worker['worker_id'] ??
+            worker['id'],
+      );
+      if (workerId == fieldWorkerId) {
+        return true;
+      }
+    }
+    return false;
   }
 
   Future<String?> _pickScanTime() async {
@@ -364,13 +510,39 @@ class _AttendancePageState extends State<AttendancePage> {
     required int fieldWorkerId,
     required String time,
   }) async {
-    final authService = Provider.of<AuthService>(context, listen: false);
-    final projectId = authService.currentUser?['project_id'];
+    final projectId = _activeProjectId();
 
     if (projectId == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No project assigned to supervisor')),
+        const SnackBar(content: Text('No project selected for attendance')),
+      );
+      return;
+    }
+
+    // Guardrail: scanned worker must belong to the currently selected project.
+    final projectWorkers = await _fetchFieldWorkers();
+    final belongsToProject = _workerIsInActiveProject(
+      fieldWorkerId,
+      projectWorkers,
+    );
+    if (!belongsToProject) {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: Colors.white,
+          title: const Text('Worker Not In Project'),
+          content: const Text(
+            'This QR belongs to a worker who is not assigned to the selected project.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
       );
       return;
     }
@@ -501,6 +673,14 @@ class _AttendancePageState extends State<AttendancePage> {
     'Carpenter',
   ];
 
+  final List<String> _statusOptions = const [
+    'All',
+    'On Site',
+    'On Break',
+    'Checked Out',
+    'Absent',
+  ];
+
   bool hasNotifications = true;
 
   List<Map<String, dynamic>> _filterAttendance(
@@ -578,6 +758,57 @@ class _AttendancePageState extends State<AttendancePage> {
   String _formatTime(String? time) {
     if (time == null || time.isEmpty) return '--';
     return time;
+  }
+
+  Widget _buildProjectSelector({required bool isCompact}) {
+    final selectedId = _supervisorProjects.any(
+      (project) => project.projectId == _selectedProjectId,
+    )
+        ? _selectedProjectId
+        : null;
+
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: isCompact ? 8 : 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(isCompact ? 8 : 10),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.apartment, size: isCompact ? 15 : 18, color: Colors.grey),
+          SizedBox(width: isCompact ? 6 : 8),
+          Expanded(
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<int>(
+                value: selectedId,
+                isExpanded: true,
+                isDense: true,
+                dropdownColor: Colors.white,
+                hint: Text(
+                  _isLoadingProjects ? 'Loading projects...' : 'Select Project',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: isCompact ? 11 : 13),
+                ),
+                items: _supervisorProjects
+                    .map(
+                      (project) => DropdownMenuItem<int>(
+                        value: project.projectId,
+                        child: Text(
+                          project.projectName,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: isCompact ? 11 : 13),
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: _isLoadingProjects ? null : _onProjectChanged,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // ----------------------
@@ -670,7 +901,11 @@ class _AttendancePageState extends State<AttendancePage> {
                                                 );
                                             if (picked != null)
                                               setState(
-                                                () => selectedDate = picked,
+                                                () {
+                                                  selectedDate = picked;
+                                                  _attendanceRecordsFuture =
+                                                      _fetchAttendanceRecords();
+                                                },
                                               );
                                           },
                                           child: Container(
@@ -736,6 +971,16 @@ class _AttendancePageState extends State<AttendancePage> {
                                             onChanged: (v) => setState(
                                               () => statusFilter = v ?? 'All',
                                             ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: _buildProjectSelector(
+                                            isCompact: true,
                                           ),
                                         ),
                                       ],
@@ -873,7 +1118,11 @@ class _AttendancePageState extends State<AttendancePage> {
                                                   );
                                               if (picked != null)
                                                 setState(
-                                                  () => selectedDate = picked,
+                                                  () {
+                                                    selectedDate = picked;
+                                                    _attendanceRecordsFuture =
+                                                        _fetchAttendanceRecords();
+                                                  },
                                                 );
                                             },
                                             child: Row(
@@ -896,38 +1145,84 @@ class _AttendancePageState extends State<AttendancePage> {
                                       ),
                                     ),
                                     const SizedBox(width: 12),
-                                    // Status filter chips on desktop/tablet
-                                    Expanded(
-                                      flex: 2,
-                                      child: Wrap(
-                                        spacing: 8,
-                                        children:
-                                            [
-                                              'All',
-                                              'On Site',
-                                              'On Break',
-                                              'Checked Out',
-                                              'Absent',
-                                            ].map((s) {
-                                              final sel = statusFilter == s;
-                                              return ChoiceChip(
-                                                label: Text(
-                                                  s,
-                                                  style: TextStyle(
-                                                    color: sel
-                                                        ? Colors.white
-                                                        : Colors.black87,
+                                    // Status filter button on desktop/tablet
+                                    SizedBox(
+                                      width: 180,
+                                      child: PopupMenuButton<String>(
+                                        color: Colors.white,
+                                        onSelected: (value) {
+                                          setState(() {
+                                            statusFilter = value;
+                                          });
+                                        },
+                                        itemBuilder: (context) {
+                                          return _statusOptions
+                                              .map(
+                                                (option) => PopupMenuItem<String>(
+                                                  value: option,
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(
+                                                        statusFilter == option
+                                                            ? Icons.check
+                                                            : Icons.circle_outlined,
+                                                        size: 16,
+                                                        color: statusFilter == option
+                                                            ? primary
+                                                            : Colors.grey,
+                                                      ),
+                                                      const SizedBox(width: 8),
+                                                      Text(option),
+                                                    ],
                                                   ),
                                                 ),
-                                                selected: sel,
-                                                selectedColor: primary,
-                                                backgroundColor:
-                                                    Colors.grey[100],
-                                                onSelected: (_) => setState(
-                                                  () => statusFilter = s,
+                                              )
+                                              .toList();
+                                        },
+                                        child: Container(
+                                          height: 42,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(10),
+                                            border: Border.all(
+                                              color: const Color(0xFFE5E7EB),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.filter_list,
+                                                color: primary,
+                                                size: 18,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                  statusFilter,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
                                                 ),
-                                              );
-                                            }).toList(),
+                                              ),
+                                              const Icon(
+                                                Icons.keyboard_arrow_down,
+                                                size: 18,
+                                                color: Colors.black54,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    SizedBox(
+                                      width: 220,
+                                      child: _buildProjectSelector(
+                                        isCompact: false,
                                       ),
                                     ),
                                     const SizedBox(width: 12),
@@ -2026,6 +2321,7 @@ class _AttendancePageState extends State<AttendancePage> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
+            backgroundColor: Colors.white,
             title: const Text('Add Attendance'),
             content: FutureBuilder<List<Map<String, dynamic>>>(
               future: _fetchFieldWorkers(),
@@ -2204,6 +2500,7 @@ class _AttendancePageState extends State<AttendancePage> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
+            backgroundColor: Colors.white,
             title: const Text('Edit Attendance'),
             content: Column(
               mainAxisSize: MainAxisSize.min,

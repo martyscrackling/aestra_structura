@@ -35,12 +35,12 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
     _workersFuture = _fetchFieldWorkers();
   }
 
-  Future<List<Map<String, dynamic>>> _fetchFieldWorkers() async {
+  Future<List<Map<String, dynamic>>> _fetchFieldWorkers({int? projectId}) async {
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
       final currentUser = authService.currentUser ?? <String, dynamic>{};
       final userId = _toInt(currentUser['user_id']);
-      final projectId = _toInt(currentUser['project_id']);
+      final userProjectId = _toInt(currentUser['project_id']);
       final typeOrRole = (currentUser['type'] ?? currentUser['role'] ?? '')
           .toString()
           .trim()
@@ -51,19 +51,24 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
           _toInt(currentUser['supervisor_id']) ??
           ((typeOrRole == 'supervisor') ? userId : null);
 
-      await _fetchProjects(supervisorId: supervisorId, userId: userId);
+      await _fetchProjects(supervisorId: supervisorId);
 
       print('=== Fetching Field Workers ===');
       print('Scope: all projects | filter: active workers');
       print('Current user payload: $currentUser');
       print(
-        'Resolved supervisorId: $supervisorId, projectId: $projectId, userId: $userId',
+        'Resolved supervisorId: $supervisorId, projectId: $projectId, userProjectId: $userProjectId, userId: $userId',
       );
 
+      final effectiveProjectId = projectId ?? userProjectId;
       final url = supervisorId != null
-          ? AppConfig.apiUri('field-workers/?supervisor_id=$supervisorId')
-          : (projectId != null
-                ? AppConfig.apiUri('field-workers/?project_id=$projectId')
+          ? (effectiveProjectId != null
+                ? AppConfig.apiUri(
+                    'field-workers/?supervisor_id=$supervisorId&project_id=$effectiveProjectId',
+                  )
+                : AppConfig.apiUri('field-workers/?supervisor_id=$supervisorId'))
+          : (effectiveProjectId != null
+                ? AppConfig.apiUri('field-workers/?project_id=$effectiveProjectId')
                 : AppConfig.apiUri('field-workers/'));
       print('📡 API URL: $url');
 
@@ -75,16 +80,13 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
         final workers = _extractWorkers(decoded);
-        final activeWorkers = workers.where(_isWorkerActive).toList();
-        print(
-          '✅ Found ${workers.length} workers (${activeWorkers.length} active)',
-        );
+        print('✅ Found ${workers.length} workers');
 
         // Some backends restrict supervisors to project-scoped data even when no
         // query param is provided. Fallback prevents empty table in that case.
-        if (activeWorkers.isEmpty && projectId != null) {
+        if (workers.isEmpty && effectiveProjectId != null) {
           final fallbackUrl = AppConfig.apiUri(
-            'field-workers/?project_id=$projectId',
+            'field-workers/?project_id=$effectiveProjectId',
           );
           print('↩️ Fallback API URL: $fallbackUrl');
           final fallbackResponse = await http.get(fallbackUrl);
@@ -93,17 +95,14 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
           if (fallbackResponse.statusCode == 200) {
             final fallbackDecoded = jsonDecode(fallbackResponse.body);
             final fallbackWorkers = _extractWorkers(fallbackDecoded);
-            final fallbackActive = fallbackWorkers
-                .where(_isWorkerActive)
-                .toList();
             print(
-              '✅ Fallback workers: ${fallbackWorkers.length} (${fallbackActive.length} active)',
+              '✅ Fallback workers: ${fallbackWorkers.length}',
             );
-            return fallbackActive;
+            return fallbackWorkers;
           }
         }
 
-        return activeWorkers;
+        return workers;
       } else {
         print('❌ Failed to fetch field workers: ${response.statusCode}');
         return [];
@@ -114,16 +113,17 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
     }
   }
 
-  Future<void> _fetchProjects({dynamic supervisorId, dynamic userId}) async {
+  Future<void> _fetchProjects({dynamic supervisorId}) async {
     try {
-      final Uri url;
-      if (supervisorId != null) {
-        url = AppConfig.apiUri('projects/?supervisor_id=$supervisorId');
-      } else if (userId != null) {
-        url = AppConfig.apiUri('projects/?user_id=$userId');
-      } else {
-        url = AppConfig.apiUri('projects/');
+      if (supervisorId == null) {
+        if (!mounted) return;
+        setState(() {
+          _projectNamesById = {};
+        });
+        return;
       }
+
+      final Uri url = AppConfig.apiUri('projects/?supervisor_id=$supervisorId');
 
       final response = await http.get(url);
       print('Projects API response status: ${response.statusCode}');
@@ -237,7 +237,7 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
   }
 
   String searchQuery = '';
-  String selectedProject = 'All Projects';
+  int? selectedProjectId;
   String selectedRole = 'All';
   String sortBy = 'Name A-Z';
 
@@ -250,24 +250,16 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
   ];
   final List<String> sortOptions = ['Name A-Z', 'Name Z-A', 'Recently Hired'];
 
-  List<String> _getProjectFilterOptions(List<Map<String, dynamic>> allWorkers) {
-    final projects = <String>{'All Projects'};
-    for (final worker in allWorkers) {
-      final names = _getWorkerProjectNames(worker);
-      for (final name in names) {
-        if (name.trim().isNotEmpty) {
-          projects.add(name);
-        }
-      }
-    }
+  List<MapEntry<int?, String>> _getProjectFilterOptions() {
+    final entries = _projectNamesById.entries.toList()
+      ..sort(
+        (a, b) => a.value.toLowerCase().compareTo(b.value.toLowerCase()),
+      );
 
-    final sorted = projects.toList()
-      ..sort((a, b) {
-        if (a == 'All Projects') return -1;
-        if (b == 'All Projects') return 1;
-        return a.compareTo(b);
-      });
-    return sorted;
+    return [
+      const MapEntry<int?, String>(null, 'All Projects'),
+      ...entries.map((entry) => MapEntry<int?, String>(entry.key, entry.value)),
+    ];
   }
 
   List<Map<String, dynamic>> _filterAndSortWorkers(
@@ -278,6 +270,7 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
           .toLowerCase();
       final role = (worker['role'] ?? '').toString().toLowerCase();
       final projectNames = _getWorkerProjectNames(worker);
+      final projectIds = _getWorkerProjectIds(worker);
       final projectSearchText = projectNames.join(' ').toLowerCase();
       final query = searchQuery.toLowerCase();
       final matchesSearch =
@@ -287,8 +280,7 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
       final matchesRole =
           selectedRole == 'All' || worker['role'] == selectedRole;
       final matchesProject =
-          selectedProject == 'All Projects' ||
-          projectNames.contains(selectedProject);
+          selectedProjectId == null || projectIds.contains(selectedProjectId);
       return matchesSearch && matchesRole && matchesProject;
     }).toList();
 
@@ -312,6 +304,39 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
       });
     }
     return filtered;
+  }
+
+  Set<int> _getWorkerProjectIds(Map<String, dynamic> worker) {
+    final ids = <int>{};
+
+    final directProjectId = _toInt(worker['project_id']);
+    if (directProjectId != null) ids.add(directProjectId);
+
+    final project = worker['project'];
+    if (project is Map<String, dynamic>) {
+      final nestedId = _toInt(project['project_id'] ?? project['id']);
+      if (nestedId != null) ids.add(nestedId);
+    }
+
+    final assignedProjects = worker['assigned_projects'];
+    if (assignedProjects is List) {
+      for (final item in assignedProjects) {
+        if (item is Map) {
+          final map = Map<String, dynamic>.from(item);
+          final id = _toInt(map['project_id'] ?? map['id']);
+          if (id != null) ids.add(id);
+        }
+      }
+    }
+
+    return ids;
+  }
+
+  void _onProjectFilterChanged(int? projectId) {
+    setState(() {
+      selectedProjectId = projectId;
+      _workersFuture = _fetchFieldWorkers(projectId: projectId);
+    });
   }
 
   Color getStatusColor(String status) {
@@ -997,9 +1022,7 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                           }
 
                           final allWorkers = snapshot.data ?? [];
-                          final projectOptions = _getProjectFilterOptions(
-                            allWorkers,
-                          );
+                          final projectOptions = _getProjectFilterOptions();
                           final filteredWorkers = _filterAndSortWorkers(
                             allWorkers,
                           );
@@ -1082,13 +1105,14 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                                                           8,
                                                         ),
                                                   ),
-                                                  child: DropdownButton<String>(
-                                                    value:
-                                                        projectOptions.contains(
-                                                          selectedProject,
+                                                  child: DropdownButton<int?>(
+                                                    value: projectOptions.any(
+                                                          (option) =>
+                                                              option.key ==
+                                                              selectedProjectId,
                                                         )
-                                                        ? selectedProject
-                                                        : 'All Projects',
+                                                        ? selectedProjectId
+                                                        : null,
                                                     underline: const SizedBox(),
                                                     isDense: true,
                                                     icon: const Icon(
@@ -1101,12 +1125,13 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                                                     ),
                                                     items: projectOptions
                                                         .map(
-                                                          (
-                                                            project,
-                                                          ) => DropdownMenuItem(
-                                                            value: project,
+                                                          (option) =>
+                                                              DropdownMenuItem<
+                                                                int?
+                                                              >(
+                                                            value: option.key,
                                                             child: Text(
-                                                              project,
+                                                              option.value,
                                                               style:
                                                                   const TextStyle(
                                                                     fontSize:
@@ -1116,10 +1141,8 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                                                           ),
                                                         )
                                                         .toList(),
-                                                    onChanged: (v) => setState(
-                                                      () => selectedProject =
-                                                          v ?? 'All Projects',
-                                                    ),
+                                                    onChanged:
+                                                        _onProjectFilterChanged,
                                                   ),
                                                 ),
                                                 const SizedBox(width: 4),
@@ -1272,32 +1295,34 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                                                           8,
                                                         ),
                                                   ),
-                                                  child: DropdownButton<String>(
-                                                    value:
-                                                        projectOptions.contains(
-                                                          selectedProject,
+                                                  child: DropdownButton<int?>(
+                                                    value: projectOptions.any(
+                                                          (option) =>
+                                                              option.key ==
+                                                              selectedProjectId,
                                                         )
-                                                        ? selectedProject
-                                                        : 'All Projects',
+                                                        ? selectedProjectId
+                                                        : null,
                                                     underline: const SizedBox(),
                                                     hint: const Text(
                                                       'Filter by project',
                                                     ),
                                                     items: projectOptions
                                                         .map(
-                                                          (project) =>
-                                                              DropdownMenuItem(
-                                                                value: project,
+                                                          (option) =>
+                                                              DropdownMenuItem<
+                                                                int?
+                                                              >(
+                                                                value:
+                                                                    option.key,
                                                                 child: Text(
-                                                                  project,
+                                                                  option.value,
                                                                 ),
                                                               ),
                                                         )
                                                         .toList(),
-                                                    onChanged: (v) => setState(
-                                                      () => selectedProject =
-                                                          v ?? 'All Projects',
-                                                    ),
+                                                    onChanged:
+                                                        _onProjectFilterChanged,
                                                   ),
                                                 ),
                                                 const SizedBox(width: 12),

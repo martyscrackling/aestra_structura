@@ -568,9 +568,6 @@ class _ReportsPageState extends State<ReportsPage> {
       );
     }
     candidateQueries.add('field-workers/?project_id=$projectId');
-    if (supervisorId != null) {
-      candidateQueries.add('field-workers/?supervisor_id=$supervisorId');
-    }
 
     int? lastStatus;
     for (final query in candidateQueries) {
@@ -624,21 +621,8 @@ class _ReportsPageState extends State<ReportsPage> {
       return scopedRows;
     }
 
-    // Fallback: recover worker-day records that may have stale/missing project links.
-    final fallbackResponse = await http.get(
-      AppConfig.apiUri('attendance/?attendance_date=${_dateString(date)}'),
-    );
-    if (fallbackResponse.statusCode != 200) {
-      return scopedRows;
-    }
-
-    return (jsonDecode(fallbackResponse.body) as List<dynamic>)
-        .whereType<Map<String, dynamic>>()
-        .where((row) {
-          final workerId = _workerIdFromAttendance(row);
-          return workerId != null && workerIds.contains(workerId);
-        })
-        .toList();
+    // Keep reports strictly scoped to selected project.
+    return scopedRows;
   }
 
   Future<int> _countWorkedDaysForWorkerUntil({
@@ -1249,6 +1233,23 @@ class _ReportsPageState extends State<ReportsPage> {
       initialDate: _weekEnd,
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
+      builder: (context, child) {
+        final theme = Theme.of(context);
+        return Theme(
+          data: theme.copyWith(
+            dialogBackgroundColor: Colors.white,
+            dialogTheme: theme.dialogTheme.copyWith(
+              backgroundColor: Colors.white,
+              surfaceTintColor: Colors.transparent,
+            ),
+            datePickerTheme: theme.datePickerTheme.copyWith(
+              backgroundColor: Colors.white,
+              surfaceTintColor: Colors.transparent,
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
     if (d != null) {
       final selected = DateTime(d.year, d.month, d.day);
@@ -1267,6 +1268,23 @@ class _ReportsPageState extends State<ReportsPage> {
       initialDate: _salaryDate,
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
+      builder: (context, child) {
+        final theme = Theme.of(context);
+        return Theme(
+          data: theme.copyWith(
+            dialogBackgroundColor: Colors.white,
+            dialogTheme: theme.dialogTheme.copyWith(
+              backgroundColor: Colors.white,
+              surfaceTintColor: Colors.transparent,
+            ),
+            datePickerTheme: theme.datePickerTheme.copyWith(
+              backgroundColor: Colors.white,
+              surfaceTintColor: Colors.transparent,
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
     if (d != null) {
       setState(() {
@@ -1568,6 +1586,7 @@ class _ReportsPageState extends State<ReportsPage> {
                             ),
                             const SizedBox(width: 10),
                             Card(
+                              color: Colors.white,
                               elevation: 1,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -1586,6 +1605,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                       child: DropdownButtonHideUnderline(
                                         child: DropdownButton<int>(
                                           value: _selectedProjectId,
+                                          dropdownColor: Colors.white,
                                           isExpanded: true,
                                           isDense: true,
                                           hint: Text(
@@ -1710,6 +1730,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                         const SizedBox(height: 6),
                                         DropdownButtonFormField<int>(
                                           value: _selectedProjectId,
+                                          dropdownColor: Colors.white,
                                           isExpanded: true,
                                           decoration: InputDecoration(
                                             labelText: 'Project',
