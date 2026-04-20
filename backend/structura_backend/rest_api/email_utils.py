@@ -4,7 +4,6 @@ import logging
 import json
 import os
 import threading
-import html as html_module
 from email.utils import formataddr, parseaddr
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
@@ -40,91 +39,6 @@ def _pm_sentence(*, pm_display: str, role: str, project_name: str, app_name: str
     return f"{pm_display} added you as {role} in {app_name}."
 
 
-def _generate_html_template(
-    *,
-    greeting: str,
-    main_content: str,
-    details: list[tuple[str, str]] | None = None,
-    app_name: str = "Structura",
-    call_to_action_url: str | None = None,
-    call_to_action_text: str = "Log In",
-) -> str:
-    """Generate a professional HTML email template."""
-    
-    # Escape HTML content to prevent injection issues
-    greeting = html_module.escape(greeting)
-    main_content = html_module.escape(main_content)
-    app_name = html_module.escape(app_name)
-    call_to_action_text = html_module.escape(call_to_action_text)
-    
-    details_html = ""
-    if details:
-        details_html = '<div style="background-color: #f8f9fa; padding: 20px; border-radius: 6px; margin: 20px 0;">'
-        for label, value in details:
-            label = html_module.escape(label)
-            value = html_module.escape(value)
-            details_html += f'''
-            <div style="margin-bottom: 12px;">
-                <span style="font-weight: 600; color: #333;">{label}:</span>
-                <span style="color: #555; word-break: break-all;">{value}</span>
-            </div>
-            '''
-        details_html += '</div>'
-
-    cta_button = ""
-    if call_to_action_url:
-        # Escape URL for HTML attribute
-        safe_url = html_module.escape(call_to_action_url, quote=True)
-        cta_button = f'''
-        <div style="text-align: center; margin: 30px 0;">
-            <a href="{safe_url}" style="display: inline-block; padding: 12px 32px; background-color: #0066cc; color: white; text-decoration: none; border-radius: 6px; font-weight: 600;">
-                {call_to_action_text}
-            </a>
-        </div>
-        '''
-
-    html = f'''<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; }}
-        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-        .header {{ background: linear-gradient(135deg, #0066cc 0%, #0052a3 100%); color: white; padding: 30px; text-align: center; border-radius: 6px 6px 0 0; }}
-        .header h1 {{ margin: 0; font-size: 24px; }}
-        .content {{ background-color: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none; }}
-        .greeting {{ font-size: 16px; font-weight: 600; margin-bottom: 20px; }}
-        .main-text {{ font-size: 15px; line-height: 1.8; margin-bottom: 20px; color: #555; }}
-        .footer {{ background-color: #f8f9fa; padding: 20px; text-align: center; font-size: 13px; color: #888; border-top: 1px solid #e0e0e0; border-radius: 0 0 6px 6px; }}
-        .divider {{ height: 1px; background-color: #e0e0e0; margin: 20px 0; }}
-    </style>
-</head>
-<body style="background-color: #f5f5f5; margin: 0; padding: 20px;">
-    <div class="container">
-        <div class="header">
-            <h1>{app_name}</h1>
-        </div>
-        <div class="content">
-            <div class="greeting">{greeting}</div>
-            <div class="main-text">{main_content}</div>
-            {details_html}
-            {cta_button}
-            <div class="divider"></div>
-            <div style="font-size: 14px; color: #666; margin-top: 20px;">
-                If you have any questions, please don't hesitate to reach out to your Project Manager.
-            </div>
-        </div>
-        <div class="footer">
-            <p style="margin: 0;">© {app_name}. All rights reserved.</p>
-        </div>
-    </div>
-</body>
-</html>
-'''
-    return html
-
-
 def _send_email_best_effort(
     *,
     to_email: str,
@@ -132,7 +46,6 @@ def _send_email_best_effort(
     message: str,
     invited_by_email: str | None = None,
     invited_by_name: str | None = None,
-    html_message: str | None = None,
 ) -> None:
     to_email = (to_email or "").strip()
     if not to_email:
@@ -176,7 +89,6 @@ def _send_email_best_effort(
                 to_email=to_email,
                 from_email=from_for_sendgrid,
                 reply_to=reply_to,
-                html_message=html_message,
             )
             logger.info(
                 "Email sendgrid status=%s to=%s subject=%r from=%r reply_to=%r",
@@ -196,8 +108,6 @@ def _send_email_best_effort(
             reply_to=reply_to,
             headers={"Sender": attempt_sender} if attempt_sender else None,
         )
-        if html_message:
-            email.attach_alternative(html_message, "text/html")
         sent_count = email.send(fail_silently=False)
         logger.info(
             "Email send result=%s to=%s subject=%r from=%r sender=%r reply_to=%r",
@@ -256,7 +166,6 @@ def _send_via_sendgrid(
     to_email: str,
     from_email: str | None,
     reply_to: list[str] | None,
-    html_message: str | None = None,
 ) -> int:
     """Send using SendGrid v3 API. Returns HTTP status code (202 means accepted)."""
 
@@ -268,14 +177,10 @@ def _send_via_sendgrid(
     if not from_addr:
         raise ValueError("SendGrid from_email is not configured")
 
-    content = [{"type": "text/plain", "value": message}]
-    if html_message:
-        content.append({"type": "text/html", "value": html_message})
-
     payload: dict = {
         "personalizations": [{"to": [{"email": to_email}], "subject": subject}],
         "from": {"email": from_addr},
-        "content": content,
+        "content": [{"type": "text/plain", "value": message}],
     }
     if from_name:
         payload["from"]["name"] = from_name
@@ -376,31 +281,12 @@ def send_invitation_email(
     lines.extend(["", "Thanks,", f"{app_name} Team"])
 
     message = "\n".join(lines)
-
-    # Generate HTML version (with fallback if it fails)
-    html_content = None
-    try:
-        html_content = _generate_html_template(
-            greeting=greeting,
-            main_content=added_sentence + " Your account has been created and you can now access the system.",
-            details=[
-                ("Email", to_email),
-                ("Temporary Password", temp_password),
-            ],
-            app_name=app_name,
-            call_to_action_url=f"{frontend_url}/login" if frontend_url else None,
-            call_to_action_text="Log In Now",
-        )
-    except Exception:
-        logger.exception("Failed to generate HTML email template")
-
     _send_email_best_effort(
         to_email=to_email,
         subject=subject,
         message=message,
         invited_by_email=invited_by_email,
         invited_by_name=invited_by_name,
-        html_message=html_content,
     )
 
 
@@ -447,26 +333,12 @@ def send_project_assignment_email(
     lines.extend(["", "Thanks,", f"{app_name} Team"])
     message = "\n".join(lines)
 
-    # Generate HTML version (with fallback if it fails)
-    html_content = None
-    try:
-        html_content = _generate_html_template(
-            greeting=greeting,
-            main_content=added_sentence,
-            app_name=app_name,
-            call_to_action_url=f"{frontend_url}/login" if frontend_url else None,
-            call_to_action_text="Go to Project",
-        )
-    except Exception:
-        logger.exception("Failed to generate HTML email template")
-
     _send_email_best_effort(
         to_email=to_email,
         subject=subject,
         message=message,
         invited_by_email=invited_by_email,
         invited_by_name=invited_by_name,
-        html_message=html_content,
     )
     return
 
