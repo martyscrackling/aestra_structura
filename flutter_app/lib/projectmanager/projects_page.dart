@@ -7,6 +7,7 @@ import 'widgets/dashboard_header.dart';
 import 'widgets/responsive_page_layout.dart';
 import 'modals/create_project_modal.dart';
 import 'project_info.dart';
+import 'archived_projects.dart';
 import '../services/auth_service.dart';
 import '../services/app_config.dart';
 
@@ -715,6 +716,33 @@ class _ProjectsHeader extends StatelessWidget {
               style: TextStyle(
                 fontWeight: FontWeight.w600,
                 color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        SizedBox(
+          height: 40,
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              backgroundColor: Colors.transparent,
+              side: const BorderSide(color: Color(0xFFFF7A18), width: 1.5),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+            ),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ArchivedProjectsPage()),
+              );
+            },
+            icon: const Icon(Icons.archive, size: 18, color: Color(0xFFFF7A18)),
+            label: const Text(
+              'Archived',
+              style: TextStyle(
+                color: Color(0xFFFF7A18),
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
