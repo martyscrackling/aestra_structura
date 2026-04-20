@@ -1591,6 +1591,7 @@ class _AllWorkforcePageState extends State<AllWorkforcePage> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
+          backgroundColor: Colors.white,
           child: Container(
             constraints: const BoxConstraints(maxWidth: 640),
             child: SingleChildScrollView(
@@ -1771,10 +1772,9 @@ class _AllWorkforcePageState extends State<AllWorkforcePage> {
                           ),
                         ),
                         const SizedBox(width: 12),
-                        ElevatedButton.icon(
+                        ElevatedButton(
                           onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.check),
-                          label: const Text('Close'),
+                          child: const Text('Close'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF1396E9),
                             padding: const EdgeInsets.symmetric(vertical: 14),

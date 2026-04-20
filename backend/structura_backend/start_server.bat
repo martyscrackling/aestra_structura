@@ -33,6 +33,6 @@ echo.
 echo Press Ctrl+C to stop the server
 echo.
 
-C:\Users\Administrator\AppData\Local\Programs\Python\Python310\python.exe manage.py runserver
+python manage.py runserver
 
 pause

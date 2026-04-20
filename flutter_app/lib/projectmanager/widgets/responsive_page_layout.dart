@@ -52,7 +52,8 @@ class ResponsivePageLayout extends StatelessWidget {
             children: [
               DashboardHeader(title: title),
               Expanded(
-                child: Center(
+                child: Align(
+                  alignment: Alignment.topCenter,
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
                       maxWidth: isLargeScreen ? 1400 : double.infinity,
