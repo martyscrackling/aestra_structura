@@ -366,14 +366,125 @@ class _ArchivedProjectsPageState extends State<ArchivedProjectsPage> {
           ? Center(
               child: Padding(
                 padding: const EdgeInsets.all(32),
-                child: Column(\n                  mainAxisAlignment: MainAxisAlignment.center,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [\n                    Container(\n                      padding: const EdgeInsets.all(24),\n                      decoration: BoxDecoration(\n                        shape: BoxShape.circle,\n                        color: const Color(0xFFDC2626).withOpacity(0.1),\n                      ),\n                      child: const Icon(\n                        Icons.error_outline,\n                        size: 64,\n                        color: Color(0xFFDC2626),\n                      ),\n                    ),\n                    const SizedBox(height: 24),\n                    Text(\n                      'Error Loading Projects',\n                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(\n                        fontWeight: FontWeight.bold,\n                        color: const Color(0xFF1F2937),\n                      ),\n                    ),\n                    const SizedBox(height: 12),\n                    Text(\n                      _error!,\n                      style: const TextStyle(\n                        fontSize: 14,\n                        color: Color(0xFF6B7280),\n                      ),\n                      textAlign: TextAlign.center,\n                    ),\n                    const SizedBox(height: 32),\n                    Row(\n                      mainAxisAlignment: MainAxisAlignment.center,\n                      children: [\n                        ElevatedButton.icon(\n                          onPressed: () => Navigator.pop(context),\n                          icon: const Icon(Icons.arrow_back, size: 18),\n                          label: const Text('Back'),\n                          style: ElevatedButton.styleFrom(\n                            backgroundColor: const Color(0xFFE5E7EB),\n                            foregroundColor: const Color(0xFF1F2937),\n                          ),\n                        ),\n                        const SizedBox(width: 12),\n                        ElevatedButton.icon(\n                          onPressed: () {\n                            setState(() {\n                              _isLoading = true;\n                              _error = null;\n                            });\n                            _fetchArchivedProjects();\n                          },\n                          icon: const Icon(Icons.refresh, size: 18),\n                          label: const Text('Try Again'),\n                        ),\n                      ],\n                    ),\n                  ],\n                ),\n              ),\n            )
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(0xFFDC2626).withOpacity(0.1),
+                      ),
+                      child: const Icon(
+                        Icons.error_outline,
+                        size: 64,
+                        color: Color(0xFFDC2626),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Error Loading Projects',
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF1F2937),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      _error!,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Color(0xFF6B7280),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 32),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.arrow_back, size: 18),
+                          label: const Text('Back'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFE5E7EB),
+                            foregroundColor: const Color(0xFF1F2937),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _isLoading = true;
+                              _error = null;
+                            });
+                            _fetchArchivedProjects();
+                          },
+                          icon: const Icon(Icons.refresh, size: 18),
+                          label: const Text('Try Again'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            )
           : _archivedProjects.isEmpty
           ? Center(
               child: Padding(
                 padding: const EdgeInsets.all(32),
-                child: Column(\n                  mainAxisAlignment: MainAxisAlignment.center,\n                  crossAxisAlignment: CrossAxisAlignment.center,\n                  children: [\n                    Container(\n                      padding: const EdgeInsets.all(24),\n                      decoration: BoxDecoration(\n                        shape: BoxShape.circle,\n                        color: Colors.grey[100],\n                      ),\n                      child: Icon(\n                        Icons.inbox_outlined,\n                        size: 64,\n                        color: Colors.grey[400],\n                      ),\n                    ),\n                    const SizedBox(height: 24),\n                    Text(\n                      'No Archived Projects',\n                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(\n                        fontWeight: FontWeight.bold,\n                        color: const Color(0xFF1F2937),\n                      ),\n                    ),\n                    const SizedBox(height: 12),\n                    Text(\n                      'Deactivated, cancelled, or completed projects will appear here.',\n                      style: TextStyle(\n                        fontSize: 14,\n                        color: Colors.grey[600],\n                      ),\n                      textAlign: TextAlign.center,\n                    ),\n                    const SizedBox(height: 32),\n                    ElevatedButton.icon(\n                      onPressed: () => Navigator.pop(context),\n                      icon: const Icon(Icons.arrow_back, size: 18),\n                      label: const Text('Back to Active Projects'),\n                      style: ElevatedButton.styleFrom(\n                        backgroundColor: const Color(0xFF0C1935),\n                        foregroundColor: Colors.white,\n                        padding: const EdgeInsets.symmetric(\n                          horizontal: 24,\n                          vertical: 12,\n                        ),\n                      ),\n                    ),\n                  ],\n                ),\n              ),\n            )
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.grey[100],
+                      ),
+                      child: Icon(
+                        Icons.inbox_outlined,
+                        size: 64,
+                        color: Colors.grey[400],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'No Archived Projects',
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF1F2937),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Deactivated, cancelled, or completed projects will appear here.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 32),
+                    ElevatedButton.icon(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.arrow_back, size: 18),
+                      label: const Text('Back to Active Projects'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0C1935),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
