@@ -32,6 +32,12 @@ class SupervisorUserBadge extends StatefulWidget {
 }
 
 class _SupervisorUserBadgeState extends State<SupervisorUserBadge> {
+  static const Duration _profileCacheTtl = Duration(minutes: 2);
+  static final Map<String, _ProfileCacheEntry> _profileCacheByKey =
+      <String, _ProfileCacheEntry>{};
+  static final Map<String, Future<Map<String, dynamic>?>> _inFlightByKey =
+      <String, Future<Map<String, dynamic>?>>{};
+
   Map<String, dynamic>? _profileUser;
 
   @override
@@ -74,33 +80,46 @@ class _SupervisorUserBadgeState extends State<SupervisorUserBadge> {
         return;
       }
 
-      final response = await http.get(
-        AppConfig.apiUri('supervisors/$supervisorId/?project_id=$projectId'),
-      );
+      final cacheKey = '$supervisorId:$projectId';
+      final now = DateTime.now();
+      final cached = _profileCacheByKey[cacheKey];
 
-      if (response.statusCode != 200) {
-        if (!mounted) return;
-        setState(() {
-          _profileUser = user;
-        });
-        return;
+      Map<String, dynamic>? profile;
+      if (cached != null && now.difference(cached.cachedAt) <= _profileCacheTtl) {
+        profile = cached.profile;
+      } else {
+        final inFlight = _inFlightByKey[cacheKey];
+        final Future<Map<String, dynamic>?> future;
+        if (inFlight != null) {
+          future = inFlight;
+        } else {
+          final created = _fetchSupervisorProfile(
+            supervisorId: supervisorId,
+            projectId: projectId,
+          );
+          _inFlightByKey[cacheKey] = created;
+          future = created;
+        }
+
+        profile = await future;
+        if (profile != null) {
+          _profileCacheByKey[cacheKey] = _ProfileCacheEntry(
+            profile: profile,
+            cachedAt: DateTime.now(),
+          );
+        }
+        if (identical(_inFlightByKey[cacheKey], future)) {
+          _inFlightByKey.remove(cacheKey);
+        }
       }
 
-      final decoded = jsonDecode(response.body);
-      if (decoded is! Map) {
-        if (!mounted) return;
-        setState(() {
-          _profileUser = user;
+      if (profile != null) {
+        await auth.updateLocalUserFields({
+          'first_name': profile['first_name'],
+          'last_name': profile['last_name'],
+          'email': profile['email'],
         });
-        return;
       }
-
-      final profile = Map<String, dynamic>.from(decoded);
-      await auth.updateLocalUserFields({
-        'first_name': profile['first_name'],
-        'last_name': profile['last_name'],
-        'email': profile['email'],
-      });
 
       if (!mounted) return;
       setState(() {
@@ -112,6 +131,26 @@ class _SupervisorUserBadgeState extends State<SupervisorUserBadge> {
         _profileUser = AuthService().currentUser;
       });
     }
+  }
+
+  Future<Map<String, dynamic>?> _fetchSupervisorProfile({
+    required int supervisorId,
+    required int projectId,
+  }) async {
+    final response = await http.get(
+      AppConfig.apiUri('supervisors/$supervisorId/?project_id=$projectId'),
+    );
+
+    if (response.statusCode != 200) {
+      return null;
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map) {
+      return null;
+    }
+
+    return Map<String, dynamic>.from(decoded);
   }
 
   String _displayName(Map<String, dynamic>? user) {
@@ -204,4 +243,11 @@ class _SupervisorUserBadgeState extends State<SupervisorUserBadge> {
       ],
     );
   }
+}
+
+class _ProfileCacheEntry {
+  final Map<String, dynamic> profile;
+  final DateTime cachedAt;
+
+  const _ProfileCacheEntry({required this.profile, required this.cachedAt});
 }

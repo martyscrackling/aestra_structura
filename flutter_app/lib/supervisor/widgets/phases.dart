@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import '../../services/app_config.dart';
+import '../../services/supervisor_dashboard_data_service.dart';
 
 class PhasesWidget extends StatefulWidget {
   final int projectId;
@@ -32,20 +30,9 @@ class _PhasesWidgetState extends State<PhasesWidget> {
   }
 
   Future<List<Map<String, dynamic>>> _fetchPhases() async {
-    try {
-      final response = await http.get(
-        AppConfig.apiUri('phases/?project_id=${widget.projectId}'),
-      );
-
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        return List<Map<String, dynamic>>.from(data);
-      }
-      return [];
-    } catch (e) {
-      print('Error fetching phases: $e');
-      return [];
-    }
+    return SupervisorDashboardDataService.fetchPhasesForProject(
+      widget.projectId,
+    );
   }
 
   Color _getStatusColor(String status) {

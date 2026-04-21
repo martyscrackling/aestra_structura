@@ -51,18 +51,13 @@ class _ProjectsPageState extends State<ProjectsPage> {
 
   List<ProjectOverviewData> get _visibleProjects {
     final query = _searchQuery.trim().toLowerCase();
-    print('🔍 _visibleProjects called: typeFilter=$_projectTypeFilter, statusFilter=$_statusFilter, searchQuery=$_searchQuery');
     final filteredByType = (_projectTypeFilter == null)
         ? List<ProjectOverviewData>.from(_projects)
         : _projects.where((p) => p.projectType == _projectTypeFilter).toList();
-    
-    print('🔍 After type filter: ${filteredByType.length} projects');
-    
+
     final filteredByStatus = (_statusFilter == null)
         ? filteredByType
         : filteredByType.where((p) => p.status.toLowerCase() == _statusFilter!.toLowerCase()).toList();
-    
-    print('🔍 After status filter: ${filteredByStatus.length} projects');
 
     final filtered = query.isEmpty
         ? filteredByStatus
@@ -197,10 +192,6 @@ class _ProjectsPageState extends State<ProjectsPage> {
       final authService = AuthService();
       final userId = authService.currentUser?['user_id'];
 
-      print('🔍 _fetchProjects called');
-      print('🔍 User ID: $userId');
-      print('🔍 Current user data: ${authService.currentUser}');
-
       if (userId == null) {
         setState(() {
           _error = 'User not logged in';
@@ -210,81 +201,18 @@ class _ProjectsPageState extends State<ProjectsPage> {
       }
 
       final url = AppConfig.apiUri('projects/?user_id=$userId');
-      print('🔍 Fetching from: $url');
 
       final response = await http.get(url);
 
-      print('✅ Response status: ${response.statusCode}');
-      print('✅ Response body: ${response.body}');
-
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
-        print('📊 Projects fetched: ${data.length}');
-        
-        // Debug: Print all unique status values from API
-        final uniqueStatuses = <String>{};
-        for (var project in data) {
-          final status = (project['status'] as String?) ?? 'Active';
-          uniqueStatuses.add(status);
-        }
-        print('🔍 Unique status values from API: $uniqueStatuses');
 
-        // Process projects and calculate progress from phases/subtasks
-        List<ProjectOverviewData> projects = [];
-        for (var project in data) {
-          try {
-            print('📌 Processing project: ${project['project_name']}');
-
-            // Safely convert all fields
-            final int projectId = (project['project_id'] as int?) ?? 0;
-            final String projectName =
-                (project['project_name'] as String?) ?? 'Unknown';
-            final String status = (project['status'] as String?) ?? 'Active';
-            final String startDateStr =
-                (project['start_date'] as String?) ?? '';
-            final String endDateStr = (project['end_date'] as String?) ?? '';
-            final String budget = (project['budget']?.toString()) ?? '0';
-            final String createdAt = (project['created_at'] as String?) ?? '';
-            final String projectType =
-                (project['project_type'] as String?) ?? '';
-            final metrics = await _calculateProjectMetrics(projectId);
-            final int projectWorkforceCount = await _fetchProjectWorkforceCount(
-              projectId: projectId,
-              userId: userId,
-            );
-            final int workforceCount =
-                projectWorkforceCount > 0
-                ? projectWorkforceCount
-                : _parseInt(project['workforce']) ??
-                      _parseInt(project['workforce_count']) ??
-                      _parseInt(project['crew_count']) ??
-                      _parseInt(project['assigned_workers_count']) ??
-                      (metrics.assignedCrewCount > 0
-                          ? metrics.assignedCrewCount
-                          : 0);
-
-            print('✅ Project ID: $projectId, Name: $projectName');
-
-            projects.add(
-              ProjectOverviewData(
-                projectId: projectId,
-                title: projectName,
-                status: status,
-                location: _buildLocation(project),
-                startDate: _formatDate(startDateStr),
-                endDate: _formatDate(endDateStr),
-                progress: metrics.progress,
-                crewCount: workforceCount,
-                image: _getProjectImage(project),
-                budget: budget,
-                createdAt: createdAt,
-                projectType: projectType,
-              ),
-            );
-          } catch (e) {
-            print('❌ Error processing project: $e');
-          }
-        }
+        final futures = data
+            .whereType<Map<String, dynamic>>()
+            .map((project) => _buildProjectOverview(project: project, userId: userId))
+            .toList(growable: false);
+        final resolved = await Future.wait(futures);
+        final projects = resolved.whereType<ProjectOverviewData>().toList(growable: false);
 
         setState(() {
           _projects = projects;
@@ -302,6 +230,57 @@ class _ProjectsPageState extends State<ProjectsPage> {
         _isLoading = false;
       });
       print('Error fetching projects: $e');
+    }
+  }
+
+  Future<ProjectOverviewData?> _buildProjectOverview({
+    required Map<String, dynamic> project,
+    required dynamic userId,
+  }) async {
+    try {
+      final projectId = _parseInt(project['project_id']) ?? 0;
+      final projectName = (project['project_name'] as String?) ?? 'Unknown';
+      final status = (project['status'] as String?) ?? 'Active';
+      final startDateStr = (project['start_date'] as String?) ?? '';
+      final endDateStr = (project['end_date'] as String?) ?? '';
+      final budget = (project['budget']?.toString()) ?? '0';
+      final createdAt = (project['created_at'] as String?) ?? '';
+      final projectType = (project['project_type'] as String?) ?? '';
+
+      final metricsFuture = _calculateProjectMetrics(projectId);
+      final workforceFuture = _fetchProjectWorkforceCount(
+        projectId: projectId,
+        userId: userId,
+      );
+
+      final metrics = await metricsFuture;
+      final projectWorkforceCount = await workforceFuture;
+
+      final workforceCount = projectWorkforceCount > 0
+          ? projectWorkforceCount
+          : _parseInt(project['workforce']) ??
+                _parseInt(project['workforce_count']) ??
+                _parseInt(project['crew_count']) ??
+                _parseInt(project['assigned_workers_count']) ??
+                (metrics.assignedCrewCount > 0 ? metrics.assignedCrewCount : 0);
+
+      return ProjectOverviewData(
+        projectId: projectId,
+        title: projectName,
+        status: status,
+        location: _buildLocation(project),
+        startDate: _formatDate(startDateStr),
+        endDate: _formatDate(endDateStr),
+        progress: metrics.progress,
+        crewCount: workforceCount,
+        image: _getProjectImage(project),
+        budget: budget,
+        createdAt: createdAt,
+        projectType: projectType,
+      );
+    } catch (e) {
+      print('❌ Error processing project: $e');
+      return null;
     }
   }
 

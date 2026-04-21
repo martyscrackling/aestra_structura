@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
@@ -26,8 +27,13 @@ class WorkerManagementPage extends StatefulWidget {
 }
 
 class _WorkerManagementPageState extends State<WorkerManagementPage> {
+  static const Duration _projectNamesCacheTtl = Duration(minutes: 3);
+
   late Future<List<Map<String, dynamic>>> _workersFuture;
   Map<int, String> _projectNamesById = {};
+  int? _projectNamesSupervisorId;
+  DateTime? _projectNamesCachedAt;
+  Future<void>? _projectNamesInFlight;
 
   @override
   void initState() {
@@ -51,16 +57,13 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
           _toInt(currentUser['supervisor_id']) ??
           ((typeOrRole == 'supervisor') ? userId : null);
 
-      await _fetchProjects(supervisorId: supervisorId);
+      // Keep worker loading responsive: project name map can refresh in background.
+      unawaited(_ensureProjectNamesLoaded(supervisorId: supervisorId));
 
-      print('=== Fetching Field Workers ===');
-      print('Scope: all projects | filter: active workers');
-      print('Current user payload: $currentUser');
-      print(
-        'Resolved supervisorId: $supervisorId, projectId: $projectId, userProjectId: $userProjectId, userId: $userId',
-      );
-
-      final effectiveProjectId = projectId ?? userProjectId;
+        // In supervisor worker management, null means "All Projects".
+        // Only fall back to user project for non-supervisor contexts.
+        final effectiveProjectId =
+          supervisorId != null ? projectId : (projectId ?? userProjectId);
       final url = supervisorId != null
           ? (effectiveProjectId != null
                 ? AppConfig.apiUri(
@@ -70,17 +73,12 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
           : (effectiveProjectId != null
                 ? AppConfig.apiUri('field-workers/?project_id=$effectiveProjectId')
                 : AppConfig.apiUri('field-workers/'));
-      print('📡 API URL: $url');
 
       final response = await http.get(url);
-
-      print('📊 Response status: ${response.statusCode}');
-      print('📦 Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
         final workers = _extractWorkers(decoded);
-        print('✅ Found ${workers.length} workers');
 
         // Some backends restrict supervisors to project-scoped data even when no
         // query param is provided. Fallback prevents empty table in that case.
@@ -88,28 +86,63 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
           final fallbackUrl = AppConfig.apiUri(
             'field-workers/?project_id=$effectiveProjectId',
           );
-          print('↩️ Fallback API URL: $fallbackUrl');
           final fallbackResponse = await http.get(fallbackUrl);
-          print('↩️ Fallback status: ${fallbackResponse.statusCode}');
 
           if (fallbackResponse.statusCode == 200) {
             final fallbackDecoded = jsonDecode(fallbackResponse.body);
             final fallbackWorkers = _extractWorkers(fallbackDecoded);
-            print(
-              '✅ Fallback workers: ${fallbackWorkers.length}',
-            );
             return fallbackWorkers;
           }
         }
 
         return workers;
       } else {
-        print('❌ Failed to fetch field workers: ${response.statusCode}');
         return [];
       }
-    } catch (e) {
-      print('❌ Error fetching field workers: $e');
+    } catch (_) {
       return [];
+    }
+  }
+
+  Future<void> _ensureProjectNamesLoaded({dynamic supervisorId}) async {
+    final resolvedSupervisorId = _toInt(supervisorId);
+
+    if (resolvedSupervisorId == null) {
+      if (!mounted) return;
+      if (_projectNamesById.isEmpty) return;
+      setState(() {
+        _projectNamesById = {};
+      });
+      _projectNamesSupervisorId = null;
+      _projectNamesCachedAt = DateTime.now();
+      return;
+    }
+
+    final now = DateTime.now();
+    final hasFreshCache =
+        _projectNamesSupervisorId == resolvedSupervisorId &&
+        _projectNamesCachedAt != null &&
+        now.difference(_projectNamesCachedAt!) <= _projectNamesCacheTtl;
+    if (hasFreshCache) {
+      return;
+    }
+
+    if (_projectNamesInFlight != null &&
+        _projectNamesSupervisorId == resolvedSupervisorId) {
+      await _projectNamesInFlight;
+      return;
+    }
+
+    _projectNamesSupervisorId = resolvedSupervisorId;
+    final future = _fetchProjects(supervisorId: resolvedSupervisorId);
+    _projectNamesInFlight = future;
+    try {
+      await future;
+      _projectNamesCachedAt = DateTime.now();
+    } finally {
+      if (identical(_projectNamesInFlight, future)) {
+        _projectNamesInFlight = null;
+      }
     }
   }
 
@@ -126,7 +159,6 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
       final Uri url = AppConfig.apiUri('projects/?supervisor_id=$supervisorId');
 
       final response = await http.get(url);
-      print('Projects API response status: ${response.statusCode}');
 
       if (response.statusCode != 200) return;
 
@@ -146,9 +178,8 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
       setState(() {
         _projectNamesById = mapped;
       });
-      print('Projects fetched successfully: ${mapped.length}');
-    } catch (e) {
-      print('Failed to fetch projects: $e');
+    } catch (_) {
+      // Keep existing fallback behavior.
     }
   }
 

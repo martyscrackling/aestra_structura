@@ -20,6 +20,7 @@ import 'supervisor/workers_management.dart' as supervisor;
 import 'supervisor/attendance_page.dart' as supervisor;
 import 'supervisor/reports.dart' as supervisor;
 import 'supervisor/inventory.dart' as supervisor;
+import 'supervisor/test_time_page.dart' as supervisor;
 import 'client/cl_dashboard.dart' as client;
 import 'license/plan.dart';
 import 'services/auth_service.dart';
@@ -228,6 +229,14 @@ class StructuraApp extends StatelessWidget {
                 child: const supervisor.InventoryPage(),
               ),
               name: 'supervisor-inventory',
+            ),
+            GoRoute(
+              path: 'test-time',
+              pageBuilder: (context, state) => _buildSmoothPage(
+                state: state,
+                child: const supervisor.TestTimePage(),
+              ),
+              name: 'supervisor-test-time',
             ),
           ],
         ),

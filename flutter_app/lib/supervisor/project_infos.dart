@@ -213,6 +213,7 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
       }
 
       if (projectResponse == null) {
+        if (!mounted) return;
         setState(() {
           _error = 'Failed to load project details';
           _isLoading = false;
@@ -220,93 +221,139 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
         return;
       }
 
-      final projectData = jsonDecode(projectResponse.body);
+      final decodedProject = jsonDecode(projectResponse.body);
+      if (decodedProject is! Map<String, dynamic>) {
+        if (!mounted) return;
+        setState(() {
+          _error = 'Unexpected project details response';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final projectData = decodedProject;
       final clientId = _toInt(projectData['client']);
       final embeddedClient = projectData['client'];
+      Map<String, dynamic>? fallbackClientInfo;
       if (embeddedClient is Map<String, dynamic>) {
-        _clientInfo = Map<String, dynamic>.from(embeddedClient);
+        fallbackClientInfo = Map<String, dynamic>.from(embeddedClient);
+      } else {
+        final fallbackFirstName = _asNonEmptyString(projectData['client_first_name']);
+        final fallbackLastName = _asNonEmptyString(projectData['client_last_name']);
+        final fallbackEmail = _asNonEmptyString(projectData['client_email']);
+        final fallbackPhone = _asNonEmptyString(projectData['client_phone_number']);
+        final fallbackPhoto = _asNonEmptyString(projectData['client_photo']);
+        final hasFallbackClient =
+            fallbackFirstName != null ||
+            fallbackLastName != null ||
+            fallbackEmail != null ||
+            fallbackPhone != null ||
+            fallbackPhoto != null;
+
+        if (hasFallbackClient) {
+          fallbackClientInfo = {
+            'client_id': clientId,
+            'first_name': fallbackFirstName ?? '',
+            'last_name': fallbackLastName ?? '',
+            'email': fallbackEmail ?? 'N/A',
+            'phone_number': fallbackPhone ?? 'N/A',
+            'photo': fallbackPhoto,
+          };
+        }
       }
 
+      final futures = await Future.wait<dynamic>([
+        _fetchClientInfo(
+          userId: userId,
+          clientId: clientId,
+          scopeSuffix: scopeSuffix,
+        ),
+        _fetchPhases(userId: userId),
+      ]);
+
+      final resolvedClient = futures[0] as Map<String, dynamic>?;
+      final resolvedPhases = (futures[1] as List<dynamic>?) ?? const <dynamic>[];
+
+      if (!mounted) return;
       setState(() {
         _projectInfo = projectData;
-      });
-
-      if (clientId != null) {
-        final candidateClientUrls = <String>[
-          if (userId != null) 'clients/$clientId/?user_id=$userId',
-          'clients/$clientId/?project_id=${widget.projectId}',
-          'clients/$clientId/',
-        ];
-
-        bool fetched = false;
-        for (final url in candidateClientUrls) {
-          final response = await http.get(AppConfig.apiUri(url));
-          if (response.statusCode == 200) {
-            final mapped = _firstRecordFromResponse(jsonDecode(response.body));
-            if (mapped != null) {
-              setState(() {
-                _clientInfo = mapped;
-              });
-              fetched = true;
-              break;
-            }
-          }
-        }
-
-        if (!fetched) {
-          final listResponse = await http.get(
-            AppConfig.apiUri(
-              'clients/?project_id=${widget.projectId}$scopeSuffix',
-            ),
-          );
-          if (listResponse.statusCode == 200) {
-            final mapped = _firstRecordFromResponse(
-              jsonDecode(listResponse.body),
-            );
-            if (mapped != null) {
-              setState(() {
-                _clientInfo = mapped;
-              });
-            }
-          }
-        }
-      } else {
-        final listResponse = await http.get(
-          AppConfig.apiUri(
-            'clients/?project_id=${widget.projectId}$scopeSuffix',
-          ),
-        );
-        if (listResponse.statusCode == 200) {
-          final mapped = _firstRecordFromResponse(
-            jsonDecode(listResponse.body),
-          );
-          if (mapped != null) {
-            setState(() {
-              _clientInfo = mapped;
-            });
-          }
-        }
-      }
-
-      final phasesUrl = userId != null
-          ? 'phases/?project_id=${widget.projectId}&user_id=$userId'
-          : 'phases/?project_id=${widget.projectId}';
-      final phasesResponse = await http.get(AppConfig.apiUri(phasesUrl));
-      if (phasesResponse.statusCode == 200) {
-        setState(() {
-          _phases = jsonDecode(phasesResponse.body) as List<dynamic>;
-        });
-      }
-
-      setState(() {
+        _clientInfo = resolvedClient ?? fallbackClientInfo;
+        _phases = resolvedPhases;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = 'Error loading project details: $e';
         _isLoading = false;
       });
     }
+  }
+
+  Future<Map<String, dynamic>?> _fetchClientInfo({
+    required dynamic userId,
+    required int? clientId,
+    required String scopeSuffix,
+  }) async {
+    if (clientId != null) {
+      final candidateClientUrls = <String>[
+        if (userId != null) 'clients/$clientId/?user_id=$userId',
+        'clients/$clientId/?project_id=${widget.projectId}',
+        'clients/$clientId/',
+      ];
+
+      for (final url in candidateClientUrls) {
+        try {
+          final response = await http.get(AppConfig.apiUri(url));
+          if (response.statusCode == 200) {
+            final mapped = _firstRecordFromResponse(jsonDecode(response.body));
+            if (mapped != null) {
+              return mapped;
+            }
+          }
+        } catch (_) {
+          // Keep trying remaining candidate endpoints.
+        }
+      }
+    }
+
+    try {
+      final listResponse = await http.get(
+        AppConfig.apiUri('clients/?project_id=${widget.projectId}$scopeSuffix'),
+      );
+      if (listResponse.statusCode == 200) {
+        return _firstRecordFromResponse(jsonDecode(listResponse.body));
+      }
+    } catch (_) {
+      // Fall back to null.
+    }
+
+    return null;
+  }
+
+  Future<List<dynamic>> _fetchPhases({required dynamic userId}) async {
+    final phasesUrl = userId != null
+        ? 'phases/?project_id=${widget.projectId}&user_id=$userId'
+        : 'phases/?project_id=${widget.projectId}';
+
+    try {
+      final phasesResponse = await http.get(AppConfig.apiUri(phasesUrl));
+      if (phasesResponse.statusCode != 200) return const <dynamic>[];
+      final decoded = jsonDecode(phasesResponse.body);
+      if (decoded is List) return decoded;
+      if (decoded is Map<String, dynamic>) {
+        if (decoded['results'] is List) {
+          return decoded['results'] as List<dynamic>;
+        }
+        if (decoded['data'] is List) {
+          return decoded['data'] as List<dynamic>;
+        }
+      }
+    } catch (_) {
+      // Fall back to empty list.
+    }
+
+    return const <dynamic>[];
   }
 
   Widget _buildProfileAvatar({
@@ -600,6 +647,8 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           child: Card(
+            color: Colors.white,
+            surfaceTintColor: Colors.transparent,
             elevation: 2,
             margin: EdgeInsets.zero,
             shape: RoundedRectangleBorder(
@@ -678,6 +727,7 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
                               margin: const EdgeInsets.only(bottom: 8),
                               child: Card(
                                 color: Colors.white,
+                                surfaceTintColor: Colors.transparent,
                                 margin: EdgeInsets.zero,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(8),

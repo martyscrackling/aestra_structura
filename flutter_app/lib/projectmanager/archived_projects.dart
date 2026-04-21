@@ -44,9 +44,6 @@ class _ArchivedProjectsPageState extends State<ArchivedProjectsPage> {
 
   List<ProjectOverviewData> get _visibleProjects {
     final query = _searchQuery.trim().toLowerCase();
-    print(
-      '🔍 _visibleArchivedProjects called with searchQuery=$_searchQuery',
-    );
 
     final filtered = query.isEmpty
         ? List<ProjectOverviewData>.from(_archivedProjects)
@@ -180,9 +177,6 @@ class _ArchivedProjectsPageState extends State<ArchivedProjectsPage> {
       final authService = AuthService();
       final userId = authService.currentUser?['user_id'];
 
-      print('🔍 _fetchArchivedProjects called');
-      print('🔍 User ID: $userId');
-
       if (userId == null) {
         setState(() {
           _error = 'User not logged in';
@@ -192,69 +186,28 @@ class _ArchivedProjectsPageState extends State<ArchivedProjectsPage> {
       }
 
       final url = AppConfig.apiUri('projects/?user_id=$userId');
-      print('🔍 Fetching from: $url');
 
       final response = await http.get(url);
 
-      print('✅ Response status: ${response.statusCode}');
-
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
-        print('📊 Projects fetched: ${data.length}');
 
         // Filter for archived statuses: Deactivated, Cancelled, Completed
         final archivedStatuses = ['Deactivated', 'Cancelled', 'Completed'];
         final archivedData =
             data.where((p) => archivedStatuses.contains(p['status'])).toList();
 
-        print('📊 Archived projects: ${archivedData.length}');
-
-        List<ProjectOverviewData> projects = [];
-        for (var project in archivedData) {
-          try {
-            print('📌 Processing archived project: ${project['project_name']}');
-
-            final int projectId = (project['project_id'] as int?) ?? 0;
-            final String projectName =
-                (project['project_name'] as String?) ?? 'Unknown';
-            final String status = (project['status'] as String?) ?? 'Unknown';
-            final String startDateStr =
-                (project['start_date'] as String?) ?? '';
-            final String endDateStr = (project['end_date'] as String?) ?? '';
-            final String budget = (project['budget']?.toString()) ?? '0';
-            final String createdAt = (project['created_at'] as String?) ?? '';
-            final String projectType =
-                (project['project_type'] as String?) ?? '';
-            final metrics = await _calculateProjectMetrics(projectId);
-            final int projectWorkforceCount = await _fetchProjectWorkforceCount(
-              projectId: projectId,
-              userId: userId,
-            );
-
-            print('✅ Archived Project ID: $projectId, Name: $projectName');
-
-            projects.add(
-              ProjectOverviewData(
-                projectId: projectId,
-                title: projectName,
-                status: status,
-                location: _buildLocation(project),
-                startDate: _formatDate(startDateStr),
-                endDate: _formatDate(endDateStr),
-                progress: metrics.progress,
-                crewCount: metrics.assignedCrewCount > 0
-                    ? metrics.assignedCrewCount
-                    : projectWorkforceCount,
-                image: _getProjectImage(project),
-                projectType: projectType,
-                budget: budget,
-                createdAt: createdAt,
+        final futures = archivedData
+            .whereType<Map<String, dynamic>>()
+            .map(
+              (project) => _buildArchivedProjectOverview(
+                project: project,
+                userId: userId,
               ),
-            );
-          } catch (e) {
-            print('❌ Error processing archived project: $e');
-          }
-        }
+            )
+            .toList(growable: false);
+        final resolved = await Future.wait(futures);
+        final projects = resolved.whereType<ProjectOverviewData>().toList(growable: false);
 
         setState(() {
           _archivedProjects = projects;
@@ -272,6 +225,51 @@ class _ArchivedProjectsPageState extends State<ArchivedProjectsPage> {
         _isLoading = false;
       });
       print('Error fetching archived projects: $e');
+    }
+  }
+
+  Future<ProjectOverviewData?> _buildArchivedProjectOverview({
+    required Map<String, dynamic> project,
+    required dynamic userId,
+  }) async {
+    try {
+      final projectId = _parseInt(project['project_id']) ?? 0;
+      final projectName = (project['project_name'] as String?) ?? 'Unknown';
+      final status = (project['status'] as String?) ?? 'Unknown';
+      final startDateStr = (project['start_date'] as String?) ?? '';
+      final endDateStr = (project['end_date'] as String?) ?? '';
+      final budget = (project['budget']?.toString()) ?? '0';
+      final createdAt = (project['created_at'] as String?) ?? '';
+      final projectType = (project['project_type'] as String?) ?? '';
+
+      final metricsFuture = _calculateProjectMetrics(projectId);
+      final workforceFuture = _fetchProjectWorkforceCount(
+        projectId: projectId,
+        userId: userId,
+      );
+
+      final metrics = await metricsFuture;
+      final projectWorkforceCount = await workforceFuture;
+
+      return ProjectOverviewData(
+        projectId: projectId,
+        title: projectName,
+        status: status,
+        location: _buildLocation(project),
+        startDate: _formatDate(startDateStr),
+        endDate: _formatDate(endDateStr),
+        progress: metrics.progress,
+        crewCount: metrics.assignedCrewCount > 0
+            ? metrics.assignedCrewCount
+            : projectWorkforceCount,
+        image: _getProjectImage(project),
+        projectType: projectType,
+        budget: budget,
+        createdAt: createdAt,
+      );
+    } catch (e) {
+      print('❌ Error processing archived project: $e');
+      return null;
     }
   }
 

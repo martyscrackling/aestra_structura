@@ -277,36 +277,74 @@ class _WorkforcePageState extends State<WorkforcePage> {
   }
 
   Widget _buildTotals() {
-    // Calculate actual worker counts
+    // Build role cards directly from the same source used by worker management.
     final allWorkers = _groups.isNotEmpty ? _groups[0].workers : [];
 
-    final supervisorCount = allWorkers
-        .where((w) => w.type == 'Supervisor')
-        .length;
-    final painterCount = allWorkers.where((w) => w.role == 'Painter').length;
-    final electricianCount = allWorkers
-        .where((w) => w.role == 'Electrician')
-        .length;
-    final masonCount = allWorkers.where((w) => w.role == 'Mason').length;
+    String normalizeRole(String role) {
+      return role.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+    }
 
-    final stats = [
-      WorkerStat(
-        label: 'Supervisor',
-        icon: Icons.supervised_user_circle_outlined,
-        count: supervisorCount,
-      ),
-      WorkerStat(
-        label: 'Painter',
-        icon: Icons.format_paint_outlined,
-        count: painterCount,
-      ),
-      WorkerStat(
-        label: 'Electrician',
-        icon: Icons.electrical_services_outlined,
-        count: electricianCount,
-      ),
-      WorkerStat(label: 'Mason', icon: Icons.grass, count: masonCount),
-    ];
+    String displayRole(String normalizedRole) {
+      return normalizedRole
+          .split(' ')
+          .where((part) => part.isNotEmpty)
+          .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
+          .join(' ');
+    }
+
+    final supervisorCount = allWorkers
+        .where((w) => w.type.trim().toLowerCase() == 'supervisor')
+        .length;
+
+    final roleCounts = <String, int>{};
+    for (final worker in allWorkers) {
+      if (worker.type.trim().toLowerCase() == 'supervisor') continue;
+
+      final normalizedRole = normalizeRole(worker.role);
+      final key = normalizedRole.isEmpty || normalizedRole == 'unknown'
+          ? 'field worker'
+          : normalizedRole;
+
+      roleCounts.update(key, (value) => value + 1, ifAbsent: () => 1);
+    }
+
+    final orderedRoleKeys = <String>[];
+    const preferredRoleOrder = ['painter', 'electrician', 'mason'];
+    for (final role in preferredRoleOrder) {
+      if ((roleCounts[role] ?? 0) > 0) {
+        orderedRoleKeys.add(role);
+      }
+    }
+
+    final dynamicRoleKeys = roleCounts.keys
+        .where((role) => !preferredRoleOrder.contains(role))
+        .toList()
+      ..sort();
+    orderedRoleKeys.addAll(dynamicRoleKeys);
+
+    final stats = <WorkerStat>[];
+
+    if (supervisorCount > 0) {
+      stats.add(
+        WorkerStat(
+          label: 'Supervisor',
+          icon: Icons.supervised_user_circle_outlined,
+          count: supervisorCount,
+        ),
+      );
+    }
+
+    for (final role in orderedRoleKeys) {
+      final count = roleCounts[role] ?? 0;
+      if (count <= 0) continue;
+      stats.add(
+        WorkerStat(
+          label: displayRole(role),
+          icon: Icons.engineering_outlined,
+          count: count,
+        ),
+      );
+    }
 
     return LayoutBuilder(
       builder: (context, constraints) {

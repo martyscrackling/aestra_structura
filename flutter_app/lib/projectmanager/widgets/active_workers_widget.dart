@@ -12,17 +12,6 @@ class ActiveWorkersWidget extends StatelessWidget {
     required this.fieldWorkersByRole,
   });
 
-  int _countRole(String roleContains) {
-    final needle = roleContains.toLowerCase();
-    var total = 0;
-    for (final entry in fieldWorkersByRole.entries) {
-      if (entry.key.toLowerCase().contains(needle)) {
-        total += entry.value;
-      }
-    }
-    return total;
-  }
-
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -30,9 +19,6 @@ class ActiveWorkersWidget extends StatelessWidget {
     final isSmallPhone = screenWidth < 375;
     final isMobile = screenWidth < 768;
     final isTablet = screenWidth >= 768 && screenWidth < 1024;
-
-    final architects = _countRole('architect');
-    final engineers = _countRole('engineer');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -56,31 +42,9 @@ class ActiveWorkersWidget extends StatelessWidget {
           children: [
             Expanded(
               child: WorkerCard(
-                icon: Icons.groups_2_outlined,
+                icon: Icons.engineering_outlined,
                 title: 'Field Workers',
                 count: fieldWorkersTotal,
-                color: Colors.orange,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: WorkerCard(
-                icon: Icons.architecture_outlined,
-                title: 'Architects',
-                count: architects,
-                color: Colors.orange,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: WorkerCard(
-                icon: Icons.engineering_outlined,
-                title: 'Engineers',
-                count: engineers,
                 color: Colors.orange,
               ),
             ),

@@ -52,6 +52,9 @@ class _SidebarState extends State<Sidebar> {
       case "Inventory":
         context.go('/supervisor/inventory');
         break;
+      case "Test Time":
+        context.go('/supervisor/test-time');
+        break;
       default:
         context.go('/supervisor');
     }
@@ -66,6 +69,7 @@ class _SidebarState extends State<Sidebar> {
       {"label": "Attendance", "icon": Icons.check_circle},
       {"label": "Reports", "icon": Icons.file_copy},
       {"label": "Inventory", "icon": Icons.inventory},
+      {"label": "Test Time", "icon": Icons.schedule},
     ];
 
     const double sidebarWidth = 190;

@@ -30,13 +30,31 @@ class _SupervisorProjectOption {
   final String projectName;
 }
 
+class _AttendanceBundle {
+  const _AttendanceBundle({
+    required this.fieldWorkers,
+    required this.attendanceRecords,
+  });
+
+  final List<Map<String, dynamic>> fieldWorkers;
+  final List<Map<String, dynamic>> attendanceRecords;
+
+  static const empty = _AttendanceBundle(
+    fieldWorkers: <Map<String, dynamic>>[],
+    attendanceRecords: <Map<String, dynamic>>[],
+  );
+}
+
 class _AttendancePageState extends State<AttendancePage> {
   final Color primary = AppColors.accent;
   final Color primaryLight = const Color(0xFFFFF3E0);
   final Color neutral = AppColors.surface;
 
+  late Future<_AttendanceBundle> _attendanceBundleFuture;
   late Future<List<Map<String, dynamic>>> _fieldWorkersFuture;
   late Future<List<Map<String, dynamic>>> _attendanceRecordsFuture;
+  Future<_AttendanceBundle>? _attendanceBundleInFlight;
+  String? _attendanceBundleInFlightKey;
 
   DateTime selectedDate = AppTimeService.now();
   String searchQuery = '';
@@ -50,9 +68,18 @@ class _AttendancePageState extends State<AttendancePage> {
   @override
   void initState() {
     super.initState();
-    _fieldWorkersFuture = _fetchFieldWorkers();
-    _attendanceRecordsFuture = _fetchAttendanceRecords();
+    _refreshAttendanceDataFutures();
     unawaited(_loadSupervisorProjects());
+  }
+
+  void _refreshAttendanceDataFutures() {
+    _attendanceBundleFuture = _fetchAttendanceBundle();
+    _fieldWorkersFuture = _attendanceBundleFuture.then(
+      (bundle) => bundle.fieldWorkers,
+    );
+    _attendanceRecordsFuture = _attendanceBundleFuture.then(
+      (bundle) => bundle.attendanceRecords,
+    );
   }
 
   int? _activeProjectId() {
@@ -145,8 +172,7 @@ class _AttendancePageState extends State<AttendancePage> {
           }
 
           _isLoadingProjects = false;
-          _fieldWorkersFuture = _fetchFieldWorkers();
-          _attendanceRecordsFuture = _fetchAttendanceRecords();
+          _refreshAttendanceDataFutures();
         });
       }
     } catch (e) {
@@ -163,67 +189,145 @@ class _AttendancePageState extends State<AttendancePage> {
     if (projectId == null || projectId == _selectedProjectId) return;
     setState(() {
       _selectedProjectId = projectId;
-      _fieldWorkersFuture = _fetchFieldWorkers();
-      _attendanceRecordsFuture = _fetchAttendanceRecords();
+      _refreshAttendanceDataFutures();
     });
   }
 
   Future<List<Map<String, dynamic>>> _fetchFieldWorkers() async {
+    final bundle = await _fetchAttendanceBundle();
+    return bundle.fieldWorkers;
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchAttendanceRecords() async {
+    final bundle = await _fetchAttendanceBundle();
+    return bundle.attendanceRecords;
+  }
+
+  String _attendanceBundleKey({required int projectId, required String dateStr}) {
+    return '$projectId|$dateStr';
+  }
+
+  Future<_AttendanceBundle> _fetchAttendanceBundle() async {
     try {
       final projectId = _activeProjectId();
       final supervisorId = _activeSupervisorId();
 
-      if (projectId == null) return [];
-
-      final url = supervisorId != null
-          ? AppConfig.apiUri(
-              'field-workers/?supervisor_id=$supervisorId&project_id=$projectId',
-            )
-          : AppConfig.apiUri('field-workers/?project_id=$projectId');
-
-      final response = await http.get(
-        url,
-      );
-
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        return data.cast<Map<String, dynamic>>();
-      }
-      return [];
-    } catch (e) {
-      print('Error fetching field workers: $e');
-      return [];
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> _fetchAttendanceRecords() async {
-    try {
-      final projectId = _activeProjectId();
-
-      if (projectId == null) return [];
+      if (projectId == null) return _AttendanceBundle.empty;
 
       final dateStr =
           '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}';
-      final response = await http.get(
-        AppConfig.apiUri(
-          'attendance/?project_id=$projectId&attendance_date=$dateStr',
-        ),
-      );
 
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        return data.cast<Map<String, dynamic>>();
+      final key = _attendanceBundleKey(projectId: projectId, dateStr: dateStr);
+      final inFlight = _attendanceBundleInFlight;
+      if (inFlight != null && _attendanceBundleInFlightKey == key) {
+        return await inFlight;
       }
-      return [];
+
+      final future = _requestAttendanceBundle(
+        projectId: projectId,
+        supervisorId: supervisorId,
+        dateStr: dateStr,
+      );
+      _attendanceBundleInFlight = future;
+      _attendanceBundleInFlightKey = key;
+
+      try {
+        return await future;
+      } finally {
+        if (identical(_attendanceBundleInFlight, future)) {
+          _attendanceBundleInFlight = null;
+          _attendanceBundleInFlightKey = null;
+        }
+      }
     } catch (e) {
-      print('Error fetching attendance: $e');
-      return [];
+      print('Error fetching attendance bundle: $e');
+      return _AttendanceBundle.empty;
     }
+  }
+
+  Future<_AttendanceBundle> _requestAttendanceBundle({
+    required int projectId,
+    required int? supervisorId,
+    required String dateStr,
+  }) async {
+    final overviewUrl = supervisorId != null
+        ? 'attendance/supervisor-overview/?project_id=$projectId&attendance_date=$dateStr&supervisor_id=$supervisorId'
+        : 'attendance/supervisor-overview/?project_id=$projectId&attendance_date=$dateStr';
+
+    try {
+      final response = await http.get(AppConfig.apiUri(overviewUrl));
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map<String, dynamic>) {
+          final workersRaw = decoded['field_workers'];
+          final attendanceRaw = decoded['attendance'];
+
+          final workers = workersRaw is List
+              ? workersRaw
+                    .whereType<Map>()
+                    .map((e) => Map<String, dynamic>.from(e))
+                    .toList(growable: false)
+              : <Map<String, dynamic>>[];
+
+          final attendance = attendanceRaw is List
+              ? attendanceRaw
+                    .whereType<Map>()
+                    .map((e) => Map<String, dynamic>.from(e))
+                    .toList(growable: false)
+              : <Map<String, dynamic>>[];
+
+          return _AttendanceBundle(
+            fieldWorkers: workers,
+            attendanceRecords: attendance,
+          );
+        }
+      }
+    } catch (_) {
+      // Fall through to legacy split endpoints.
+    }
+
+    final legacyWorkersUrl = supervisorId != null
+        ? AppConfig.apiUri(
+            'field-workers/?supervisor_id=$supervisorId&project_id=$projectId',
+          )
+        : AppConfig.apiUri('field-workers/?project_id=$projectId');
+
+    final legacyAttendanceUrl = AppConfig.apiUri(
+      'attendance/?project_id=$projectId&attendance_date=$dateStr',
+    );
+
+    final responses = await Future.wait<http.Response>([
+      http.get(legacyWorkersUrl),
+      http.get(legacyAttendanceUrl),
+    ]);
+
+    final workersResponse = responses[0];
+    final attendanceResponse = responses[1];
+
+    final workers = workersResponse.statusCode == 200
+        ? (jsonDecode(workersResponse.body) as List<dynamic>)
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList(growable: false)
+        : <Map<String, dynamic>>[];
+
+    final attendance = attendanceResponse.statusCode == 200
+        ? (jsonDecode(attendanceResponse.body) as List<dynamic>)
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList(growable: false)
+        : <Map<String, dynamic>>[];
+
+    return _AttendanceBundle(
+      fieldWorkers: workers,
+      attendanceRecords: attendance,
+    );
   }
 
   Future<bool> _saveAttendance(
     Map<String, dynamic> attendanceData, {
     DateTime? attendanceDate,
+    Map<String, dynamic>? existingRecord,
   }) async {
     final projectId = _activeProjectId();
     if (projectId == null) {
@@ -238,22 +342,30 @@ class _AttendancePageState extends State<AttendancePage> {
       ..['project'] = projectId
       ..['attendance_date'] = dateStr;
 
-    // Scope lookup to current project to avoid cross-project record rewrites.
-    final existingRecords = await http.get(
-      AppConfig.apiUri(
-        'attendance/?project_id=$projectId&field_worker_id=${payload['field_worker']}&attendance_date=$dateStr',
-      ),
-    );
+    Map<String, dynamic>? resolvedExisting = existingRecord;
 
-    if (existingRecords.statusCode != 200) {
-      throw Exception(
-        'Failed to query attendance (${existingRecords.statusCode}).',
+    if (resolvedExisting == null) {
+      // Scope lookup to current project to avoid cross-project record rewrites.
+      final existingRecords = await http.get(
+        AppConfig.apiUri(
+          'attendance/?project_id=$projectId&field_worker_id=${payload['field_worker']}&attendance_date=$dateStr',
+        ),
       );
+
+      if (existingRecords.statusCode != 200) {
+        throw Exception(
+          'Failed to query attendance (${existingRecords.statusCode}).',
+        );
+      }
+
+      final List<dynamic> data = jsonDecode(existingRecords.body);
+      if (data.isNotEmpty && data.first is Map<String, dynamic>) {
+        resolvedExisting = data.first as Map<String, dynamic>;
+      }
     }
 
-    final List<dynamic> data = jsonDecode(existingRecords.body);
-    if (data.isNotEmpty) {
-      final attendanceId = data[0]['attendance_id'];
+    if (resolvedExisting != null) {
+      final attendanceId = resolvedExisting['attendance_id'];
       final updateResponse = await http.patch(
         AppConfig.apiUri('attendance/$attendanceId/'),
         headers: {'Content-Type': 'application/json'},
@@ -288,7 +400,7 @@ class _AttendancePageState extends State<AttendancePage> {
     }
 
     setState(() {
-      _attendanceRecordsFuture = _fetchAttendanceRecords();
+      _refreshAttendanceDataFutures();
     });
     return true;
   }
@@ -333,7 +445,9 @@ class _AttendancePageState extends State<AttendancePage> {
 
   Map<String, dynamic> _resolveWorkerFromRecord(
     Map<String, dynamic> record,
-    List<Map<String, dynamic>> fieldWorkers,
+    List<Map<String, dynamic>> fieldWorkers, {
+    Map<int, Map<String, dynamic>>? workerById,
+  }
   ) {
     final recordWorkerRaw = record['field_worker_id'] ?? record['field_worker'];
     final recordWorkerId = recordWorkerRaw is Map<String, dynamic>
@@ -341,6 +455,11 @@ class _AttendancePageState extends State<AttendancePage> {
         : _asInt(recordWorkerRaw);
 
     if (recordWorkerId != null) {
+      final indexedWorker = workerById?[recordWorkerId];
+      if (indexedWorker != null) {
+        return indexedWorker;
+      }
+
       for (final worker in fieldWorkers) {
         final workerId = _asInt(
           worker['fieldworker_id'] ?? worker['field_worker'] ?? worker['id'],
@@ -372,6 +491,24 @@ class _AttendancePageState extends State<AttendancePage> {
     }
 
     return {'first_name': 'Unknown', 'last_name': '', 'role': 'N/A'};
+  }
+
+  Map<int, Map<String, dynamic>> _buildWorkerIndex(
+    List<Map<String, dynamic>> workers,
+  ) {
+    final indexed = <int, Map<String, dynamic>>{};
+    for (final worker in workers) {
+      final workerId = _asInt(
+        worker['fieldworker_id'] ??
+            worker['field_worker_id'] ??
+            worker['field_worker'] ??
+            worker['id'],
+      );
+      if (workerId != null) {
+        indexed[workerId] = worker;
+      }
+    }
+    return indexed;
   }
 
   int? _timeStringToMinutes(String? raw) {
@@ -521,7 +658,15 @@ class _AttendancePageState extends State<AttendancePage> {
     }
 
     // Guardrail: scanned worker must belong to the currently selected project.
-    final projectWorkers = await _fetchFieldWorkers();
+    var projectWorkers = <Map<String, dynamic>>[];
+    try {
+      projectWorkers = await _fieldWorkersFuture;
+    } catch (_) {
+      // Fall back to direct fetch below.
+    }
+    if (projectWorkers.isEmpty) {
+      projectWorkers = await _fetchFieldWorkers();
+    }
     final belongsToProject = _workerIsInActiveProject(
       fieldWorkerId,
       projectWorkers,
@@ -550,12 +695,14 @@ class _AttendancePageState extends State<AttendancePage> {
     final attendanceData = <String, dynamic>{'field_worker': fieldWorkerId};
     final scanNow = AppTimeService.now();
     final scanDate = DateTime(scanNow.year, scanNow.month, scanNow.day);
+    Map<String, dynamic>? existingForAction;
 
     if (action == 'Time Out') {
       final existing = await _fetchExistingAttendanceRecord(
         fieldWorkerId: fieldWorkerId,
         attendanceDate: scanDate,
       );
+      existingForAction = existing;
       final inMinutes = _timeStringToMinutes(
         (existing?['check_in_time'] ?? '').toString(),
       );
@@ -613,6 +760,7 @@ class _AttendancePageState extends State<AttendancePage> {
       final saved = await _saveAttendance(
         attendanceData,
         attendanceDate: scanDate,
+        existingRecord: existingForAction,
       );
       if (!mounted || !saved) return;
 
@@ -687,10 +835,13 @@ class _AttendancePageState extends State<AttendancePage> {
     List<Map<String, dynamic>> allAttendance,
     List<Map<String, dynamic>> allWorkers,
   ) {
+    final workerById = _buildWorkerIndex(allWorkers);
+
     final filtered = allAttendance.where((record) {
-      final worker = allWorkers.firstWhere(
-        (w) => w['fieldworker_id'] == record['field_worker'],
-        orElse: () => {},
+      final worker = _resolveWorkerFromRecord(
+        record,
+        allWorkers,
+        workerById: workerById,
       );
 
       final fullName =
@@ -903,8 +1054,7 @@ class _AttendancePageState extends State<AttendancePage> {
                                               setState(
                                                 () {
                                                   selectedDate = picked;
-                                                  _attendanceRecordsFuture =
-                                                      _fetchAttendanceRecords();
+                                                    _refreshAttendanceDataFutures();
                                                 },
                                               );
                                           },
@@ -1120,8 +1270,7 @@ class _AttendancePageState extends State<AttendancePage> {
                                                 setState(
                                                   () {
                                                     selectedDate = picked;
-                                                    _attendanceRecordsFuture =
-                                                        _fetchAttendanceRecords();
+                                                    _refreshAttendanceDataFutures();
                                                   },
                                                 );
                                             },
@@ -1362,49 +1511,46 @@ class _AttendancePageState extends State<AttendancePage> {
                         padding: EdgeInsets.symmetric(
                           horizontal: isMobile ? 12 : 20,
                         ),
-                        child: FutureBuilder<List<Map<String, dynamic>>>(
-                          future: _attendanceRecordsFuture,
-                          builder: (context, attendanceSnapshot) {
-                            return FutureBuilder<List<Map<String, dynamic>>>(
-                              future: _fieldWorkersFuture,
-                              builder: (context, workersSnapshot) {
-                                if (attendanceSnapshot.connectionState ==
-                                        ConnectionState.waiting ||
-                                    workersSnapshot.connectionState ==
-                                        ConnectionState.waiting) {
-                                  return const Center(
-                                    child: CircularProgressIndicator(),
-                                  );
-                                }
+                        child: FutureBuilder<_AttendanceBundle>(
+                          future: _attendanceBundleFuture,
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState == ConnectionState.waiting) {
+                              return const Center(
+                                child: CircularProgressIndicator(),
+                              );
+                            }
 
-                                final attendanceRecords =
-                                    attendanceSnapshot.data ?? [];
-                                final fieldWorkers = workersSnapshot.data ?? [];
-                                final filteredRecords = _filterAttendance(
-                                  attendanceRecords,
-                                  fieldWorkers,
-                                );
-
-                                if (filteredRecords.isEmpty) {
-                                  return Center(
-                                    child: Text(
-                                      'No records',
-                                      style: TextStyle(color: Colors.grey[700]),
-                                    ),
-                                  );
-                                }
-
-                                return screenWidth <= 600
-                                    ? _buildMobileAttendanceList(
-                                        filteredRecords,
-                                        fieldWorkers,
-                                      )
-                                    : _buildDesktopAttendanceTable(
-                                        filteredRecords,
-                                        fieldWorkers,
-                                      );
-                              },
+                            final bundle = snapshot.data ?? _AttendanceBundle.empty;
+                            final attendanceRecords = bundle.attendanceRecords;
+                            final fieldWorkers = bundle.fieldWorkers;
+                            final workerById = _buildWorkerIndex(
+                              fieldWorkers,
                             );
+                            final filteredRecords = _filterAttendance(
+                              attendanceRecords,
+                              fieldWorkers,
+                            );
+
+                            if (filteredRecords.isEmpty) {
+                              return Center(
+                                child: Text(
+                                  'No records',
+                                  style: TextStyle(color: Colors.grey[700]),
+                                ),
+                              );
+                            }
+
+                            return screenWidth <= 600
+                                ? _buildMobileAttendanceList(
+                                    filteredRecords,
+                                    fieldWorkers,
+                                    workerById,
+                                  )
+                                : _buildDesktopAttendanceTable(
+                                    filteredRecords,
+                                    fieldWorkers,
+                                    workerById,
+                                  );
                           },
                         ),
                       ),
@@ -1425,6 +1571,7 @@ class _AttendancePageState extends State<AttendancePage> {
   Widget _buildDesktopAttendanceTable(
     List<Map<String, dynamic>> filteredRecords,
     List<Map<String, dynamic>> fieldWorkers,
+    Map<int, Map<String, dynamic>> workerById,
   ) {
     return Card(
       color: Colors.white,
@@ -1458,7 +1605,11 @@ class _AttendancePageState extends State<AttendancePage> {
               separatorBuilder: (context, index) => const Divider(height: 1),
               itemBuilder: (context, index) {
                 final record = filteredRecords[index];
-                final worker = _resolveWorkerFromRecord(record, fieldWorkers);
+                final worker = _resolveWorkerFromRecord(
+                  record,
+                  fieldWorkers,
+                  workerById: workerById,
+                );
                 final workerName =
                     '${worker['first_name']} ${worker['last_name']}';
                 final statusKey = _statusKeyForRecord(record);
@@ -1656,12 +1807,17 @@ class _AttendancePageState extends State<AttendancePage> {
   Widget _buildMobileAttendanceList(
     List<Map<String, dynamic>> filteredRecords,
     List<Map<String, dynamic>> fieldWorkers,
+    Map<int, Map<String, dynamic>> workerById,
   ) {
     return ListView.builder(
       itemCount: filteredRecords.length,
       itemBuilder: (context, index) {
         final record = filteredRecords[index];
-        final worker = _resolveWorkerFromRecord(record, fieldWorkers);
+        final worker = _resolveWorkerFromRecord(
+          record,
+          fieldWorkers,
+          workerById: workerById,
+        );
         final workerName = '${worker['first_name']} ${worker['last_name']}';
         final initials = workerName
             .split(' ')
@@ -2324,7 +2480,7 @@ class _AttendancePageState extends State<AttendancePage> {
             backgroundColor: Colors.white,
             title: const Text('Add Attendance'),
             content: FutureBuilder<List<Map<String, dynamic>>>(
-              future: _fetchFieldWorkers(),
+              future: _fieldWorkersFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting)
                   return const Center(child: CircularProgressIndicator());

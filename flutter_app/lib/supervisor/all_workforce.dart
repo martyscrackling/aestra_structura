@@ -237,11 +237,25 @@ class _AllWorkforcePageState extends State<AllWorkforcePage> {
       final workers = byKey.values.toList()
         ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
+      final expectedWorkerIds = workers
+          .map(
+            (member) =>
+                member.fieldWorkerId ??
+                _toInt(
+                  member.raw['fieldworker_id'] ??
+                      member.raw['worker_id'] ??
+                      member.raw['id'],
+                ),
+          )
+          .whereType<int>()
+          .toSet();
+
       // Preload full worker records so modal values don't fall back to partial
       // assigned_workers payload from phases.
       final fullWorkers = await _fetchProjectWorkersDirectory(
         userId: userId,
         supervisorId: supervisorId,
+        expectedWorkerIds: expectedWorkerIds,
       );
       for (final item in fullWorkers) {
         final id = _toInt(
@@ -1324,18 +1338,19 @@ class _AllWorkforcePageState extends State<AllWorkforcePage> {
   Future<List<Map<String, dynamic>>> _fetchProjectWorkersDirectory({
     required int? userId,
     required int? supervisorId,
+    Set<int>? expectedWorkerIds,
   }) async {
     final ownerUserId = await _resolveProjectOwnerUserId();
     final scopedUserId = ownerUserId ?? userId;
 
-    final candidateUrls = <String>[
-      'field-workers/?project_id=${widget.projectId}',
+    final candidateUrls = <String>{
       if (scopedUserId != null)
         'field-workers/?project_id=${widget.projectId}&user_id=$scopedUserId',
       if (supervisorId != null)
         'field-workers/?project_id=${widget.projectId}&supervisor_id=$supervisorId',
+      'field-workers/?project_id=${widget.projectId}',
       if (supervisorId != null) 'field-workers/?supervisor_id=$supervisorId',
-    ];
+    };
 
     final mergedById = <int, Map<String, dynamic>>{};
     for (final url in candidateUrls) {
@@ -1348,7 +1363,21 @@ class _AllWorkforcePageState extends State<AllWorkforcePage> {
           record['fieldworker_id'] ?? record['worker_id'] ?? record['id'],
         );
         if (id != null) {
+          if (expectedWorkerIds != null && !expectedWorkerIds.contains(id)) {
+            continue;
+          }
           mergedById[id] = Map<String, dynamic>.from(record);
+        }
+      }
+
+      if (expectedWorkerIds != null && expectedWorkerIds.isNotEmpty) {
+        final allResolved = expectedWorkerIds.every(mergedById.containsKey);
+        final allRich = allResolved && expectedWorkerIds.every((id) {
+          final data = mergedById[id];
+          return data != null && _hasRichWorkerData(data);
+        });
+        if (allRich) {
+          break;
         }
       }
     }

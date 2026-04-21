@@ -26,10 +26,12 @@ class _NotificationPageState extends State<NotificationPage> {
   }
 
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    if (!_loading || _error != null) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
 
     try {
       final authService = AuthService();
@@ -46,7 +48,10 @@ class _NotificationPageState extends State<NotificationPage> {
         return;
       }
 
-      final summary = await _dashboardService.fetchSummary(userId: userId);
+      final summary = await _dashboardService.fetchSummary(
+        userId: userId,
+        preferCache: true,
+      );
       final items = summary.notificationsItems.map(_toNotification).toList();
 
       if (!mounted) return;
