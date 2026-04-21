@@ -181,6 +181,20 @@ class User(models.Model):
         return self.email
 
 
+class EmailOTP(models.Model):
+    email = models.EmailField(max_length=100, unique=True)
+    code_hash = models.CharField(max_length=255)
+    expires_at = models.DateTimeField()
+    resend_available_at = models.DateTimeField()
+    is_verified = models.BooleanField(default=False)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.email} (verified={self.is_verified})"
+
+
 # Subscription Warning Log Model
 class SubscriptionWarning(models.Model):
     WARNING_TYPE_CHOICES = [

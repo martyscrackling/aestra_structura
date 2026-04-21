@@ -342,3 +342,26 @@ def send_project_assignment_email(
     )
     return
 
+
+def send_signup_otp_email(*, to_email: str, otp_code: str) -> None:
+    """Send signup OTP email in a best-effort background thread."""
+    app_name = getattr(settings, "APP_NAME", "Structura")
+    subject = f"{app_name} signup verification code"
+    message = "\n".join(
+        [
+            "Hi,",
+            "",
+            f"Your verification code is: {otp_code}",
+            "",
+            "This code expires in 10 minutes.",
+            "If you did not request this code, you can ignore this email.",
+            "",
+            f"{app_name} Team",
+        ]
+    )
+    _send_email_best_effort(
+        to_email=to_email,
+        subject=subject,
+        message=message,
+    )
+

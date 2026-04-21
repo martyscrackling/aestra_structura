@@ -177,6 +177,67 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  Future<Map<String, dynamic>> sendSignupOtp(String email) async {
+    try {
+      final response = await http
+          .post(
+            AppConfig.apiUri('signup/send-otp/'),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({"email": email}),
+          )
+          .timeout(_networkTimeout);
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode == 200 && data['success'] == true) {
+        return {
+          'success': true,
+          'message': data['message'] ?? 'OTP sent successfully',
+          'resend_available_in_seconds':
+              data['resend_available_in_seconds'] ?? 60,
+        };
+      }
+
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Failed to send OTP',
+        'retry_after_seconds': data['retry_after_seconds'],
+      };
+    } on TimeoutException {
+      return {'success': false, 'message': 'Request timed out'};
+    } catch (e) {
+      return {'success': false, 'message': 'Failed to send OTP: $e'};
+    }
+  }
+
+  Future<Map<String, dynamic>> verifySignupOtp(String email, String otp) async {
+    try {
+      final response = await http
+          .post(
+            AppConfig.apiUri('signup/verify-otp/'),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({"email": email, "otp": otp}),
+          )
+          .timeout(_networkTimeout);
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode == 200 && data['success'] == true) {
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Email verified successfully',
+        };
+      }
+
+      return {
+        'success': false,
+        'message': data['message'] ?? 'OTP verification failed',
+      };
+    } on TimeoutException {
+      return {'success': false, 'message': 'Request timed out'};
+    } catch (e) {
+      return {'success': false, 'message': 'Failed to verify OTP: $e'};
+    }
+  }
+
   /// Update user info
   Future<bool> updateUserInfo({
     required String firstName,

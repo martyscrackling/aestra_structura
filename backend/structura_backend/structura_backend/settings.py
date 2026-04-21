@@ -263,7 +263,10 @@ if not _email_use_tls_raw:
     # Some deployments accidentally use MAIL_USE_TLS.
     _email_use_tls_raw = os.getenv("MAIL_USE_TLS", "1").strip()
 EMAIL_USE_TLS = _email_use_tls_raw.lower() in {"1", "true", "yes"}
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "no-reply@localhost")
+DEFAULT_FROM_EMAIL = os.getenv(
+    "DEFAULT_FROM_EMAIL",
+    EMAIL_HOST_USER or "aestra462@gmail.com",
+)
 
 if EMAIL_HOST:
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"

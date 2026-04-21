@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
@@ -18,7 +19,14 @@ class _SignUpPageState extends State<SignUpPage> {
   late TextEditingController _emailController;
   late TextEditingController _passwordController;
   late TextEditingController _confirmPasswordController;
+  late TextEditingController _otpController;
+  late List<TextEditingController> _otpDigitControllers;
+  late List<FocusNode> _otpFocusNodes;
   bool _isLoading = false;
+  bool _otpRequested = false;
+  bool _isEmailVerified = false;
+  int _resendSecondsLeft = 0;
+  Timer? _resendTimer;
 
   @override
   void initState() {
@@ -26,6 +34,9 @@ class _SignUpPageState extends State<SignUpPage> {
     _emailController = TextEditingController();
     _passwordController = TextEditingController();
     _confirmPasswordController = TextEditingController();
+    _otpController = TextEditingController();
+    _otpDigitControllers = List.generate(6, (_) => TextEditingController());
+    _otpFocusNodes = List.generate(6, (_) => FocusNode());
   }
 
   @override
@@ -33,7 +44,182 @@ class _SignUpPageState extends State<SignUpPage> {
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _otpController.dispose();
+    for (final controller in _otpDigitControllers) {
+      controller.dispose();
+    }
+    for (final node in _otpFocusNodes) {
+      node.dispose();
+    }
+    _resendTimer?.cancel();
     super.dispose();
+  }
+
+  void _startResendCountdown([int seconds = 60]) {
+    _resendTimer?.cancel();
+    setState(() => _resendSecondsLeft = seconds);
+    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_resendSecondsLeft <= 1) {
+        timer.cancel();
+        setState(() => _resendSecondsLeft = 0);
+      } else {
+        setState(() => _resendSecondsLeft--);
+      }
+    });
+  }
+
+  Future<void> _sendOtp() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter your email address'),
+          backgroundColor: Color(0xFFFF6B2C),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      final authService = context.read<AuthService>();
+      final result = await authService.sendSignupOtp(email);
+      if (!mounted) return;
+      if (result['success'] == true) {
+        setState(() {
+          _otpRequested = true;
+          _isEmailVerified = false;
+        });
+        final resendSeconds =
+            (result['resend_available_in_seconds'] as num?)?.toInt() ?? 60;
+        _startResendCountdown(resendSeconds);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message'] as String),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        final retryAfter = (result['retry_after_seconds'] as num?)?.toInt();
+        if (retryAfter != null && retryAfter > 0) {
+          _startResendCountdown(retryAfter);
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message'] as String),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _verifyOtp() async {
+    final email = _emailController.text.trim();
+    final otp = _otpDigitControllers.map((c) => c.text).join();
+    if (otp.length != 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter the 6-digit OTP'),
+          backgroundColor: Color(0xFFFF6B2C),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      final authService = context.read<AuthService>();
+      final result = await authService.verifySignupOtp(email, otp);
+      if (!mounted) return;
+      if (result['success'] == true) {
+        setState(() => _isEmailVerified = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message'] as String),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message'] as String),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  void _changeEmail() {
+    setState(() {
+      _otpRequested = false;
+      _isEmailVerified = false;
+      _resendSecondsLeft = 0;
+      _otpController.clear();
+      for (final controller in _otpDigitControllers) {
+        controller.clear();
+      }
+      _passwordController.clear();
+      _confirmPasswordController.clear();
+    });
+    _resendTimer?.cancel();
+  }
+
+  Widget _buildOtpBoxes() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: List.generate(6, (index) {
+        return SizedBox(
+          width: 44,
+          child: TextField(
+            controller: _otpDigitControllers[index],
+            focusNode: _otpFocusNodes[index],
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.center,
+            maxLength: 1,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+            decoration: InputDecoration(
+              counterText: '',
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(vertical: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+              focusedBorder: const OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(8)),
+                borderSide: BorderSide(color: Color(0xFFFF6B2C), width: 2),
+              ),
+            ),
+            onChanged: (value) {
+              if (value.isNotEmpty && index < 5) {
+                _otpFocusNodes[index + 1].requestFocus();
+              } else if (value.isEmpty && index > 0) {
+                _otpFocusNodes[index - 1].requestFocus();
+              }
+            },
+          ),
+        );
+      }),
+    );
   }
 
   @override
@@ -133,6 +319,7 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 
   Widget _buildSignUpForm({bool isMobile = false}) {
+    final enteredEmail = _emailController.text.trim();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -174,57 +361,149 @@ class _SignUpPageState extends State<SignUpPage> {
         ),
         SizedBox(height: isMobile ? 20 : 25),
 
-        // Email Field
-        _buildTextField(
-          label: 'Email Address',
-          icon: Icons.email_outlined,
-          keyboardType: TextInputType.emailAddress,
-          controller: _emailController,
-        ),
-        const SizedBox(height: 16),
+        if (!_otpRequested) ...[
+          // Email Field
+          _buildTextField(
+            label: 'Email Address',
+            icon: Icons.email_outlined,
+            keyboardType: TextInputType.emailAddress,
+            controller: _emailController,
+          ),
+          const SizedBox(height: 12),
+        ],
 
-        // Create Password Field
-        _buildTextField(
-          label: 'Create Password',
-          icon: Icons.lock_outline,
-          obscureText: _obscureCreatePassword,
-          controller: _passwordController,
-          suffixIcon: IconButton(
-            icon: Icon(
-              _obscureCreatePassword
-                  ? Icons.visibility_off_outlined
-                  : Icons.visibility_outlined,
-              color: Colors.grey[600],
+        if (!_otpRequested) ...[
+          Container(
+            height: 50,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              gradient: const LinearGradient(
+                colors: [Color(0xFFFF6B2C), Color(0xFFFF8C5A)],
+              ),
             ),
-            onPressed: () => setState(
-              () => _obscureCreatePassword = !_obscureCreatePassword,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                shadowColor: Colors.transparent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: _isLoading ? null : _sendOtp,
+              child: const Text(
+                "Send OTP",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 16),
+          const SizedBox(height: 16),
+        ],
 
-        // Confirm Password Field
-        _buildTextField(
-          label: 'Confirm Password',
-          icon: Icons.lock_outline,
-          obscureText: _obscureConfirmPassword,
-          controller: _confirmPasswordController,
-          suffixIcon: IconButton(
-            icon: Icon(
-              _obscureConfirmPassword
-                  ? Icons.visibility_off_outlined
-                  : Icons.visibility_outlined,
-              color: Colors.grey[600],
-            ),
-            onPressed: () => setState(
-              () => _obscureConfirmPassword = !_obscureConfirmPassword,
+        if (_otpRequested && !_isEmailVerified) ...[
+          Text(
+            "The verification code has been sent to your email $enteredEmail.",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey[700],
             ),
           ),
-        ),
-        const SizedBox(height: 25),
+          const SizedBox(height: 12),
+          _buildOtpBoxes(),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _isLoading || _resendSecondsLeft > 0 ? null : _sendOtp,
+                  child: Text(
+                    _resendSecondsLeft > 0
+                        ? 'Resend in ${_resendSecondsLeft}s'
+                        : 'Resend OTP',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _isLoading ? null : _changeEmail,
+                  child: const Text('Change email'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            height: 50,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              gradient: const LinearGradient(
+                colors: [Color(0xFFFF6B2C), Color(0xFFFF8C5A)],
+              ),
+            ),
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                shadowColor: Colors.transparent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: _isLoading ? null : _verifyOtp,
+              child: const Text(
+                "Verify OTP",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+
+        if (_isEmailVerified) ...[
+          // Create Password Field
+          _buildTextField(
+            label: 'Create Password',
+            icon: Icons.lock_outline,
+            obscureText: _obscureCreatePassword,
+            controller: _passwordController,
+            suffixIcon: IconButton(
+              icon: Icon(
+                _obscureCreatePassword
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+                color: Colors.grey[600],
+              ),
+              onPressed: () => setState(
+                () => _obscureCreatePassword = !_obscureCreatePassword,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Confirm Password Field
+          _buildTextField(
+            label: 'Confirm Password',
+            icon: Icons.lock_outline,
+            obscureText: _obscureConfirmPassword,
+            controller: _confirmPasswordController,
+            suffixIcon: IconButton(
+              icon: Icon(
+                _obscureConfirmPassword
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+                color: Colors.grey[600],
+              ),
+              onPressed: () => setState(
+                () => _obscureConfirmPassword = !_obscureConfirmPassword,
+              ),
+            ),
+          ),
+          const SizedBox(height: 25),
+        ],
 
         // Sign Up Button
-        Container(
+        if (_isEmailVerified)
+          Container(
           height: 50,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
@@ -256,6 +535,16 @@ class _SignUpPageState extends State<SignUpPage> {
                         .trim();
 
                     // Validation
+                    if (!_isEmailVerified) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Please verify your email first'),
+                          backgroundColor: Color(0xFFFF6B2C),
+                        ),
+                      );
+                      return;
+                    }
+
                     if (email.isEmpty ||
                         password.isEmpty ||
                         confirmPassword.isEmpty) {

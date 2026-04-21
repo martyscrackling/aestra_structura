@@ -4,6 +4,7 @@ from rest_framework.decorators import api_view, action, parser_classes
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.contrib.auth.hashers import check_password
+from django.contrib.auth.hashers import make_password
 from django.views.decorators.csrf import csrf_exempt
 from django.db.models import Count, Q, Prefetch
 from django.db import transaction
@@ -12,12 +13,14 @@ from django.utils import timezone
 import json
 import os
 import re
+import secrets
 from datetime import timedelta
 import logging
 
 logger = logging.getLogger(__name__)
 
 from app.image_verification import verify_image_has_human_face
+from .email_utils import send_signup_otp_email
 
 
 def _get_request_pm_user_id(request):
@@ -156,6 +159,20 @@ class ListUser(generics.ListCreateAPIView):
     
     def create(self, request, *args, **kwargs):
         try:
+            email = (request.data.get('email') or '').strip()
+            if not email:
+                return Response(
+                    {'success': False, 'message': 'Email is required'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            otp_entry = models.EmailOTP.objects.filter(email=email, is_verified=True).first()
+            if otp_entry is None:
+                return Response(
+                    {'success': False, 'message': 'Email is not verified. Please verify OTP first.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
             return super().create(request, *args, **kwargs)
         except Exception as e:
             logger.error(f"User creation error: {str(e)}", exc_info=True)
@@ -164,9 +181,135 @@ class ListUser(generics.ListCreateAPIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+    def perform_create(self, serializer):
+        user = serializer.save()
+        email = (getattr(user, 'email', '') or '').strip()
+        if email:
+            models.EmailOTP.objects.filter(email=email).delete()
+
 class DetailUser(generics.RetrieveUpdateDestroyAPIView):
     queryset = models.User.objects.all()
     serializer_class = UserSerializer
+
+
+@csrf_exempt
+@api_view(['POST'])
+def send_signup_otp(request):
+    try:
+        data = json.loads(request.body)
+        email = (data.get('email') or '').strip().lower()
+        if not email:
+            return Response(
+                {'success': False, 'message': 'Email is required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if (
+            models.User.objects.filter(email=email).exists()
+            or models.Supervisors.objects.filter(email=email).exists()
+            or models.Client.objects.filter(email=email).exists()
+        ):
+            return Response(
+                {'success': False, 'message': 'Email already exists'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        now = timezone.now()
+        existing = models.EmailOTP.objects.filter(email=email).first()
+        if existing is not None and existing.resend_available_at > now:
+            remaining_seconds = int((existing.resend_available_at - now).total_seconds())
+            return Response(
+                {
+                    'success': False,
+                    'message': 'Please wait before requesting another OTP.',
+                    'retry_after_seconds': remaining_seconds,
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
+        otp_code = f"{secrets.randbelow(1000000):06d}"
+        models.EmailOTP.objects.update_or_create(
+            email=email,
+            defaults={
+                'code_hash': make_password(otp_code),
+                'expires_at': now + timedelta(minutes=10),
+                'resend_available_at': now + timedelta(minutes=1),
+                'is_verified': False,
+                'verified_at': None,
+            },
+        )
+
+        send_signup_otp_email(to_email=email, otp_code=otp_code)
+        return Response(
+            {
+                'success': True,
+                'message': 'OTP sent successfully',
+                'resend_available_in_seconds': 60,
+            },
+            status=status.HTTP_200_OK,
+        )
+    except json.JSONDecodeError:
+        return Response(
+            {'success': False, 'message': 'Invalid JSON body'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    except Exception as e:
+        return Response(
+            {'success': False, 'message': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@csrf_exempt
+@api_view(['POST'])
+def verify_signup_otp(request):
+    try:
+        data = json.loads(request.body)
+        email = (data.get('email') or '').strip().lower()
+        otp = (data.get('otp') or '').strip()
+        if not email or not otp:
+            return Response(
+                {'success': False, 'message': 'Email and otp are required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        otp_entry = models.EmailOTP.objects.filter(email=email).first()
+        if otp_entry is None:
+            return Response(
+                {'success': False, 'message': 'No OTP request found for this email'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        now = timezone.now()
+        if otp_entry.expires_at < now:
+            return Response(
+                {'success': False, 'message': 'OTP expired. Please request a new one.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not check_password(otp, otp_entry.code_hash):
+            return Response(
+                {'success': False, 'message': 'Wrong OTP code'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        otp_entry.is_verified = True
+        otp_entry.verified_at = now
+        otp_entry.save(update_fields=['is_verified', 'verified_at', 'updated_at'])
+        return Response(
+            {'success': True, 'message': 'Email verified successfully'},
+            status=status.HTTP_200_OK,
+        )
+    except json.JSONDecodeError:
+        return Response(
+            {'success': False, 'message': 'Invalid JSON body'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    except Exception as e:
+        return Response(
+            {'success': False, 'message': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 @csrf_exempt
 @api_view(['POST'])
