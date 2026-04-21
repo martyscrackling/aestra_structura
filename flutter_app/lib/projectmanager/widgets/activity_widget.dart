@@ -3,15 +3,115 @@ import 'package:fl_chart/fl_chart.dart';
 
 import '../../services/pm_dashboard_service.dart';
 
-class ActivityWidget extends StatelessWidget {
+enum _ActivityView { daily, monthly }
+
+class ActivityWidget extends StatefulWidget {
   final List<PmActivityPoint> series;
 
   const ActivityWidget({super.key, required this.series});
+
+  @override
+  State<ActivityWidget> createState() => _ActivityWidgetState();
+}
+
+class _ActivityChartPoint {
+  final String label;
+  final int completed;
+
+  const _ActivityChartPoint({required this.label, required this.completed});
+}
+
+class _ActivityWidgetState extends State<ActivityWidget> {
+  _ActivityView _selectedView = _ActivityView.daily;
 
   String _weekdayLabel(DateTime day) {
     const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     final idx = (day.weekday - 1).clamp(0, 6);
     return labels[idx];
+  }
+
+  String _monthLabel(int month) {
+    const labels = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return labels[(month - 1).clamp(0, 11)];
+  }
+
+  List<_ActivityChartPoint> _buildMonthlyChartSeries() {
+    final now = DateTime.now();
+    final rollingMonths = List.generate(12, (index) {
+      final date = DateTime(now.year, now.month - (11 - index), 1);
+      return DateTime(date.year, date.month, 1);
+    });
+
+    final totalsByMonth = <String, int>{};
+    for (final point in widget.series) {
+      final key = '${point.day.year}-${point.day.month}';
+      totalsByMonth[key] = (totalsByMonth[key] ?? 0) + point.completed;
+    }
+
+    return rollingMonths.map((date) {
+      final key = '${date.year}-${date.month}';
+      return _ActivityChartPoint(
+        label: _monthLabel(date.month),
+        completed: totalsByMonth[key] ?? 0,
+      );
+    }).toList();
+  }
+
+  List<_ActivityChartPoint> _buildDailyChartSeries() {
+    final now = DateTime.now();
+    final startOfWeek = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: now.weekday - 1));
+    final endOfWeek = startOfWeek.add(const Duration(days: 7));
+
+    final totalsByWeekday = <int, int>{
+      1: 0,
+      2: 0,
+      3: 0,
+      4: 0,
+      5: 0,
+      6: 0,
+      7: 0,
+    };
+
+    for (final point in widget.series) {
+      final day = DateTime(point.day.year, point.day.month, point.day.day);
+      if (!day.isBefore(startOfWeek) && day.isBefore(endOfWeek)) {
+        totalsByWeekday[day.weekday] =
+            (totalsByWeekday[day.weekday] ?? 0) + point.completed;
+      }
+    }
+
+    const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return [
+      for (var i = 0; i < labels.length; i++)
+        _ActivityChartPoint(
+          label: labels[i],
+          completed: totalsByWeekday[i + 1] ?? 0,
+        ),
+    ];
+  }
+
+  List<_ActivityChartPoint> _chartSeriesForSelectedView() {
+    if (_selectedView == _ActivityView.daily) {
+      return _buildDailyChartSeries();
+    }
+    return _buildMonthlyChartSeries();
   }
 
   @override
@@ -28,7 +128,7 @@ class ActivityWidget extends StatelessWidget {
         ? 16.0
         : 20.0;
 
-    if (series.isEmpty) {
+    if (widget.series.isEmpty) {
       return Container(
         padding: EdgeInsets.all(padding),
         decoration: BoxDecoration(
@@ -66,15 +166,40 @@ class ActivityWidget extends StatelessWidget {
       );
     }
 
-    final spots = <FlSpot>[];
-    for (var i = 0; i < series.length; i++) {
-      spots.add(FlSpot(i.toDouble(), series[i].completed.toDouble()));
+    final chartSeries = _chartSeriesForSelectedView();
+    final bars = <BarChartGroupData>[];
+    for (var i = 0; i < chartSeries.length; i++) {
+      bars.add(
+        BarChartGroupData(
+          x: i,
+          barRods: [
+            BarChartRodData(
+              toY: chartSeries[i].completed.toDouble(),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(6),
+                topRight: Radius.circular(6),
+              ),
+              width: isSmallPhone
+                  ? 12
+                  : isMobile
+                  ? 14
+                  : 18,
+              gradient: const LinearGradient(
+                colors: [Color(0xFF2F80ED), Color(0xFF56CCF2)],
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+              ),
+            ),
+          ],
+        ),
+      );
     }
 
-    final maxValue = series
+    final maxValue = chartSeries
         .map((p) => p.completed)
         .fold<int>(0, (a, b) => a > b ? a : b);
-    final maxY = (maxValue == 0 ? 1 : (maxValue + 1)).toDouble();
+    final roundedCeil = ((maxValue + 4) ~/ 5) * 5;
+    final maxY = (roundedCeil < 15 ? 15 : roundedCeil).toDouble();
 
     return Container(
       padding: EdgeInsets.all(padding),
@@ -110,45 +235,35 @@ class ActivityWidget extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: isSmallPhone
-                      ? 6.0
-                      : isMobile
-                      ? 8.0
-                      : 12.0,
-                  vertical: isSmallPhone
-                      ? 3.0
-                      : isMobile
-                      ? 4.0
-                      : 6.0,
-                ),
+                padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(6),
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      'Weekly',
-                      style: TextStyle(
-                        fontSize: isSmallPhone
-                            ? 10.0
-                            : isMobile
-                            ? 11.0
-                            : 13.0,
-                        color: const Color(0xFF0C1935),
-                      ),
+                    _buildToggleButton(
+                      label: 'Daily',
+                      selected: _selectedView == _ActivityView.daily,
+                      onTap: () {
+                        setState(() {
+                          _selectedView = _ActivityView.daily;
+                        });
+                      },
+                      isSmallPhone: isSmallPhone,
+                      isMobile: isMobile,
                     ),
-                    const SizedBox(width: 4),
-                    Icon(
-                      Icons.keyboard_arrow_down,
-                      size: isSmallPhone
-                          ? 12.0
-                          : isMobile
-                          ? 14.0
-                          : 16.0,
-                      color: Colors.grey[600],
+                    _buildToggleButton(
+                      label: 'Monthly',
+                      selected: _selectedView == _ActivityView.monthly,
+                      onTap: () {
+                        setState(() {
+                          _selectedView = _ActivityView.monthly;
+                        });
+                      },
+                      isSmallPhone: isSmallPhone,
+                      isMobile: isMobile,
                     ),
                   ],
                 ),
@@ -160,12 +275,12 @@ class ActivityWidget extends StatelessWidget {
 
           SizedBox(
             height: 200,
-            child: LineChart(
-              LineChartData(
+            child: BarChart(
+              BarChartData(
                 gridData: FlGridData(
                   show: true,
                   drawVerticalLine: false,
-                  horizontalInterval: 25,
+                  horizontalInterval: 5,
                   getDrawingHorizontalLine: (value) {
                     return FlLine(color: Colors.grey[200]!, strokeWidth: 1);
                   },
@@ -187,11 +302,11 @@ class ActivityWidget extends StatelessWidget {
                       interval: 1,
                       getTitlesWidget: (double value, TitleMeta meta) {
                         final index = value.toInt();
-                        if (index >= 0 && index < series.length) {
+                        if (index >= 0 && index < chartSeries.length) {
                           return Padding(
                             padding: const EdgeInsets.only(top: 8.0),
                             child: Text(
-                              _weekdayLabel(series[index].day),
+                              chartSeries[index].label,
                               style: TextStyle(
                                 color: Colors.grey[600],
                                 fontSize: 12,
@@ -208,11 +323,18 @@ class ActivityWidget extends StatelessWidget {
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      interval: maxY <= 5 ? 1 : (maxY / 4).ceilToDouble(),
+                      interval: 5,
                       reservedSize: 40,
                       getTitlesWidget: (double value, TitleMeta meta) {
+                        final intValue = value.toInt();
+                        if (intValue != 0 &&
+                            intValue != 5 &&
+                            intValue != 10 &&
+                            intValue != 15) {
+                          return const SizedBox.shrink();
+                        }
                         return Text(
-                          value.toInt().toString(),
+                          intValue.toString(),
                           style: TextStyle(
                             color: Colors.grey[600],
                             fontSize: 12,
@@ -225,58 +347,106 @@ class ActivityWidget extends StatelessWidget {
 
                 borderData: FlBorderData(show: false),
 
-                minX: 0,
-                maxX: (series.length - 1).toDouble(),
                 minY: 0,
                 maxY: maxY,
 
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: spots,
-                    isCurved: true,
-                    color: Colors.blue,
-                    barWidth: 3,
-                    isStrokeCapRound: true,
-
-                    dotData: FlDotData(
-                      show: true,
-                      getDotPainter: (spot, percent, barData, index) {
-                        return FlDotCirclePainter(
-                          radius: 3,
-                          color: Colors.blue,
-                        );
-                      },
-                    ),
-                    belowBarData: BarAreaData(show: false),
-                  ),
-                ],
-
-                lineTouchData: LineTouchData(
+                barGroups: bars,
+                barTouchData: BarTouchData(
                   enabled: true,
-                  touchTooltipData: LineTouchTooltipData(
+                  handleBuiltInTouches: true,
+                  touchTooltipData: BarTouchTooltipData(
+                    fitInsideHorizontally: true,
+                    fitInsideVertically: true,
                     tooltipPadding: const EdgeInsets.all(8),
-                    getTooltipItems: (touchedSpots) {
-                      return touchedSpots.map((spot) {
-                        final idx = spot.x.toInt();
-                        final count = (idx >= 0 && idx < series.length)
-                            ? series[idx].completed
-                            : 0;
-                        return LineTooltipItem(
-                          '$count tasks completed',
-                          const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        );
-                      }).toList();
+                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                      final idx = group.x.toInt();
+                      if (idx < 0 || idx >= chartSeries.length) {
+                        return null;
+                      }
+                      final point = chartSeries[idx];
+                      return BarTooltipItem(
+                        '${point.completed} tasks completed\n${point.label}',
+                        const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      );
                     },
                   ),
                 ),
               ),
             ),
           ),
+          if (_selectedView == _ActivityView.monthly) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Monthly view: showing totals across the last 12 months',
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: isSmallPhone
+                    ? 10
+                    : isMobile
+                    ? 11
+                    : 12,
+              ),
+            ),
+          ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildToggleButton({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+    required bool isSmallPhone,
+    required bool isMobile,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        padding: EdgeInsets.symmetric(
+          horizontal: isSmallPhone
+              ? 8
+              : isMobile
+              ? 10
+              : 12,
+          vertical: isSmallPhone
+              ? 5
+              : isMobile
+              ? 6
+              : 7,
+        ),
+        decoration: BoxDecoration(
+          color: selected ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: isSmallPhone
+                ? 10.0
+                : isMobile
+                ? 11.0
+                : 13.0,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            color: selected ? const Color(0xFF0C1935) : Colors.grey[600],
+          ),
+        ),
       ),
     );
   }

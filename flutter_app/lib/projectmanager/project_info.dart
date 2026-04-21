@@ -172,6 +172,22 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     return null;
   }
 
+  Map<String, dynamic>? _extractProjectPayload(dynamic decoded) {
+    if (decoded is! Map<String, dynamic>) return null;
+
+    final projectNode = decoded['project'];
+    if (projectNode is Map<String, dynamic>) {
+      return Map<String, dynamic>.from(projectNode);
+    }
+
+    final dataNode = decoded['data'];
+    if (dataNode is Map<String, dynamic>) {
+      return Map<String, dynamic>.from(dataNode);
+    }
+
+    return decoded;
+  }
+
   int? _calculateDaysLeft() {
     if (_projectInfo == null || _projectInfo!['end_date'] == null) return null;
     try {
@@ -253,8 +269,20 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         return;
       }
 
-      final projectData = jsonDecode(projectResponse.body);
-      final clientId = _toInt(projectData['client']);
+      final rawProjectData = jsonDecode(projectResponse.body);
+      final projectData = _extractProjectPayload(rawProjectData);
+      if (projectData == null) {
+        setState(() {
+          _error = 'Unexpected project response format';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final projectOwnerUserId = _toInt(projectData['user']);
+      final clientId = _toInt(
+        projectData['client'] ?? projectData['client_id'],
+      );
 
       // Some APIs embed client details directly in project payload.
       final embeddedClient = projectData['client'];
@@ -268,12 +296,15 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
 
       print('🔍 Project ID: ${widget.projectId}');
       print('🔍 Client ID: $clientId');
+      print('🔍 Project Owner User ID: $projectOwnerUserId');
 
       // Fetch client information
       if (clientId != null) {
         try {
           final candidateClientUrls = <String>[
             if (userId != null) 'clients/$clientId/?user_id=$userId',
+            if (projectOwnerUserId != null)
+              'clients/$clientId/?user_id=$projectOwnerUserId',
             'clients/$clientId/?project_id=${widget.projectId}',
             'clients/$clientId/',
           ];
@@ -340,8 +371,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           print('⚠️ Error fetching client list fallback: $e');
         }
       }
-
-
 
       // Fetch phases for accurate progress calculation
       try {
@@ -534,8 +563,10 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                     Expanded(
                       child: Text(
                         widget.projectLocation,
-                        style:
-                            const TextStyle(fontSize: 15, color: Colors.grey),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          color: Colors.grey,
+                        ),
                       ),
                     ),
                   ],
@@ -559,11 +590,11 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(12),
-                                border:
-                                    Border.all(color: Colors.grey.shade300),
+                                border: Border.all(color: Colors.grey.shade300),
                               ),
                               child: const Center(
-                                  child: Text('No client assigned')),
+                                child: Text('No client assigned'),
+                              ),
                             ),
                     ),
                     const SizedBox(width: 12),
@@ -637,20 +668,25 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                             ? _infoCard(
                                 title: "Client:",
                                 name:
-                              '${_clientInfo!['first_name']} ${_clientInfo!['last_name']}',
-                          email: _clientInfo!['email'] ?? 'N/A',
-                          phone: _clientInfo!['phone_number'] ?? 'N/A',
-                          photoUrl: _resolveMediaUrl(_clientInfo!['photo']),
-                          isMobile: false,
-                        )
+                                    '${_clientInfo!['first_name']} ${_clientInfo!['last_name']}',
+                                email: _clientInfo!['email'] ?? 'N/A',
+                                phone: _clientInfo!['phone_number'] ?? 'N/A',
+                                photoUrl: _resolveMediaUrl(
+                                  _clientInfo!['photo'],
+                                ),
+                                isMobile: false,
+                              )
                             : Container(
                                 padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.grey.shade300),
+                                  border: Border.all(
+                                    color: Colors.grey.shade300,
+                                  ),
                                 ),
-                                child:
-                                    const Center(child: Text('No client assigned')),
+                                child: const Center(
+                                  child: Text('No client assigned'),
+                                ),
                               ),
                       ),
                       IconButton(
@@ -804,8 +840,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           const SizedBox(height: 24),
 
           // Manage Workforce Button
-          
-
           const SizedBox(height: 20),
           const Divider(),
 
@@ -899,8 +933,11 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                   final phaseMap = phase as Map<String, dynamic>;
                   final subtasks = phaseMap['subtasks'] as List<dynamic>? ?? [];
                   final completedCount = subtasks
-                      .where((s) =>
-                          (s as Map<String, dynamic>)['status'] == 'completed')
+                      .where(
+                        (s) =>
+                            (s as Map<String, dynamic>)['status'] ==
+                            'completed',
+                      )
                       .length;
                   final progress = subtasks.isEmpty
                       ? 0.0
@@ -953,8 +990,11 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                         const SizedBox(height: 12),
                         Row(
                           children: [
-                            const Icon(Icons.assignment_outlined,
-                                size: 14, color: Colors.grey),
+                            const Icon(
+                              Icons.assignment_outlined,
+                              size: 14,
+                              color: Colors.grey,
+                            ),
                             const SizedBox(width: 6),
                             Text(
                               '$completedCount / ${subtasks.length} subtasks completed',
@@ -1005,10 +1045,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
               child: Center(
                 child: Text(
                   'No phases available',
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: Colors.grey.shade700,
-                  ),
+                  style: TextStyle(fontSize: 15, color: Colors.grey.shade700),
                 ),
               ),
             ),
@@ -1149,12 +1186,14 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
   }
 
   bool _isProjectActive() {
-    final status = _projectInfo?['status']?.toString().toLowerCase() ?? 'active';
+    final status =
+        _projectInfo?['status']?.toString().toLowerCase() ?? 'active';
     return status == 'active';
   }
 
   bool _isProjectOnHold() {
-    final status = _projectInfo?['status']?.toString().toLowerCase() ?? 'active';
+    final status =
+        _projectInfo?['status']?.toString().toLowerCase() ?? 'active';
     return status == 'on hold';
   }
 
@@ -1168,7 +1207,9 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           title: const Text('Project Status'),
           content: isActive
               ? const Text('What would you like to do with this project?')
-              : const Text('Activate this project or continue managing its status?'),
+              : const Text(
+                  'Activate this project or continue managing its status?',
+                ),
           actions: [
             TextButton(
               onPressed: () {
@@ -1219,7 +1260,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     try {
       final authUser = AuthService().currentUser;
       final userId = authUser?['user_id'];
-      
+
       // Get the current status
       final currentStatus = _projectInfo?['status']?.toString() ?? 'Active';
       final url = userId != null
@@ -1234,17 +1275,17 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
           currentStatusLoop = data['status'] ?? 'Unknown';
-          
+
           if (currentStatusLoop == targetStatus) {
             if (!mounted) return;
-            
+
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('Project status changed to: $targetStatus'),
                 backgroundColor: Colors.green,
               ),
             );
-            
+
             setState(() {
               _projectInfo?['status'] = targetStatus;
             });
@@ -1252,10 +1293,12 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           }
         } else {
           if (!mounted) return;
-          
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Failed to change project status (${response.statusCode})'),
+              content: Text(
+                'Failed to change project status (${response.statusCode})',
+              ),
               backgroundColor: Colors.red,
             ),
           );
@@ -1264,12 +1307,9 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
       }
     } catch (e) {
       if (!mounted) return;
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
       );
     }
   }
@@ -1301,10 +1341,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                     const SizedBox(height: 2),
                     Text(
                       email,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey,
-                      ),
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   ],
                 ),
@@ -1329,10 +1366,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                     const SizedBox(height: 2),
                     Text(
                       email,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey,
-                      ),
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   ],
                 ),

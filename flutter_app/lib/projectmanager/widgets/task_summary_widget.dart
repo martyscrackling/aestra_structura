@@ -51,18 +51,22 @@ class TaskSummaryWidget extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Task Summary',
-                style: TextStyle(
-                  fontSize: isSmallPhone
-                      ? 14.0
-                      : isMobile
-                      ? 16.0
-                      : isTablet
-                      ? 17.0
-                      : 18.0,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFF0C1935),
+              Expanded(
+                child: Text(
+                  'Task Summary',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: isSmallPhone
+                        ? 14.0
+                        : isMobile
+                        ? 16.0
+                        : isTablet
+                        ? 17.0
+                        : 18.0,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF0C1935),
+                  ),
                 ),
               ),
               IconButton(
@@ -79,44 +83,16 @@ class TaskSummaryWidget extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Container(
-                  padding: EdgeInsets.all(
-                    isSmallPhone
-                        ? 8.0
-                        : isMobile
-                        ? 12.0
-                        : 16.0,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[600],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.folder_outlined,
-                        color: Colors.white,
-                        size: isSmallPhone ? 20.0 : 28.0,
-                      ),
-                      SizedBox(height: isSmallPhone ? 4.0 : 8.0),
-                      Text(
-                        'Projects',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: isSmallPhone ? 10.0 : 13.0,
-                        ),
-                      ),
-                      SizedBox(height: isSmallPhone ? 2.0 : 4.0),
-                      Text(
-                        totalProjects.toString(),
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: isSmallPhone ? 18.0 : 24.0,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
+                child: _SummaryStatCard(
+                  label: 'Projects',
+                  value: totalProjects.toString(),
+                  icon: Icons.folder_outlined,
+                  iconColor: Colors.white,
+                  labelColor: Colors.white,
+                  valueColor: Colors.white,
+                  backgroundColor: Colors.blue[600]!,
+                  isSmallPhone: isSmallPhone,
+                  isMobile: isMobile,
                 ),
               ),
               SizedBox(
@@ -127,44 +103,16 @@ class TaskSummaryWidget extends StatelessWidget {
                     : 16.0,
               ),
               Expanded(
-                child: Container(
-                  padding: EdgeInsets.all(
-                    isSmallPhone
-                        ? 8.0
-                        : isMobile
-                        ? 12.0
-                        : 16.0,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.cyan[400],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.assignment_outlined,
-                        color: Colors.white,
-                        size: isSmallPhone ? 20.0 : 28.0,
-                      ),
-                      SizedBox(height: isSmallPhone ? 4.0 : 8.0),
-                      Text(
-                        'Assigned',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: isSmallPhone ? 10.0 : 13.0,
-                        ),
-                      ),
-                      SizedBox(height: isSmallPhone ? 2.0 : 4.0),
-                      Text(
-                        assignedTasks.toString(),
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: isSmallPhone ? 18.0 : 24.0,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
+                child: _SummaryStatCard(
+                  label: 'Assigned',
+                  value: assignedTasks.toString(),
+                  icon: Icons.assignment_outlined,
+                  iconColor: Colors.white,
+                  labelColor: Colors.white,
+                  valueColor: Colors.white,
+                  backgroundColor: Colors.cyan[400]!,
+                  isSmallPhone: isSmallPhone,
+                  isMobile: isMobile,
                 ),
               ),
               SizedBox(
@@ -175,44 +123,16 @@ class TaskSummaryWidget extends StatelessWidget {
                     : 16.0,
               ),
               Expanded(
-                child: Container(
-                  padding: EdgeInsets.all(
-                    isSmallPhone
-                        ? 8.0
-                        : isMobile
-                        ? 12.0
-                        : 16.0,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.grid_view_rounded,
-                        color: Colors.grey[400],
-                        size: isSmallPhone ? 20.0 : 28.0,
-                      ),
-                      SizedBox(height: isSmallPhone ? 4.0 : 8.0),
-                      Text(
-                        'All',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: isSmallPhone ? 10.0 : 13.0,
-                        ),
-                      ),
-                      SizedBox(height: isSmallPhone ? 2.0 : 4.0),
-                      Text(
-                        totalTasks.toString(),
-                        style: TextStyle(
-                          color: Colors.grey[800],
-                          fontSize: isSmallPhone ? 18.0 : 24.0,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
+                child: _SummaryStatCard(
+                  label: 'All',
+                  value: totalTasks.toString(),
+                  icon: Icons.grid_view_rounded,
+                  iconColor: Colors.grey[400]!,
+                  labelColor: Colors.grey[600]!,
+                  valueColor: Colors.grey[800]!,
+                  backgroundColor: Colors.grey[100]!,
+                  isSmallPhone: isSmallPhone,
+                  isMobile: isMobile,
                 ),
               ),
             ],
@@ -235,6 +155,80 @@ class TaskSummaryWidget extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryStatCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color iconColor;
+  final Color labelColor;
+  final Color valueColor;
+  final Color backgroundColor;
+  final bool isSmallPhone;
+  final bool isMobile;
+
+  const _SummaryStatCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.iconColor,
+    required this.labelColor,
+    required this.valueColor,
+    required this.backgroundColor,
+    required this.isSmallPhone,
+    required this.isMobile,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.all(
+        isSmallPhone
+            ? 8.0
+            : isMobile
+            ? 12.0
+            : 16.0,
+      ),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: iconColor, size: isSmallPhone ? 20.0 : 28.0),
+          SizedBox(height: isSmallPhone ? 4.0 : 8.0),
+          SizedBox(
+            width: double.infinity,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: labelColor,
+                  fontSize: isSmallPhone ? 10.0 : 13.0,
+                  height: 1.2,
+                ),
+              ),
+            ),
+          ),
+          SizedBox(height: isSmallPhone ? 2.0 : 4.0),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: TextStyle(
+                color: valueColor,
+                fontSize: isSmallPhone ? 18.0 : 24.0,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ],
       ),
