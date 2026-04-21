@@ -236,7 +236,10 @@ class _ProjectsPageState extends State<ProjectsPage> {
             print('📌 Processing project: ${project['project_name']}');
 
             // Safely convert all fields
-            final int projectId = (project['project_id'] as int?) ?? 0;
+            final int projectId =
+              _parseInt(project['project_id']) ??
+              _parseInt(project['id']) ??
+              0;
             final String projectName =
                 (project['project_name'] as String?) ?? 'Unknown';
             final String status = (project['status'] as String?) ?? 'Active';

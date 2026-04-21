@@ -819,6 +819,42 @@ class ClientSerializer(serializers.ModelSerializer):
         return value
 
 
+class BackJobReviewSerializer(serializers.ModelSerializer):
+    client_name = serializers.SerializerMethodField()
+    project_name = serializers.CharField(source='project.project_name', read_only=True)
+
+    class Meta:
+        model = models.BackJobReview
+        fields = [
+            'review_id',
+            'project',
+            'project_name',
+            'client',
+            'client_name',
+            'review_text',
+            'is_resolved',
+            'created_at',
+            'updated_at',
+        ]
+        extra_kwargs = {
+            'review_id': {'read_only': True},
+            'created_at': {'read_only': True},
+            'updated_at': {'read_only': True},
+        }
+
+    def get_client_name(self, obj):
+        if obj.client is None:
+            return 'Client'
+        first = (obj.client.first_name or '').strip()
+        last = (obj.client.last_name or '').strip()
+        name = f'{first} {last}'.strip()
+        if name:
+            return name
+        if obj.client.email:
+            return obj.client.email
+        return 'Client'
+
+
 class SubtaskSerializer(serializers.ModelSerializer):
     assigned_workers = serializers.SerializerMethodField()
 
