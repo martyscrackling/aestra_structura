@@ -1,0 +1,273 @@
+:root {
+    --structura-bg: #f3f6f8;
+    --structura-panel: #ffffff;
+    --structura-border: #d5e0e6;
+    --structura-text: #1f2b32;
+    --structura-muted: #5c6c75;
+    --structura-accent: #0f5e66;
+    --structura-accent-soft: #e5f2f4;
+}
+
+#content {
+    padding: 24px;
+}
+
+.superadmin-shell {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 20px;
+    align-items: start;
+}
+
+.superadmin-sidebar {
+    background: linear-gradient(180deg, #f8fbfc 0%, #eef5f7 100%);
+    border: 1px solid var(--structura-border);
+    border-radius: 14px;
+    padding: 16px;
+    position: sticky;
+    top: 14px;
+}
+
+.superadmin-sidebar h2 {
+    margin: 0 0 8px;
+    color: var(--structura-text);
+    font-size: 1.05rem;
+}
+
+.superadmin-sidebar p {
+    margin: 0 0 14px;
+    color: var(--structura-muted);
+    font-size: 0.88rem;
+}
+
+.superadmin-nav-link {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+        "title count"
+        "desc desc";
+    row-gap: 5px;
+    text-decoration: none;
+    color: var(--structura-text);
+    background: var(--structura-panel);
+    border: 1px solid var(--structura-border);
+    border-radius: 10px;
+    padding: 11px 12px;
+    margin-bottom: 10px;
+    transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.superadmin-nav-link:hover {
+    border-color: var(--structura-accent);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 14px rgba(15, 94, 102, 0.12);
+}
+
+.superadmin-nav-title {
+    grid-area: title;
+    font-weight: 700;
+}
+
+.superadmin-nav-meta {
+    grid-area: count;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--structura-accent);
+    background: var(--structura-accent-soft);
+    border-radius: 999px;
+    padding: 2px 8px;
+}
+
+.superadmin-nav-link small {
+    grid-area: desc;
+    color: var(--structura-muted);
+    font-size: 0.78rem;
+}
+
+.superadmin-main {
+    min-width: 0;
+}
+
+.superadmin-content-card {
+    background: var(--structura-panel);
+    border: 1px solid var(--structura-border);
+    border-radius: 14px;
+    padding: 18px;
+}
+
+.change-form .aligned label {
+    color: var(--structura-text);
+    font-weight: 600;
+}
+
+.change-form .form-row {
+    border-bottom: 1px solid #e7edf1;
+    padding: 12px 0;
+}
+
+.change-form .form-row:last-child {
+    border-bottom: 0;
+}
+
+.change-form .submit-row {
+    background: #f7fbfc;
+    border: 1px solid var(--structura-border);
+    border-radius: 10px;
+    padding: 12px;
+}
+
+.change-form fieldset.module {
+    border: 1px solid var(--structura-border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 14px;
+}
+
+.change-form fieldset.module h2,
+.change-form fieldset.module .collapse-toggle {
+    background: linear-gradient(90deg, #166f80 0%, #2a7f97 100%);
+    color: #fff;
+}
+
+.change-form input[type="text"],
+.change-form input[type="email"],
+.change-form input[type="number"],
+.change-form input[type="date"],
+.change-form input[type="datetime-local"],
+.change-form select,
+.change-form textarea {
+    border-radius: 8px;
+    border: 1px solid #c8d6de;
+    padding: 8px 10px;
+}
+
+.change-form input:focus,
+.change-form select:focus,
+.change-form textarea:focus {
+    outline: none;
+    border-color: #1a8191;
+    box-shadow: 0 0 0 3px rgba(26, 129, 145, 0.15);
+}
+
+.superadmin-activate-btn {
+    border: 1px solid #2b8f64;
+    background: #2b8f64;
+    color: #fff;
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-weight: 700;
+}
+
+.superadmin-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(16, 28, 36, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100;
+}
+
+.superadmin-modal-backdrop[hidden] {
+    display: none !important;
+}
+
+.superadmin-modal {
+    width: min(680px, 92vw);
+    background: #fff;
+    border: 1px solid var(--structura-border);
+    border-radius: 14px;
+    box-shadow: 0 18px 40px rgba(10, 26, 33, 0.2);
+    padding: 16px;
+}
+
+.superadmin-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.superadmin-modal-header h2 {
+    margin: 0;
+    font-size: 1.2rem;
+    color: var(--structura-text);
+}
+
+.superadmin-modal-close {
+    border: 0;
+    background: transparent;
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+    color: #54666f;
+}
+
+.superadmin-modal-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.superadmin-modal-grid label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: var(--structura-text);
+    font-weight: 600;
+}
+
+.superadmin-modal-grid input {
+    border: 1px solid #c8d6de;
+    border-radius: 8px;
+    padding: 8px 10px;
+}
+
+.superadmin-modal-error {
+    margin: 12px 0 0;
+    color: #b42318;
+    background: #fff2f2;
+    border: 1px solid #f3b5b5;
+    border-radius: 8px;
+    padding: 8px 10px;
+}
+
+.superadmin-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.superadmin-header-card {
+    background: var(--structura-panel);
+    border: 1px solid var(--structura-border);
+    border-radius: 14px;
+    padding: 18px;
+    margin-bottom: 14px;
+}
+
+.superadmin-header-card h1 {
+    margin: 0 0 6px;
+    font-size: 1.4rem;
+    color: var(--structura-text);
+}
+
+.superadmin-header-card p {
+    margin: 0;
+    color: var(--structura-muted);
+}
+
+@media (max-width: 980px) {
+    .superadmin-shell {
+        grid-template-columns: 1fr;
+    }
+
+    .superadmin-sidebar {
+        position: static;
+    }
+
+    .superadmin-modal-grid {
+        grid-template-columns: 1fr;
+    }
+}
