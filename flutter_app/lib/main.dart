@@ -804,8 +804,808 @@ class FeatureCard extends StatelessWidget {
 }
 
 // -------------------- PROJECT TRACKING SECTION --------------------
-class ProjectTrackingSection extends StatelessWidget {
+class ProjectTrackingSection extends StatefulWidget {
   const ProjectTrackingSection({super.key});
+
+  @override
+  State<ProjectTrackingSection> createState() => _ProjectTrackingSectionState();
+}
+
+class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
+  static const List<_SubscriptionPlanOption> _planOptions = [
+    _SubscriptionPlanOption(
+      years: 1,
+      amountLabel: '₱5,000',
+      subtitle: 'Best for annual budgeting',
+    ),
+    _SubscriptionPlanOption(
+      years: 3,
+      amountLabel: '₱13,000',
+      subtitle: 'Save more for long-term projects',
+    ),
+    _SubscriptionPlanOption(
+      years: 5,
+      amountLabel: '₱22,000',
+      subtitle: 'Maximum value for enterprise planning',
+    ),
+  ];
+
+  Future<void> _showPlanSelectionModal(BuildContext context) async {
+    final selectedPlan = await showDialog<_SubscriptionPlanOption>(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Colors.black.withValues(alpha: 0.45),
+      builder: (dialogContext) {
+        return TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0.95, end: 1),
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          builder: (context, scale, child) {
+            return Transform.scale(scale: scale, child: child);
+          },
+          child: Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: const Color(0xFFE8EDF3)),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x33101C24),
+                    blurRadius: 36,
+                    offset: Offset(0, 14),
+                  ),
+                ],
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 560),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF3E7),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.workspace_premium, color: Color(0xFFFF8C00)),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Choose a Subscription Plan',
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF0B1437),
+                                ),
+                              ),
+                              SizedBox(height: 3),
+                              Text(
+                                'Select your preferred duration to continue to payment.',
+                                style: TextStyle(color: Color(0xFF6B7280), fontSize: 13.5),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    ..._planOptions.map(
+                      (plan) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: () => Navigator.of(dialogContext).pop(plan),
+                          child: Ink(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: const Color(0xFFE5EAF0)),
+                              gradient: LinearGradient(
+                                colors: plan.years == 3
+                                    ? const [Color(0xFFFFF8EF), Color(0xFFFFFFFF)]
+                                    : const [Color(0xFFF8FBFF), Color(0xFFFFFFFF)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(
+                                            '${plan.years} year${plan.years > 1 ? 's' : ''}',
+                                            style: const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w700,
+                                              color: Color(0xFF0B1437),
+                                            ),
+                                          ),
+                                          if (plan.years == 3) ...[
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFFF8C00),
+                                                borderRadius: BorderRadius.circular(999),
+                                              ),
+                                              child: const Text(
+                                                'POPULAR',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.w700,
+                                                  fontSize: 10,
+                                                  letterSpacing: 0.3,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                      const SizedBox(height: 5),
+                                      Text(
+                                        plan.subtitle,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          color: Color(0xFF6B7280),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      plan.amountLabel,
+                                      style: const TextStyle(
+                                        fontSize: 19,
+                                        fontWeight: FontWeight.w800,
+                                        color: Color(0xFFFF8C00),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    const Icon(Icons.arrow_forward_rounded, color: Color(0xFF96A1B1)),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        icon: const Icon(Icons.close_rounded, size: 18),
+                        label: const Text('Cancel'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!context.mounted || selectedPlan == null) return;
+
+    final isAuthenticated = await _ensureAuthenticatedForCheckout(context);
+    if (!context.mounted || !isAuthenticated) return;
+
+    await _showPaymentModal(context, selectedPlan);
+  }
+
+  Future<bool> _ensureAuthenticatedForCheckout(BuildContext context) async {
+    // Product rule: always require explicit auth in modal before payment.
+    final didAuthenticate = await _showInlineAuthModal(context);
+    return didAuthenticate ?? false;
+  }
+
+  Future<bool?> _showInlineAuthModal(BuildContext context) async {
+    final authService = context.read<AuthService>();
+    final messenger = ScaffoldMessenger.of(context);
+    final loginEmailController = TextEditingController();
+    final loginPasswordController = TextEditingController();
+    final signupEmailController = TextEditingController();
+    final signupPasswordController = TextEditingController();
+    final signupConfirmController = TextEditingController();
+
+    final currentEmail = (authService.currentUser?['email'] ?? '').toString();
+    if (currentEmail.isNotEmpty) {
+      loginEmailController.text = currentEmail;
+      signupEmailController.text = currentEmail;
+    }
+
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.45),
+      builder: (dialogContext) {
+        bool isSignInMode = true;
+        bool isSubmitting = false;
+        String? errorMessage;
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: const Color(0xFFE8EDF3)),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x33101C24),
+                      blurRadius: 36,
+                      offset: Offset(0, 14),
+                    ),
+                  ],
+                ),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 520),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Sign In To Continue',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF0B1437),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Use your account before proceeding to payment.',
+                        style: TextStyle(fontSize: 13.5, color: Color(0xFF6B7280)),
+                      ),
+                      const SizedBox(height: 14),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          ChoiceChip(
+                            label: const Text('Sign In'),
+                            selected: isSignInMode,
+                            selectedColor: const Color(0xFFFFEED9),
+                            onSelected: (_) {
+                              setModalState(() {
+                                isSignInMode = true;
+                                errorMessage = null;
+                              });
+                            },
+                          ),
+                          ChoiceChip(
+                            label: const Text('Create Account'),
+                            selected: !isSignInMode,
+                            selectedColor: const Color(0xFFE8F3FF),
+                            onSelected: (_) {
+                              setModalState(() {
+                                isSignInMode = false;
+                                errorMessage = null;
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 180),
+                        switchInCurve: Curves.easeOutCubic,
+                        switchOutCurve: Curves.easeInCubic,
+                        child: isSignInMode
+                            ? Column(
+                                key: const ValueKey('checkout-signin'),
+                                children: [
+                                  TextField(
+                                    controller: loginEmailController,
+                                    keyboardType: TextInputType.emailAddress,
+                                    decoration: _modalInputDecoration('Email Address'),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  TextField(
+                                    controller: loginPasswordController,
+                                    obscureText: true,
+                                    decoration: _modalInputDecoration('Password'),
+                                  ),
+                                ],
+                              )
+                            : Column(
+                                key: const ValueKey('checkout-signup'),
+                                children: [
+                                  TextField(
+                                    controller: signupEmailController,
+                                    keyboardType: TextInputType.emailAddress,
+                                    decoration: _modalInputDecoration('Email Address'),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  TextField(
+                                    controller: signupPasswordController,
+                                    obscureText: true,
+                                    decoration: _modalInputDecoration('Create Password'),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  TextField(
+                                    controller: signupConfirmController,
+                                    obscureText: true,
+                                    decoration: _modalInputDecoration('Confirm Password'),
+                                  ),
+                                ],
+                              ),
+                      ),
+                      if (errorMessage != null) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          errorMessage!,
+                          style: const TextStyle(
+                            color: Color(0xFFB42318),
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton.icon(
+                            onPressed: isSubmitting
+                                ? null
+                                : () => Navigator.of(dialogContext).pop(false),
+                            icon: const Icon(Icons.close_rounded, size: 18),
+                            label: const Text('Cancel'),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            onPressed: isSubmitting
+                                ? null
+                                : () async {
+                                    setModalState(() {
+                                      errorMessage = null;
+                                      isSubmitting = true;
+                                    });
+
+                                    if (isSignInMode) {
+                                      final email = loginEmailController.text.trim();
+                                      final password = loginPasswordController.text.trim();
+                                      if (email.isEmpty || password.isEmpty) {
+                                        setModalState(() {
+                                          errorMessage = 'Please enter email and password.';
+                                          isSubmitting = false;
+                                        });
+                                        return;
+                                      }
+
+                                      final success = await authService.login(email, password);
+                                      if (!context.mounted) return;
+                                      if (!success) {
+                                        setModalState(() {
+                                          errorMessage = 'Invalid credentials. Please try again.';
+                                          isSubmitting = false;
+                                        });
+                                        return;
+                                      }
+
+                                      Navigator.of(dialogContext).pop(true);
+                                      messenger.showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Signed in successfully. Continue to payment.'),
+                                        ),
+                                      );
+                                      return;
+                                    }
+
+                                    final email = signupEmailController.text.trim();
+                                    final password = signupPasswordController.text.trim();
+                                    final confirm = signupConfirmController.text.trim();
+
+                                    if (email.isEmpty || password.isEmpty || confirm.isEmpty) {
+                                      setModalState(() {
+                                        errorMessage = 'Please complete all fields.';
+                                        isSubmitting = false;
+                                      });
+                                      return;
+                                    }
+
+                                    if (password.length < 6) {
+                                      setModalState(() {
+                                        errorMessage = 'Password must be at least 6 characters.';
+                                        isSubmitting = false;
+                                      });
+                                      return;
+                                    }
+
+                                    if (password != confirm) {
+                                      setModalState(() {
+                                        errorMessage = 'Passwords do not match.';
+                                        isSubmitting = false;
+                                      });
+                                      return;
+                                    }
+
+                                    final success = await authService.signup(
+                                      email,
+                                      password,
+                                      'User',
+                                      'Account',
+                                    );
+                                    if (!context.mounted) return;
+
+                                    if (!success) {
+                                      setModalState(() {
+                                        errorMessage =
+                                            'Unable to create account. Email may already exist.';
+                                        isSubmitting = false;
+                                      });
+                                      return;
+                                    }
+
+                                    Navigator.of(dialogContext).pop(true);
+                                    messenger.showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Account created. Continue to payment.'),
+                                      ),
+                                    );
+                                  },
+                            icon: isSubmitting
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
+                                  )
+                                : Icon(
+                                    isSignInMode
+                                        ? Icons.login_rounded
+                                        : Icons.person_add_alt_1_rounded,
+                                    size: 18,
+                                  ),
+                            label: Text(isSignInMode ? 'Sign In' : 'Create Account'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFFF8C00),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    loginEmailController.dispose();
+    loginPasswordController.dispose();
+    signupEmailController.dispose();
+    signupPasswordController.dispose();
+    signupConfirmController.dispose();
+
+    return result;
+  }
+
+  Future<void> _showPaymentModal(
+    BuildContext context,
+    _SubscriptionPlanOption plan,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    String paymentMethod = 'card';
+    final cardNumberController = TextEditingController();
+    final cardNameController = TextEditingController();
+    final cardExpiryController = TextEditingController();
+    final cardCvvController = TextEditingController();
+    final gcashNumberController = TextEditingController();
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.45),
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0.95, end: 1),
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              builder: (context, scale, child) {
+                return Transform.scale(scale: scale, child: child);
+              },
+              child: Dialog(
+                backgroundColor: Colors.transparent,
+                insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(color: const Color(0xFFE8EDF3)),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x33101C24),
+                        blurRadius: 36,
+                        offset: Offset(0, 14),
+                      ),
+                    ],
+                  ),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 580),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(14),
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFFFFF5EA), Color(0xFFFFFFFF)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              border: Border.all(color: const Color(0xFFFFE5CA)),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFF8C00),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(Icons.payments_rounded, color: Colors.white),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Complete Payment',
+                                        style: TextStyle(
+                                          fontSize: 21,
+                                          fontWeight: FontWeight.w800,
+                                          color: Color(0xFF0B1437),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        '${plan.amountLabel} for ${plan.years} year${plan.years > 1 ? 's' : ''} plan',
+                                        style: const TextStyle(
+                                          fontSize: 13.5,
+                                          color: Color(0xFF6B7280),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Wrap(
+                            spacing: 10,
+                            children: [
+                              ChoiceChip(
+                                avatar: const Icon(Icons.credit_card_rounded, size: 17),
+                                label: const Text('Card'),
+                                selected: paymentMethod == 'card',
+                                selectedColor: const Color(0xFFFFEED9),
+                                side: const BorderSide(color: Color(0xFFD4DEE8)),
+                                onSelected: (_) {
+                                  setModalState(() => paymentMethod = 'card');
+                                },
+                              ),
+                              ChoiceChip(
+                                avatar: const Icon(Icons.account_balance_wallet_rounded, size: 17),
+                                label: const Text('GCash'),
+                                selected: paymentMethod == 'gcash',
+                                selectedColor: const Color(0xFFE8F3FF),
+                                side: const BorderSide(color: Color(0xFFD4DEE8)),
+                                onSelected: (_) {
+                                  setModalState(() => paymentMethod = 'gcash');
+                                },
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 180),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeInCubic,
+                            child: paymentMethod == 'card'
+                                ? Column(
+                                    key: const ValueKey('card-form'),
+                                    children: [
+                                      TextField(
+                                        controller: cardNumberController,
+                                        keyboardType: TextInputType.number,
+                                        decoration: _modalInputDecoration('Card Number', hint: '1234 5678 9012 3456'),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      TextField(
+                                        controller: cardNameController,
+                                        decoration: _modalInputDecoration('Cardholder Name'),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: TextField(
+                                              controller: cardExpiryController,
+                                              decoration: _modalInputDecoration('Expiry (MM/YY)'),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: TextField(
+                                              controller: cardCvvController,
+                                              keyboardType: TextInputType.number,
+                                              obscureText: true,
+                                              decoration: _modalInputDecoration('CVV'),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  )
+                                : Column(
+                                    key: const ValueKey('gcash-form'),
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      TextField(
+                                        controller: gcashNumberController,
+                                        keyboardType: TextInputType.phone,
+                                        decoration: _modalInputDecoration(
+                                          'GCash Number',
+                                          hint: '09XXXXXXXXX',
+                                        ),
+                                      ),
+                                      const SizedBox(height: 9),
+                                      const Text(
+                                        'You will be redirected to GCash authorization after confirmation.',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Color(0xFF6B7280),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                          ),
+                          const SizedBox(height: 18),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton.icon(
+                                onPressed: () => Navigator.of(dialogContext).pop(),
+                                icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                                label: const Text('Back'),
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  final cardInvalid =
+                                      paymentMethod == 'card' &&
+                                      (cardNumberController.text.trim().isEmpty ||
+                                          cardNameController.text.trim().isEmpty ||
+                                          cardExpiryController.text.trim().isEmpty ||
+                                          cardCvvController.text.trim().isEmpty);
+
+                                  final gcashInvalid =
+                                      paymentMethod == 'gcash' &&
+                                      gcashNumberController.text.trim().isEmpty;
+
+                                  if (cardInvalid || gcashInvalid) {
+                                    messenger.showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Please complete all required payment fields.',
+                                        ),
+                                      ),
+                                    );
+                                    return;
+                                  }
+
+                                  Navigator.of(dialogContext).pop();
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Proceeding to ${paymentMethod == 'card' ? 'Card' : 'GCash'} payment for ${plan.amountLabel}.',
+                                      ),
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.lock_rounded, size: 18),
+                                label: const Text('Pay Now'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFFF8C00),
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    cardNumberController.dispose();
+    cardNameController.dispose();
+    cardExpiryController.dispose();
+    cardCvvController.dispose();
+    gcashNumberController.dispose();
+  }
+
+  InputDecoration _modalInputDecoration(String label, {String? hint}) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      filled: true,
+      fillColor: const Color(0xFFF8FAFD),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFD6E0EB)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFD6E0EB)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFFF8C00), width: 1.4),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      labelStyle: const TextStyle(color: Color(0xFF526171), fontWeight: FontWeight.w600),
+      hintStyle: const TextStyle(color: Color(0xFF97A3B2), fontSize: 13),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -823,6 +1623,26 @@ class ProjectTrackingSection extends StatelessWidget {
               children: [
                 Expanded(
                   flex: 1,
+                  child: AspectRatio(
+                    aspectRatio: 4 / 3,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: Image.asset(
+                        'assets/images/engineer.jpg',
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 40),
+                Expanded(child: _buildTextSection(context, isMobile)),
+              ],
+            )
+          else
+            Column(
+              children: [
+                AspectRatio(
+                  aspectRatio: 4 / 3,
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(20),
                     child: Image.asset(
@@ -831,22 +1651,8 @@ class ProjectTrackingSection extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 40),
-                Expanded(child: _buildTextSection(isMobile)),
-              ],
-            )
-          else
-            Column(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: Image.asset(
-                    'assets/images/engineer.jpg',
-                    fit: BoxFit.cover,
-                  ),
-                ),
                 const SizedBox(height: 20),
-                _buildTextSection(isMobile),
+                _buildTextSection(context, isMobile),
               ],
             ),
         ],
@@ -854,7 +1660,7 @@ class ProjectTrackingSection extends StatelessWidget {
     );
   }
 
-  Widget _buildTextSection(bool isMobile) {
+  Widget _buildTextSection(BuildContext context, bool isMobile) {
     return Column(
       crossAxisAlignment: isMobile
           ? CrossAxisAlignment.center
@@ -876,7 +1682,7 @@ class ProjectTrackingSection extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         ElevatedButton(
-          onPressed: () {},
+          onPressed: () => _showPlanSelectionModal(context),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.orange,
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
@@ -896,6 +1702,18 @@ class ProjectTrackingSection extends StatelessWidget {
       ],
     );
   }
+}
+
+class _SubscriptionPlanOption {
+  final int years;
+  final String amountLabel;
+  final String subtitle;
+
+  const _SubscriptionPlanOption({
+    required this.years,
+    required this.amountLabel,
+    required this.subtitle,
+  });
 }
 
 // -------------------- FOOTER SECTION --------------------
