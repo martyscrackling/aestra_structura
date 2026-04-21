@@ -172,6 +172,8 @@ class _ReportsPageState extends State<ReportsPage> {
   List<ReportHistoryEntry> _history = [];
   List<_SupervisorProjectOption> _supervisorProjects = [];
   int? _selectedProjectId;
+  final Map<int, List<Map<String, dynamic>>> _workersCacheByProject =
+      <int, List<Map<String, dynamic>>>{};
 
   final _money = NumberFormat.currency(
     locale: 'en_PH',
@@ -181,8 +183,50 @@ class _ReportsPageState extends State<ReportsPage> {
 
   Future<void> _initializeReportScope() async {
     await _loadSupervisorProjects();
-    await _refreshReports();
-    await _loadReportsHistory();
+    await _restorePersistedSalaryDate();
+    await Future.wait<void>([
+      _refreshReports(),
+      _loadReportsHistory(),
+    ]);
+  }
+
+  String _salaryDatePrefsKey({required int projectId}) {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentUser = authService.currentUser ?? <String, dynamic>{};
+    final supervisorId =
+        _toInt(currentUser['supervisor_id']) ??
+        _toInt(currentUser['user_id']) ??
+        _toInt(currentUser['id']) ??
+        0;
+    return 'supervisor_salary_date_v1:$supervisorId:$projectId';
+  }
+
+  Future<void> _persistSalaryDate() async {
+    final projectId = _activeProjectId();
+    if (projectId == null) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _salaryDatePrefsKey(projectId: projectId),
+      _dateString(_salaryDate),
+    );
+  }
+
+  Future<void> _restorePersistedSalaryDate() async {
+    final projectId = _activeProjectId();
+    if (projectId == null) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_salaryDatePrefsKey(projectId: projectId));
+    if (raw == null || raw.trim().isEmpty) return;
+
+    final parsed = DateTime.tryParse(raw.trim());
+    if (parsed == null) return;
+
+    if (!mounted) return;
+    setState(() {
+      _salaryDate = DateTime(parsed.year, parsed.month, parsed.day);
+    });
   }
 
   int? _activeProjectId() {
@@ -397,6 +441,53 @@ class _ReportsPageState extends State<ReportsPage> {
     return int.tryParse(value?.toString() ?? '');
   }
 
+  int? _workerIdFromWorkerPayload(Map<String, dynamic> worker) {
+    return _toInt(worker['fieldworker_id'] ?? worker['id']);
+  }
+
+  void _syncSavedWorkerPayroll({
+    required int workerId,
+    required double cashAdvanceBalance,
+    required double deductionPerSalary,
+  }) {
+    final projectId = _activeProjectId();
+
+    setState(() {
+      _rows = _rows
+          .map((row) {
+            if (row.fieldWorkerId != workerId) return row;
+            return AttendanceReport(
+              fieldWorkerId: row.fieldWorkerId,
+              name: row.name,
+              role: row.role,
+              totalDaysPresent: row.totalDaysPresent,
+              totalHours: row.totalHours,
+              overtimeHours: row.overtimeHours,
+              cashAdvance: cashAdvanceBalance,
+              deduction: deductionPerSalary,
+              hourlyRate: row.hourlyRate,
+              sssDeduction: row.sssDeduction,
+              philhealthDeduction: row.philhealthDeduction,
+              pagibigDeduction: row.pagibigDeduction,
+            );
+          })
+          .toList(growable: false);
+
+      if (projectId != null) {
+        final cachedWorkers = _workersCacheByProject[projectId];
+        if (cachedWorkers != null) {
+          for (final worker in cachedWorkers) {
+            if (_workerIdFromWorkerPayload(worker) == workerId) {
+              worker['cash_advance_balance'] = cashAdvanceBalance;
+              worker['deduction_per_salary'] = deductionPerSalary;
+              break;
+            }
+          }
+        }
+      }
+    });
+  }
+
   double _toDouble(dynamic value) {
     if (value is double) return value;
     if (value is num) return value.toDouble();
@@ -550,6 +641,13 @@ class _ReportsPageState extends State<ReportsPage> {
   }
 
   Future<List<Map<String, dynamic>>> _fetchWorkers(int projectId) async {
+    final cached = _workersCacheByProject[projectId];
+    if (cached != null && cached.isNotEmpty) {
+      return cached
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList(growable: false);
+    }
+
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentUser = authService.currentUser ?? <String, dynamic>{};
     final typeOrRole = (currentUser['type'] ?? currentUser['role'] ?? '')
@@ -559,15 +657,45 @@ class _ReportsPageState extends State<ReportsPage> {
     final userId = _toInt(currentUser['user_id']);
     final supervisorId =
         _toInt(currentUser['supervisor_id']) ??
+        _toInt(currentUser['id']) ??
         ((typeOrRole == 'supervisor') ? userId : null);
 
-    final candidateQueries = <String>[];
+    final workersById = <int, Map<String, dynamic>>{};
+
+    // Use the same source as Attendance page so subtask-assigned workers are included.
+    try {
+      final dateStr = _dateString(_weekEnd);
+      final overviewQuery = supervisorId != null
+          ? 'attendance/supervisor-overview/?project_id=$projectId&attendance_date=$dateStr&supervisor_id=$supervisorId'
+          : 'attendance/supervisor-overview/?project_id=$projectId&attendance_date=$dateStr';
+      final overviewResponse = await http.get(AppConfig.apiUri(overviewQuery));
+      if (overviewResponse.statusCode == 200) {
+        final decoded = jsonDecode(overviewResponse.body);
+        if (decoded is Map<String, dynamic> && decoded['field_workers'] is List) {
+          final overviewWorkers = (decoded['field_workers'] as List<dynamic>)
+              .whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item))
+              .toList(growable: false);
+          for (final worker in overviewWorkers) {
+            final workerId = _workerIdFromWorkerPayload(worker);
+            if (workerId == null) continue;
+            workersById[workerId] = worker;
+          }
+        }
+      }
+    } catch (_) {
+      // Continue with field-workers endpoints.
+    }
+
+    final candidateQueries = <String>{
+      'field-workers/?project_id=$projectId',
+      if (userId != null) 'field-workers/?project_id=$projectId&user_id=$userId',
+    };
     if (supervisorId != null) {
       candidateQueries.add(
         'field-workers/?project_id=$projectId&supervisor_id=$supervisorId',
       );
     }
-    candidateQueries.add('field-workers/?project_id=$projectId');
 
     int? lastStatus;
     for (final query in candidateQueries) {
@@ -577,17 +705,37 @@ class _ReportsPageState extends State<ReportsPage> {
         continue;
       }
 
-      final workersData = jsonDecode(workersResponse.body) as List<dynamic>;
-      final workers = workersData.whereType<Map<String, dynamic>>().toList();
-      if (workers.isNotEmpty) {
-        return workers;
+      final decoded = jsonDecode(workersResponse.body);
+      final workersData = decoded is List
+          ? decoded
+          : (decoded is Map<String, dynamic> && decoded['results'] is List
+                ? decoded['results'] as List<dynamic>
+                : const <dynamic>[]);
+
+      final workers = workersData
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+      for (final worker in workers) {
+        final workerId = _workerIdFromWorkerPayload(worker);
+        if (workerId == null) continue;
+        workersById[workerId] = worker;
       }
     }
 
-    if (lastStatus != null && lastStatus != 200) {
+    if (workersById.isEmpty && lastStatus != null && lastStatus != 200) {
       throw Exception('Failed to load workers ($lastStatus)');
     }
-    return <Map<String, dynamic>>[];
+
+    final mergedWorkers = workersById.values
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList(growable: false);
+    if (mergedWorkers.isNotEmpty) {
+      _workersCacheByProject[projectId] = mergedWorkers
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList(growable: false);
+    }
+    return mergedWorkers;
   }
 
   Future<List<Map<String, dynamic>>> _fetchAttendanceForDate(
@@ -778,16 +926,32 @@ class _ReportsPageState extends State<ReportsPage> {
     final countedPresencePerDay = <String>{};
     final workerIds = workersById.keys.toSet();
 
+    final dates = <DateTime>[];
     for (
       DateTime date = DateTime(start.year, start.month, start.day);
       !date.isAfter(end);
       date = date.add(const Duration(days: 1))
     ) {
-      final attendance = await _fetchAttendanceForDate(
-        projectId,
-        date,
-        workerIds,
-      );
+      dates.add(date);
+    }
+
+    final attendanceByDate = await Future.wait<({
+      DateTime date,
+      List<Map<String, dynamic>> attendance,
+    })>(
+      dates.map((date) async {
+        final attendance = await _fetchAttendanceForDate(
+          projectId,
+          date,
+          workerIds,
+        );
+        return (date: date, attendance: attendance);
+      }),
+    );
+
+    for (final daily in attendanceByDate) {
+      final date = daily.date;
+      final attendance = daily.attendance;
       final mergedByWorker = <int, Map<String, dynamic>>{};
 
       for (final record in attendance) {
@@ -982,6 +1146,38 @@ class _ReportsPageState extends State<ReportsPage> {
     }
   }
 
+  Future<void> _refreshReportsInBackground() async {
+    if (!mounted) return;
+
+    try {
+      final projectId = _activeProjectId();
+      if (projectId == null) return;
+
+      DateTime start = _weekStart;
+      if (_isSalaryDayMode) {
+        start = await _resolveSalaryCycleStartDate(
+          projectId: projectId,
+          endDate: _weekEnd,
+        );
+      }
+
+      final reports = await _buildReportsForRange(
+        projectId: projectId,
+        start: start,
+        end: _weekEnd,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _rows = reports;
+        _effectiveReportStart = start;
+        _loadError = null;
+      });
+    } catch (_) {
+      // Keep current UI values when silent background refresh fails.
+    }
+  }
+
   Future<void> _loadReportsHistory() async {
     if (!mounted) return;
     setState(() {
@@ -998,28 +1194,32 @@ class _ReportsPageState extends State<ReportsPage> {
         return;
       }
 
-      final history = <ReportHistoryEntry>[];
-      for (var i = 1; i <= 4; i++) {
+      final windows = List.generate(4, (index) {
+        final i = index + 1;
         final end = _weekStart.subtract(Duration(days: 7 * (i - 1) + 1));
         final start = end.subtract(const Duration(days: 6));
-        final rows = await _buildReportsForRange(
-          projectId: projectId,
-          start: start,
-          end: end,
-        );
-        final totalAmount = rows.fold<double>(
-          0,
-          (sum, r) => sum + r.computedSalary,
-        );
-        history.add(
-          ReportHistoryEntry(
-            start: start,
-            end: end,
+        return (start: start, end: end);
+      });
+
+      final history = await Future.wait<ReportHistoryEntry>(
+        windows.map((window) async {
+          final rows = await _buildReportsForRange(
+            projectId: projectId,
+            start: window.start,
+            end: window.end,
+          );
+          final totalAmount = rows.fold<double>(
+            0,
+            (sum, r) => sum + r.computedSalary,
+          );
+          return ReportHistoryEntry(
+            start: window.start,
+            end: window.end,
             totalAmount: totalAmount,
             workersCount: rows.where((r) => r.totalHours > 0).length,
-          ),
-        );
-      }
+          );
+        }),
+      );
 
       if (!mounted) return;
       setState(() {
@@ -1290,6 +1490,7 @@ class _ReportsPageState extends State<ReportsPage> {
       setState(() {
         _salaryDate = DateTime(d.year, d.month, d.day);
       });
+      await _persistSalaryDate();
     }
   }
 
@@ -1298,6 +1499,7 @@ class _ReportsPageState extends State<ReportsPage> {
     setState(() {
       _selectedProjectId = projectId;
     });
+    await _restorePersistedSalaryDate();
     await _refreshReports();
     await _loadReportsHistory();
   }
@@ -1495,11 +1697,16 @@ class _ReportsPageState extends State<ReportsPage> {
                     color: Colors.green,
                   ),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  'Cash Adv. Deduct: $deductionStr',
-                  style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-                ),
+                if (_isSalaryDayMode) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'Cash Adv. Deduct: $deductionStr',
+                    style: const TextStyle(
+                      color: Colors.redAccent,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
               ],
             ),
           ],
@@ -2284,18 +2491,19 @@ class _ReportsPageState extends State<ReportsPage> {
                                               textAlign: TextAlign.right,
                                             ),
                                           ),
-                                          Expanded(
-                                            flex: 2,
-                                            child: Text(
-                                              'Cash Adv. Deduct',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.w700,
-                                                color: Colors.grey[800],
-                                                fontSize: 13,
+                                          if (_isSalaryDayMode)
+                                            Expanded(
+                                              flex: 2,
+                                              child: Text(
+                                                'Cash Adv. Deduct',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w700,
+                                                  color: Colors.grey[800],
+                                                  fontSize: 13,
+                                                ),
+                                                textAlign: TextAlign.right,
                                               ),
-                                              textAlign: TextAlign.right,
                                             ),
-                                          ),
                                           Expanded(
                                             flex: 3,
                                             child: Text(
@@ -2607,25 +2815,26 @@ class _ReportsPageState extends State<ReportsPage> {
                                                       ),
 
                                                       // Other Deductions (Cash Advance + Other)
-                                                      Expanded(
-                                                        flex: 2,
-                                                        child: Text(
-                                                          _money.format(
-                                                            r.deduction,
+                                                      if (_isSalaryDayMode)
+                                                        Expanded(
+                                                          flex: 2,
+                                                          child: Text(
+                                                            _money.format(
+                                                              r.deduction,
+                                                            ),
+                                                            style:
+                                                                const TextStyle(
+                                                                  color: Colors
+                                                                      .redAccent,
+                                                                  fontSize: 12,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w600,
+                                                                ),
+                                                            textAlign:
+                                                                TextAlign.right,
                                                           ),
-                                                          style:
-                                                              const TextStyle(
-                                                                color: Colors
-                                                                    .redAccent,
-                                                                fontSize: 12,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w600,
-                                                              ),
-                                                          textAlign:
-                                                              TextAlign.right,
                                                         ),
-                                                      ),
 
                                                       // Net Salary
                                                       Expanded(
@@ -3269,7 +3478,18 @@ class _ReportsPageState extends State<ReportsPage> {
                                             cashAdvanceController.text = '0.00';
                                           }
                                         });
-                                        await _refreshReports();
+                                        if (mounted) {
+                                          _syncSavedWorkerPayroll(
+                                            workerId: r.fieldWorkerId,
+                                            cashAdvanceBalance:
+                                                editableCashAdvance,
+                                            deductionPerSalary:
+                                                effectiveDeduction,
+                                          );
+                                          unawaited(
+                                            _refreshReportsInBackground(),
+                                          );
+                                        }
                                         if (!mounted) return;
                                         ScaffoldMessenger.of(
                                           context,

@@ -47,10 +47,12 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
   }
 
   Future<void> _loadDashboardSummary() async {
-    setState(() {
-      _isLoadingSummary = true;
-      _summaryError = null;
-    });
+    if (!_isLoadingSummary || _summaryError != null) {
+      setState(() {
+        _isLoadingSummary = true;
+        _summaryError = null;
+      });
+    }
 
     try {
       final authService = AuthService();
@@ -236,7 +238,7 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
   }
 
   Widget _buildBody({required double screenWidth, required LayoutType layout}) {
-    if (_isLoadingPrefs || _isLoadingSummary) {
+    if (_isLoadingSummary) {
       return const Center(
         child: Padding(
           padding: EdgeInsets.symmetric(vertical: 24),
@@ -246,7 +248,7 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
     }
 
     final totalProjects = _summary?.totalProjects ?? 0;
-    final shouldShowWelcome = _showWelcome && totalProjects <= 0;
+    final shouldShowWelcome = !_isLoadingPrefs && _showWelcome && totalProjects <= 0;
 
     if (shouldShowWelcome) {
       return _buildWelcomeEmptyState(layout: layout);

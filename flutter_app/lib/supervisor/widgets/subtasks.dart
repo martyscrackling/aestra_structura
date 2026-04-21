@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import '../../services/app_config.dart';
+import '../../services/supervisor_dashboard_data_service.dart';
 
 class SubtasksWidget extends StatefulWidget {
   final int phaseId;
@@ -27,20 +25,9 @@ class _SubtasksWidgetState extends State<SubtasksWidget> {
   }
 
   Future<List<Map<String, dynamic>>> _fetchSubtasks() async {
-    try {
-      final response = await http.get(
-        AppConfig.apiUri('subtasks/?phase_id=${widget.phaseId}'),
-      );
-
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        return List<Map<String, dynamic>>.from(data);
-      }
-      return [];
-    } catch (e) {
-      print('Error fetching subtasks: $e');
-      return [];
-    }
+    return SupervisorDashboardDataService.fetchSubtasksForPhase(
+      widget.phaseId,
+    );
   }
 
   IconData _getStatusIcon(String status) {

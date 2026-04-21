@@ -1,9 +1,5 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-
-import '../../services/app_config.dart';
+import '../../services/supervisor_dashboard_data_service.dart';
 
 class Tasks extends StatefulWidget {
   final int? projectId;
@@ -16,6 +12,7 @@ class Tasks extends StatefulWidget {
 
 class _TasksState extends State<Tasks> {
   Future<List<Map<String, dynamic>>>? _tasksFuture;
+  bool _showAllTasks = false;
 
   @override
   void initState() {
@@ -28,6 +25,7 @@ class _TasksState extends State<Tasks> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.projectId != widget.projectId) {
       _tasksFuture = _fetchTasks();
+      _showAllTasks = false;
     }
   }
 
@@ -35,32 +33,18 @@ class _TasksState extends State<Tasks> {
     final projectId = widget.projectId;
     if (projectId == null) return [];
 
-    try {
-      final response = await http.get(
-        AppConfig.apiUri('subtasks/?project_id=$projectId'),
-      );
+    final tasks = await SupervisorDashboardDataService.fetchTasksForProject(
+      projectId,
+    );
 
-      if (response.statusCode != 200) return [];
-
-      final decoded = jsonDecode(response.body);
-      if (decoded is! List) return [];
-
-      final tasks = decoded
-          .whereType<Map<String, dynamic>>()
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
-
-      tasks.sort((a, b) {
+    final sorted = List<Map<String, dynamic>>.from(tasks)
+      ..sort((a, b) {
         final aUpdated = (a['updated_at'] as String?) ?? '';
         final bUpdated = (b['updated_at'] as String?) ?? '';
         return bUpdated.compareTo(aUpdated);
       });
 
-      // Keep the widget compact
-      return tasks.take(4).toList(growable: false);
-    } catch (_) {
-      return [];
-    }
+    return sorted;
   }
 
   String _statusLabel(String raw) {
@@ -99,18 +83,77 @@ class _TasksState extends State<Tasks> {
     }
   }
 
-  double _progressFor(String status) {
+  bool _isCompletedStatus(dynamic rawStatus) {
+    return (rawStatus ?? '').toString().trim().toLowerCase() == 'completed';
+  }
+
+  int? _phaseIdForTask(Map<String, dynamic> task) {
+    final phaseRaw = task['phase'] ?? task['phase_id'];
+    if (phaseRaw is int) return phaseRaw;
+    return int.tryParse(phaseRaw?.toString() ?? '');
+  }
+
+  Map<int, ({int total, int completed})> _buildPhaseStats(
+    List<Map<String, dynamic>> tasks,
+  ) {
+    final stats = <int, ({int total, int completed})>{};
+
+    for (final task in tasks) {
+      final phaseId = _phaseIdForTask(task);
+      if (phaseId == null) continue;
+
+      final current = stats[phaseId] ?? (total: 0, completed: 0);
+      final nextTotal = current.total + 1;
+      final nextCompleted =
+          current.completed + (_isCompletedStatus(task['status']) ? 1 : 0);
+      stats[phaseId] = (total: nextTotal, completed: nextCompleted);
+    }
+
+    return stats;
+  }
+
+  double _progressForTask(
+    Map<String, dynamic> task,
+    String status,
+    Map<int, ({int total, int completed})> phaseStats,
+  ) {
+    final dynamic raw =
+        task['progress'] ?? task['progress_percent'] ?? task['completion'];
+
+    if (raw is num) {
+      final value = raw.toDouble();
+      if (value > 1) {
+        return (value / 100).clamp(0.0, 1.0);
+      }
+      return value.clamp(0.0, 1.0);
+    }
+
+    if (raw is String) {
+      final parsed = double.tryParse(raw.trim());
+      if (parsed != null) {
+        if (parsed > 1) {
+          return (parsed / 100).clamp(0.0, 1.0);
+        }
+        return parsed.clamp(0.0, 1.0);
+      }
+    }
+
+    final phaseId = _phaseIdForTask(task);
+    final phaseStat = phaseId != null ? phaseStats[phaseId] : null;
+    if (phaseStat != null && phaseStat.total > 0) {
+      final ratio = phaseStat.completed / phaseStat.total;
+      return ratio.clamp(0.0, 1.0);
+    }
+
     switch (status) {
       case "Completed":
         return 1.0;
       case "In Progress":
-        return 0.45;
+        return 0.5;
       case "In Review":
-        return 0.78;
+        return 0.8;
       case "Pending":
-        return 0.12;
       case "Assigned":
-        return 0.2;
       default:
         return 0.0;
     }
@@ -162,12 +205,31 @@ class _TasksState extends State<Tasks> {
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                   ),
                 ),
-                TextButton(
-                  onPressed: () {},
-                  child: const Text(
-                    "View all",
-                    style: TextStyle(fontSize: 13, color: Color(0xFFFF6F00)),
-                  ),
+                FutureBuilder<List<Map<String, dynamic>>>(
+                  future: _tasksFuture,
+                  builder: (context, snapshot) {
+                    final count = snapshot.data?.length ?? 0;
+                    final canToggle = count > 4;
+
+                    return TextButton(
+                      onPressed: canToggle
+                          ? () {
+                              setState(() {
+                                _showAllTasks = !_showAllTasks;
+                              });
+                            }
+                          : null,
+                      child: Text(
+                        _showAllTasks ? 'Show less' : 'View all',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: canToggle
+                              ? const Color(0xFFFF6F00)
+                              : Colors.grey,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -193,15 +255,24 @@ class _TasksState extends State<Tasks> {
                     );
                   }
 
+                  final phaseStats = _buildPhaseStats(tasks);
+                  final visibleTasks = _showAllTasks
+                      ? tasks
+                      : tasks.take(4).toList(growable: false);
+
                   return Column(
-                    children: tasks.map((task) {
+                    children: visibleTasks.map((task) {
                       final title =
                           (task['title'] as String?) ?? 'Untitled task';
                       final rawStatus =
                           (task['status'] as String?) ?? 'pending';
                       final status = _statusLabel(rawStatus);
                       final color = getStatusColor(status);
-                      final progress = _progressFor(status);
+                      final progress = _progressForTask(
+                        task,
+                        status,
+                        phaseStats,
+                      );
 
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),

@@ -4,6 +4,12 @@ import 'package:http/http.dart' as http;
 import 'app_config.dart';
 
 class InventoryService {
+  static const Duration _supervisorLookupTtl = Duration(seconds: 60);
+  static final Map<String, _InventoryListCacheEntry> _listCacheByKey =
+      <String, _InventoryListCacheEntry>{};
+  static final Map<String, Future<List<Map<String, dynamic>>>>
+  _inFlightListByKey = <String, Future<List<Map<String, dynamic>>>>{};
+
   // ── List items ──────────────────────────────────────────────────────────
   static Future<List<Map<String, dynamic>>> getInventoryItems({
     required dynamic userId,
@@ -323,26 +329,86 @@ class InventoryService {
   }) async {
     String qp = 'supervisor_id=$supervisorId';
     if (projectId != null) qp += '&project_id=$projectId';
-    final uri = AppConfig.apiUri('field-workers/?$qp');
-    final response = await http.get(uri).timeout(const Duration(seconds: 30));
-    if (response.statusCode == 200) {
-      final List<dynamic> data = jsonDecode(response.body);
-      return data.cast<Map<String, dynamic>>();
-    }
-    throw Exception('Failed to load field workers (${response.statusCode})');
+    final endpoint = 'field-workers/?$qp';
+    final cacheKey = 'supervisor-workers:$supervisorId:${projectId ?? 'all'}';
+
+    return _getCachedList(
+      cacheKey: cacheKey,
+      endpoint: endpoint,
+      errorPrefix: 'Failed to load field workers',
+    );
   }
 
   // ── Get projects for a supervisor ───────────────────────────────────────
   static Future<List<Map<String, dynamic>>> getProjectsForSupervisor({
     required dynamic supervisorId,
   }) async {
-    final uri = AppConfig.apiUri('projects/?supervisor_id=$supervisorId');
-    final response = await http.get(uri).timeout(const Duration(seconds: 30));
-    if (response.statusCode == 200) {
-      final List<dynamic> data = jsonDecode(response.body);
-      return data.cast<Map<String, dynamic>>();
+    final endpoint = 'projects/?supervisor_id=$supervisorId';
+    final cacheKey = 'supervisor-projects:$supervisorId';
+
+    return _getCachedList(
+      cacheKey: cacheKey,
+      endpoint: endpoint,
+      errorPrefix: 'Failed to load projects',
+    );
+  }
+
+  static Future<List<Map<String, dynamic>>> _getCachedList({
+    required String cacheKey,
+    required String endpoint,
+    required String errorPrefix,
+  }) async {
+    final now = DateTime.now();
+    final cached = _listCacheByKey[cacheKey];
+    if (cached != null && now.difference(cached.cachedAt) <= _supervisorLookupTtl) {
+      return cached.items;
     }
-    throw Exception('Failed to load projects (${response.statusCode})');
+
+    final existing = _inFlightListByKey[cacheKey];
+    if (existing != null) {
+      return existing;
+    }
+
+    final request = _requestList(endpoint: endpoint, errorPrefix: errorPrefix);
+    _inFlightListByKey[cacheKey] = request;
+
+    try {
+      final items = await request;
+      _listCacheByKey[cacheKey] = _InventoryListCacheEntry(
+        items: items,
+        cachedAt: DateTime.now(),
+      );
+      return items;
+    } finally {
+      if (identical(_inFlightListByKey[cacheKey], request)) {
+        _inFlightListByKey.remove(cacheKey);
+      }
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> _requestList({
+    required String endpoint,
+    required String errorPrefix,
+  }) async {
+    final uri = AppConfig.apiUri(endpoint);
+    final response = await http.get(uri).timeout(const Duration(seconds: 30));
+    if (response.statusCode != 200) {
+      throw Exception('$errorPrefix (${response.statusCode})');
+    }
+
+    final decoded = jsonDecode(response.body);
+    final rawList = decoded is List
+        ? decoded
+        : (decoded is Map<String, dynamic> && decoded['results'] is List
+              ? decoded['results'] as List<dynamic>
+              : (decoded is Map<String, dynamic> && decoded['data'] is List
+                    ? decoded['data'] as List<dynamic>
+                    : const <dynamic>[]));
+
+    return rawList
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList(growable: false);
   }
 
   // ── Get projects for a PM ───────────────────────────────────────────────
@@ -418,4 +484,11 @@ class InventoryService {
       );
     }
   }
+}
+
+class _InventoryListCacheEntry {
+  final List<Map<String, dynamic>> items;
+  final DateTime cachedAt;
+
+  const _InventoryListCacheEntry({required this.items, required this.cachedAt});
 }

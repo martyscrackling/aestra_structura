@@ -112,11 +112,10 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
     });
 
     try {
-      final projectProgressPoints = await _loadSupervisorProjectProgress(
-        authService,
-      );
+      final projectProgressFuture = _loadSupervisorProjectProgress(authService);
 
       if (projectId == null) {
+        final projectProgressPoints = await projectProgressFuture;
         if (!mounted) return;
         setState(() {
           _phases = [];
@@ -127,21 +126,22 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
         return;
       }
 
-      // Fetch project details
-      final projectResponse = await http.get(
-        AppConfig.apiUri('projects/$projectId/'),
-      );
+      final projectInfoFuture = _fetchProjectInfo(projectId: projectId);
+      final phasesFuture = _fetchPhasesForProject(projectId: projectId);
 
-      if (projectResponse.statusCode == 200) {
-        _projectInfo = jsonDecode(projectResponse.body) as Map<String, dynamic>;
-      }
+      final resolved = await Future.wait<dynamic>([
+        projectProgressFuture,
+        projectInfoFuture,
+        phasesFuture,
+      ]);
 
-      final response = await http.get(
-        AppConfig.apiUri('phases/?project_id=$projectId'),
-      );
-      if (response.statusCode == 200) {
-        final List<dynamic> payload =
-            jsonDecode(response.body) as List<dynamic>;
+      final projectProgressPoints =
+          (resolved[0] as List<ProjectProgressPoint>?) ??
+          <ProjectProgressPoint>[];
+      final projectInfo = resolved[1] as Map<String, dynamic>?;
+      final payload = (resolved[2] as List<dynamic>?) ?? <dynamic>[];
+
+      if (payload.isNotEmpty) {
         final List<Phase> phases = payload.map((phaseJson) {
           final Map<String, dynamic> phaseMap =
               phaseJson as Map<String, dynamic>;
@@ -182,6 +182,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
 
         if (!mounted) return;
         setState(() {
+          _projectInfo = projectInfo;
           _phases = phases;
           _projectProgressPoints = projectProgressPoints;
           _isLoadingPhases = false;
@@ -189,8 +190,9 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
       } else {
         if (!mounted) return;
         setState(() {
+          _projectInfo = projectInfo;
           _phasesError =
-              'Failed to load phases (status ${response.statusCode}).';
+              'Failed to load phases.';
           _projectProgressPoints = projectProgressPoints;
           _isLoadingPhases = false;
         });
@@ -203,6 +205,35 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
         _isLoadingPhases = false;
       });
     }
+  }
+
+  Future<Map<String, dynamic>?> _fetchProjectInfo({required dynamic projectId}) async {
+    try {
+      final projectResponse = await http.get(
+        AppConfig.apiUri('projects/$projectId/'),
+      );
+      if (projectResponse.statusCode == 200) {
+        return jsonDecode(projectResponse.body) as Map<String, dynamic>;
+      }
+    } catch (_) {
+      // Keep existing fallback behavior.
+    }
+    return null;
+  }
+
+  Future<List<dynamic>> _fetchPhasesForProject({required dynamic projectId}) async {
+    try {
+      final response = await http.get(
+        AppConfig.apiUri('phases/?project_id=$projectId'),
+      );
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        return _parsePhasesPayload(decoded);
+      }
+    } catch (_) {
+      // Keep existing fallback behavior.
+    }
+    return <dynamic>[];
   }
 
   Future<List<ProjectProgressPoint>> _loadSupervisorProjectProgress(
@@ -236,15 +267,14 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
     final decoded = jsonDecode(projectsResponse.body);
     final projects = _parseProjectsPayload(decoded);
 
-    final List<ProjectProgressPoint> progressPoints = [];
-    for (final project in projects) {
+    final progressFutures = projects.map((project) async {
       final projectIdRaw = project['project_id'];
-      if (projectIdRaw == null) continue;
+      if (projectIdRaw == null) return null;
 
       final int projectId = projectIdRaw is int
           ? projectIdRaw
           : int.tryParse(projectIdRaw.toString()) ?? -1;
-      if (projectId <= 0) continue;
+      if (projectId <= 0) return null;
 
       final projectName =
           (project['project_name'] as String?)?.trim().isNotEmpty == true
@@ -258,26 +288,36 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
       try {
         final phasesResponse = await http.get(AppConfig.apiUri(phasesUrl));
         if (phasesResponse.statusCode != 200) {
-          progressPoints.add(
-            ProjectProgressPoint(projectName: projectName, progress: 0),
-          );
-          continue;
+          return ProjectProgressPoint(projectName: projectName, progress: 0);
         }
 
-        final List<dynamic> phasesPayload =
-            jsonDecode(phasesResponse.body) as List<dynamic>;
+        final phasesPayload = _parsePhasesPayload(
+          jsonDecode(phasesResponse.body),
+        );
         final progress = _calculateProjectProgress(phasesPayload);
-        progressPoints.add(
-          ProjectProgressPoint(projectName: projectName, progress: progress),
-        );
+        return ProjectProgressPoint(projectName: projectName, progress: progress);
       } catch (_) {
-        progressPoints.add(
-          ProjectProgressPoint(projectName: projectName, progress: 0),
-        );
+        return ProjectProgressPoint(projectName: projectName, progress: 0);
+      }
+    }).toList(growable: false);
+
+    final resolved = await Future.wait<ProjectProgressPoint?>(progressFutures);
+    return resolved.whereType<ProjectProgressPoint>().toList(growable: false);
+  }
+
+  List<dynamic> _parsePhasesPayload(dynamic payload) {
+    if (payload is List) {
+      return payload;
+    }
+    if (payload is Map<String, dynamic>) {
+      if (payload['results'] is List) {
+        return payload['results'] as List<dynamic>;
+      }
+      if (payload['data'] is List) {
+        return payload['data'] as List<dynamic>;
       }
     }
-
-    return progressPoints;
+    return <dynamic>[];
   }
 
   List<Map<String, dynamic>> _parseProjectsPayload(dynamic payload) {

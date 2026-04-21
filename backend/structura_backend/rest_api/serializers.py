@@ -114,6 +114,11 @@ class ProjectSerializer(serializers.ModelSerializer):
     province_name = serializers.CharField(source='province.name', read_only=True)
     city_name = serializers.CharField(source='city.name', read_only=True)
     barangay_name = serializers.CharField(source='barangay.name', read_only=True)
+    client_first_name = serializers.CharField(source='client.first_name', read_only=True)
+    client_last_name = serializers.CharField(source='client.last_name', read_only=True)
+    client_email = serializers.CharField(source='client.email', read_only=True)
+    client_phone_number = serializers.CharField(source='client.phone_number', read_only=True)
+    client_photo = serializers.CharField(source='client.photo', read_only=True)
     
     class Meta:
         model = models.Project
@@ -137,6 +142,11 @@ class ProjectSerializer(serializers.ModelSerializer):
             'end_date',
             'duration_days',
             'client',
+            'client_first_name',
+            'client_last_name',
+            'client_email',
+            'client_phone_number',
+            'client_photo',
             'supervisor',
             'budget',
             'status',
@@ -883,39 +893,18 @@ class SubtaskSerializer(serializers.ModelSerializer):
         workers = []
         for assignment in assignments:
             worker = assignment.field_worker
+            if worker is None:
+                continue
+            worker_id = worker.fieldworker_id
             workers.append({
                 'assignment_id': assignment.assignment_id,
-                'fieldworker_id': worker.fieldworker_id,
+                # Keep common id aliases for compatibility across app screens.
+                'fieldworker_id': worker_id,
+                'id': worker_id,
                 'first_name': worker.first_name,
-                'middle_name': worker.middle_name,
                 'last_name': worker.last_name,
-                'phone_number': worker.phone_number,
-                'birthdate': worker.birthdate,
-                'region': worker.region_id,
-                'province': worker.province_id,
-                'city': worker.city_id,
-                'barangay': worker.barangay_id,
                 'role': worker.role,
-                'sss_id': worker.sss_id,
-                'philhealth_id': worker.philhealth_id,
-                'pagibig_id': worker.pagibig_id,
-                'payrate': worker.payrate,
-                'cash_advance_balance': worker.cash_advance_balance,
-                'deduction_per_salary': worker.deduction_per_salary,
-                'weekly_salary': worker.weekly_salary,
-                'sss_weekly_min': worker.sss_weekly_min,
-                'philhealth_weekly_min': worker.philhealth_weekly_min,
-                'pagibig_weekly_min': worker.pagibig_weekly_min,
-                'sss_weekly_topup': worker.sss_weekly_topup,
-                'philhealth_weekly_topup': worker.philhealth_weekly_topup,
-                'pagibig_weekly_topup': worker.pagibig_weekly_topup,
-                'sss_weekly_total': worker.sss_weekly_total,
-                'philhealth_weekly_total': worker.philhealth_weekly_total,
-                'pagibig_weekly_total': worker.pagibig_weekly_total,
-                'total_weekly_deduction': worker.total_weekly_deduction,
-                'net_weekly_pay': worker.net_weekly_pay,
                 'photo': worker.photo.url if worker.photo else None,
-                'created_at': worker.created_at,
             })
         return workers
 

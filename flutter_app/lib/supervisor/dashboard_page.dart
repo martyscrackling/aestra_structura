@@ -93,15 +93,14 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
       final decoded = jsonDecode(projectsResponse.body);
       final projects = _parseProjectsPayload(decoded);
 
-      final List<_ProjectProgressPoint> progressPoints = [];
-      for (final project in projects) {
+      final progressFutures = projects.map((project) async {
         final projectIdRaw = project['project_id'];
-        if (projectIdRaw == null) continue;
+        if (projectIdRaw == null) return null;
 
         final int projectId = projectIdRaw is int
             ? projectIdRaw
             : int.tryParse(projectIdRaw.toString()) ?? -1;
-        if (projectId <= 0) continue;
+        if (projectId <= 0) return null;
 
         final projectName =
             (project['project_name'] as String?)?.trim().isNotEmpty == true
@@ -115,24 +114,23 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
         try {
           final phasesResponse = await http.get(AppConfig.apiUri(phasesUrl));
           if (phasesResponse.statusCode != 200) {
-            progressPoints.add(
-              _ProjectProgressPoint(projectName: projectName, progress: 0),
-            );
-            continue;
+            return _ProjectProgressPoint(projectName: projectName, progress: 0);
           }
 
-          final List<dynamic> phasesPayload =
-              jsonDecode(phasesResponse.body) as List<dynamic>;
+          final phasesPayload = _parsePhasesPayload(
+            jsonDecode(phasesResponse.body),
+          );
           final progress = _calculateProjectProgress(phasesPayload);
-          progressPoints.add(
-            _ProjectProgressPoint(projectName: projectName, progress: progress),
-          );
+          return _ProjectProgressPoint(projectName: projectName, progress: progress);
         } catch (_) {
-          progressPoints.add(
-            _ProjectProgressPoint(projectName: projectName, progress: 0),
-          );
+          return _ProjectProgressPoint(projectName: projectName, progress: 0);
         }
-      }
+      }).toList(growable: false);
+
+      final resolved = await Future.wait<_ProjectProgressPoint?>(progressFutures);
+      final progressPoints = resolved
+          .whereType<_ProjectProgressPoint>()
+          .toList(growable: false);
 
       if (!mounted) return;
       setState(() {
@@ -159,6 +157,21 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
       return [Map<String, dynamic>.from(payload)];
     }
     return [];
+  }
+
+  List<dynamic> _parsePhasesPayload(dynamic payload) {
+    if (payload is List) {
+      return payload;
+    }
+    if (payload is Map<String, dynamic>) {
+      if (payload['results'] is List) {
+        return payload['results'] as List<dynamic>;
+      }
+      if (payload['data'] is List) {
+        return payload['data'] as List<dynamic>;
+      }
+    }
+    return <dynamic>[];
   }
 
   int _calculateProjectProgress(List<dynamic> phasesPayload) {

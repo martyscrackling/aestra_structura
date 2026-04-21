@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.contrib.auth.hashers import check_password
 from django.views.decorators.csrf import csrf_exempt
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Prefetch
 from django.db import transaction
 from django.db.models.functions import TruncDate
 from django.utils import timezone
@@ -1027,13 +1027,11 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
                 .values_list('project_id', flat=True)
             )
             queryset = models.FieldWorker.objects.filter(
-                Q(project_id__in=sv_project_ids)
-                | Q(subtask_assignments__subtask__phase__project_id__in=sv_project_ids)
+                Q(subtask_assignments__subtask__phase__project_id__in=sv_project_ids)
             )
             if project_id:
                 queryset = queryset.filter(
-                    Q(project_id=project_id)
-                    | Q(subtask_assignments__subtask__phase__project_id=project_id)
+                    Q(subtask_assignments__subtask__phase__project_id=project_id)
                 )
             return queryset.distinct()
 
@@ -1179,7 +1177,11 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'], url_path='active-projects')
     def active_projects(self, request, pk=None):
-        """Get active subtask assignments with their phase and project details."""
+        """Get active subtask assignments with their phase and project details.
+
+        By default this returns only explicit subtask assignments.
+        Set include_direct_project=true to include fallback direct project rows.
+        """
         try:
             print(f"\n{'='*80}")
             print(f"🔍 active_projects endpoint called with pk={pk}")
@@ -1204,6 +1206,10 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
                 )
             
             print(f"   Direct project assignment: {field_worker.project_id}")
+
+            include_direct_project = str(
+                request.query_params.get('include_direct_project', 'false')
+            ).strip().lower() in ('1', 'true', 'yes', 'y', 'on')
             
             assignments_data = []
             
@@ -1256,8 +1262,8 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
                 except Exception as e:
                     print(f"  #{i} ❌ Error: {e}")
             
-            # Method 2: Direct project assignment (if no subtask assignments, show direct project)
-            if len(assignments_data) == 0 and field_worker.project_id:
+            # Optional method 2: include direct project only when explicitly requested.
+            if include_direct_project and len(assignments_data) == 0 and field_worker.project_id:
                 print(f"⚠️  No subtask assignments, checking direct project assignment...")
                 try:
                     project = field_worker.project_id
@@ -1329,7 +1335,12 @@ class ClientViewSet(viewsets.ModelViewSet):
         project_id = self.request.query_params.get('project_id')
         if pm_user_id is None:
             if project_id:
-                return models.Client.objects.filter(project_id=project_id)
+                # Support both legacy direct link (Client.project_id) and
+                # canonical assignment (Project.client -> Client).
+                return models.Client.objects.filter(
+                    Q(project_id=project_id)
+                    | Q(assigned_projects__project_id=project_id)
+                ).distinct()
             return models.Client.objects.none()
 
         # Prefer explicit ownership; fall back to project ownership for older rows.
@@ -1502,7 +1513,7 @@ class PhaseViewSet(viewsets.ModelViewSet):
     serializer_class = PhaseSerializer
 
     def get_queryset(self):
-        queryset = models.Phase.objects.all()
+        queryset = models.Phase.objects.all().order_by('-created_at', '-phase_id')
         project_id = self.request.query_params.get('project_id')
         if project_id:
             queryset = queryset.filter(project_id=project_id)
@@ -1578,7 +1589,80 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         if field_worker_id:
             queryset = queryset.filter(field_worker_id=field_worker_id)
         
-        return queryset.order_by('-attendance_date')
+        return queryset.select_related('field_worker', 'project').order_by('-attendance_date')
+
+    @action(detail=False, methods=['get'], url_path='supervisor-overview')
+    def supervisor_overview(self, request):
+        project_id_raw = request.query_params.get('project_id')
+        attendance_date = request.query_params.get('attendance_date')
+        supervisor_id_raw = request.query_params.get('supervisor_id')
+
+        if not project_id_raw:
+            return Response(
+                {'detail': 'project_id is required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            project_id = int(project_id_raw)
+        except (TypeError, ValueError):
+            return Response(
+                {'detail': 'project_id must be an integer'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        workers_qs = models.FieldWorker.objects.filter(
+            Q(project_id=project_id)
+            | Q(subtask_assignments__subtask__phase__project_id=project_id)
+        )
+
+        if supervisor_id_raw:
+            try:
+                supervisor_id = int(supervisor_id_raw)
+            except (TypeError, ValueError):
+                return Response(
+                    {'detail': 'supervisor_id must be an integer'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            supervisor_project_ids = models.Project.objects.filter(
+                Q(supervisor_id=supervisor_id) | Q(supervisors__supervisor_id=supervisor_id)
+            ).values_list('project_id', flat=True)
+
+            workers_qs = workers_qs.filter(
+                Q(project_id__in=supervisor_project_ids)
+                | Q(subtask_assignments__subtask__phase__project_id__in=supervisor_project_ids)
+            )
+
+        workers_qs = workers_qs.select_related('project_id').distinct()
+
+        attendance_qs = models.Attendance.objects.filter(project_id=project_id)
+        if attendance_date:
+            attendance_qs = attendance_qs.filter(attendance_date=attendance_date)
+
+        attendance_qs = attendance_qs.select_related('field_worker', 'project').order_by('-attendance_date')
+
+        field_workers_payload = [
+            {
+                'fieldworker_id': worker.fieldworker_id,
+                'project_id': worker.project_id_id,
+                'first_name': worker.first_name,
+                'last_name': worker.last_name,
+                'role': worker.role,
+                'photo': worker.photo.url if getattr(worker, 'photo', None) else None,
+            }
+            for worker in workers_qs.order_by('first_name', 'last_name', 'fieldworker_id')
+        ]
+
+        return Response(
+            {
+                'project_id': project_id,
+                'attendance_date': attendance_date,
+                'field_workers': field_workers_payload,
+                'attendance': AttendanceSerializer(attendance_qs, many=True).data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 @csrf_exempt
@@ -1603,6 +1687,7 @@ def pm_dashboard_summary(request):
     # Projects (recent)
     projects_qs = (
         models.Project.objects.filter(user_id=user_id)
+        .select_related('barangay', 'city', 'province')
         .annotate(
             total_subtasks=Count('phases__subtasks', distinct=True),
             completed_subtasks=Count(
@@ -1646,10 +1731,16 @@ def pm_dashboard_summary(request):
 
     # Tasks summary
     subtasks_qs = models.Subtask.objects.filter(phase__project__user_id=user_id)
-    total_subtasks = subtasks_qs.count()
-    completed_subtasks = subtasks_qs.filter(status='completed').count()
-    in_progress_subtasks = subtasks_qs.filter(status='in_progress').count()
-    pending_subtasks = subtasks_qs.filter(status='pending').count()
+    task_counts = subtasks_qs.aggregate(
+        total=Count('subtask_id'),
+        completed=Count('subtask_id', filter=Q(status='completed')),
+        in_progress=Count('subtask_id', filter=Q(status='in_progress')),
+        pending=Count('subtask_id', filter=Q(status='pending')),
+    )
+    total_subtasks = int(task_counts.get('total') or 0)
+    completed_subtasks = int(task_counts.get('completed') or 0)
+    in_progress_subtasks = int(task_counts.get('in_progress') or 0)
+    pending_subtasks = int(task_counts.get('pending') or 0)
     assigned_subtasks = (
         subtasks_qs.filter(assigned_workers__isnull=False).distinct().count()
     )
@@ -1691,20 +1782,28 @@ def pm_dashboard_summary(request):
     by_role = {row['role']: int(row['count']) for row in field_workers_by_role}
 
     # Notifications / Task Today are derived from most recently updated open subtasks
-    open_subtasks_count = subtasks_qs.exclude(status='completed').count()
+    open_subtasks_qs = subtasks_qs.exclude(status='completed')
+    open_subtasks_count = open_subtasks_qs.count()
 
     recent_open_subtasks = list(
-        subtasks_qs.exclude(status='completed')
+        open_subtasks_qs
         .select_related('phase__project')
-        .prefetch_related('assigned_workers__field_worker')
+        .prefetch_related(
+            Prefetch(
+                'assigned_workers',
+                queryset=models.SubtaskFieldWorker.objects.select_related('field_worker'),
+            )
+        )
         .order_by('-updated_at')[:20]
     )
 
     recent_open_items = []
     for st in recent_open_subtasks:
         assigned_workers = []
-        for assignment in st.assigned_workers.select_related('field_worker').all():
+        for assignment in st.assigned_workers.all():
             w = assignment.field_worker
+            if w is None:
+                continue
             assigned_workers.append(
                 {
                     'assignment_id': assignment.assignment_id,

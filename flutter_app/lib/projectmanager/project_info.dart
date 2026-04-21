@@ -234,6 +234,106 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     return completedSubtasks / totalSubtasks;
   }
 
+  Future<Map<String, dynamic>?> _fetchClientInfo({
+    required int? clientId,
+    required dynamic userId,
+    required String scopeSuffix,
+    Map<String, dynamic>? embeddedClient,
+  }) async {
+    if (clientId != null) {
+      final candidateClientUrls = <String>[
+        if (userId != null) 'clients/$clientId/?user_id=$userId',
+        'clients/$clientId/?project_id=${widget.projectId}',
+        'clients/$clientId/',
+      ];
+
+      for (final url in candidateClientUrls) {
+        try {
+          final clientResponse = await http.get(AppConfig.apiUri(url));
+          if (clientResponse.statusCode == 200) {
+            final decoded = jsonDecode(clientResponse.body);
+            final mapped = _firstRecordFromResponse(decoded);
+            if (mapped != null) return mapped;
+          }
+        } catch (_) {
+          // Continue to next candidate URL.
+        }
+      }
+    }
+
+    try {
+      final listResponse = await http.get(
+        AppConfig.apiUri('clients/?project_id=${widget.projectId}$scopeSuffix'),
+      );
+      if (listResponse.statusCode == 200) {
+        final decoded = jsonDecode(listResponse.body);
+        final mapped = _firstRecordFromResponse(decoded);
+        if (mapped != null) return mapped;
+      }
+    } catch (_) {
+      // Fall through to embedded client fallback.
+    }
+
+    return embeddedClient;
+  }
+
+  Future<List<dynamic>?> _fetchProjectPhases({required dynamic userId}) async {
+    try {
+      final phasesUrl = userId != null
+          ? 'phases/?project_id=${widget.projectId}&user_id=$userId'
+          : 'phases/?project_id=${widget.projectId}';
+      final phasesResponse = await http.get(AppConfig.apiUri(phasesUrl));
+      if (phasesResponse.statusCode == 200) {
+        final phases = jsonDecode(phasesResponse.body) as List<dynamic>;
+        phases.sort(_comparePhasesNewestFirst);
+        return phases;
+      }
+    } catch (_) {
+      // Keep existing phases if fetch fails.
+    }
+    return null;
+  }
+
+  int _phaseSortScore(dynamic value) {
+    if (value is int) return value;
+    if (value is String) {
+      final asInt = int.tryParse(value);
+      if (asInt != null) return asInt;
+      final asDate = DateTime.tryParse(value);
+      if (asDate != null) return asDate.millisecondsSinceEpoch;
+    }
+    return 0;
+  }
+
+  int _comparePhasesNewestFirst(dynamic a, dynamic b) {
+    final aMap = a is Map
+        ? a.cast<String, dynamic>()
+        : const <String, dynamic>{};
+    final bMap = b is Map
+        ? b.cast<String, dynamic>()
+        : const <String, dynamic>{};
+
+    final createdCompare = _phaseSortScore(
+      bMap['created_at'],
+    ).compareTo(_phaseSortScore(aMap['created_at']));
+    if (createdCompare != 0) return createdCompare;
+
+    return _phaseSortScore(
+      bMap['phase_id'],
+    ).compareTo(_phaseSortScore(aMap['phase_id']));
+  }
+
+  Future<void> _refreshProjectPlanPreview() async {
+    final authUser = AuthService().currentUser;
+    final userId = authUser?['user_id'];
+    final refreshedPhases = await _fetchProjectPhases(userId: userId);
+    if (!mounted || refreshedPhases == null) return;
+
+    setState(() {
+      _phases = refreshedPhases;
+    });
+  }
+
   Future<void> _fetchProjectDetails() async {
     try {
       final authUser = AuthService().currentUser;
@@ -269,130 +369,38 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         return;
       }
 
-      final rawProjectData = jsonDecode(projectResponse.body);
-      final projectData = _extractProjectPayload(rawProjectData);
-      if (projectData == null) {
-        setState(() {
-          _error = 'Unexpected project response format';
-          _isLoading = false;
-        });
-        return;
-      }
-
-      final projectOwnerUserId = _toInt(projectData['user']);
-      final clientId = _toInt(
-        projectData['client'] ?? projectData['client_id'],
-      );
+      final projectData = jsonDecode(projectResponse.body);
+      final clientId = _toInt(projectData['client']);
+      Map<String, dynamic>? embeddedClient;
 
       // Some APIs embed client details directly in project payload.
-      final embeddedClient = projectData['client'];
-      if (embeddedClient is Map<String, dynamic>) {
-        _clientInfo = Map<String, dynamic>.from(embeddedClient);
+      final embeddedClientRaw = projectData['client'];
+      if (embeddedClientRaw is Map) {
+        embeddedClient = Map<String, dynamic>.from(
+          embeddedClientRaw.cast<String, dynamic>(),
+        );
       }
+
+      final clientFuture = _fetchClientInfo(
+        clientId: clientId,
+        userId: userId,
+        scopeSuffix: scopeSuffix,
+        embeddedClient: embeddedClient,
+      );
+      final phasesFuture = _fetchProjectPhases(userId: userId);
+
+      final resolved = await Future.wait<dynamic>([clientFuture, phasesFuture]);
+      final resolvedClient = resolved[0] as Map<String, dynamic>?;
+      final resolvedPhases = resolved[1] as List<dynamic>?;
 
       setState(() {
         _projectInfo = projectData;
-      });
-
-      print('🔍 Project ID: ${widget.projectId}');
-      print('🔍 Client ID: $clientId');
-      print('🔍 Project Owner User ID: $projectOwnerUserId');
-
-      // Fetch client information
-      if (clientId != null) {
-        try {
-          final candidateClientUrls = <String>[
-            if (userId != null) 'clients/$clientId/?user_id=$userId',
-            if (projectOwnerUserId != null)
-              'clients/$clientId/?user_id=$projectOwnerUserId',
-            'clients/$clientId/?project_id=${widget.projectId}',
-            'clients/$clientId/',
-          ];
-
-          bool fetched = false;
-          for (final url in candidateClientUrls) {
-            final clientResponse = await http.get(AppConfig.apiUri(url));
-            if (clientResponse.statusCode == 200) {
-              final decoded = jsonDecode(clientResponse.body);
-              final mapped = _firstRecordFromResponse(decoded);
-              if (mapped != null) {
-                setState(() {
-                  _clientInfo = mapped;
-                  print('✅ Client info fetched: ${_clientInfo?['email']}');
-                });
-                fetched = true;
-                break;
-              }
-            } else {
-              print(
-                '❌ Failed to fetch client: ${clientResponse.statusCode} ${clientResponse.body}',
-              );
-            }
-          }
-
-          if (!fetched) {
-            // Fallback: if FK is only set on the Client side, fetch by project_id.
-            final listResponse = await http.get(
-              AppConfig.apiUri(
-                'clients/?project_id=${widget.projectId}$scopeSuffix',
-              ),
-            );
-            if (listResponse.statusCode == 200) {
-              final decoded = jsonDecode(listResponse.body);
-              final mapped = _firstRecordFromResponse(decoded);
-              if (mapped != null) {
-                setState(() {
-                  _clientInfo = mapped;
-                });
-              }
-            }
-          }
-        } catch (e) {
-          print('⚠️ Error fetching client: $e');
-        }
-      } else {
-        // Fallback: project has no client FK set, but a Client may still be linked via Client.project_id
-        try {
-          final listResponse = await http.get(
-            AppConfig.apiUri(
-              'clients/?project_id=${widget.projectId}$scopeSuffix',
-            ),
-          );
-          if (listResponse.statusCode == 200) {
-            final decoded = jsonDecode(listResponse.body);
-            final mapped = _firstRecordFromResponse(decoded);
-            if (mapped != null) {
-              setState(() {
-                _clientInfo = mapped;
-              });
-            }
-          }
-        } catch (e) {
-          print('⚠️ Error fetching client list fallback: $e');
-        }
-      }
-
-      // Fetch phases for accurate progress calculation
-      try {
-        final phasesUrl = userId != null
-            ? 'phases/?project_id=${widget.projectId}&user_id=$userId'
-            : 'phases/?project_id=${widget.projectId}';
-        final phasesResponse = await http.get(AppConfig.apiUri(phasesUrl));
-        if (phasesResponse.statusCode == 200) {
-          setState(() {
-            _phases = jsonDecode(phasesResponse.body) as List<dynamic>;
-            print('Phases fetched: ${_phases?.length ?? 0} phases');
-          });
-        }
-      } catch (e) {
-        print('Error fetching phases: $e');
-      }
-
-      setState(() {
+        _clientInfo = resolvedClient;
+        _phases = resolvedPhases ?? _phases;
+        _error = null;
         _isLoading = false;
       });
     } catch (e) {
-      print('Error: $e');
       setState(() {
         _error = 'Error loading project details: $e';
         _isLoading = false;
@@ -887,8 +895,8 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                   ),
                   const SizedBox(width: 12),
                   ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
+                    onPressed: () async {
+                      await Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (context) =>
@@ -903,6 +911,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                               ),
                         ),
                       );
+                      await _refreshProjectPlanPreview();
                     },
                     icon: const Icon(Icons.arrow_forward, size: 16),
                     label: const Text("Manage Project Plan"),

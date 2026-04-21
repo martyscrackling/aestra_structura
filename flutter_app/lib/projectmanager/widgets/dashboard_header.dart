@@ -100,6 +100,14 @@ class _NotificationMenu extends StatefulWidget {
 }
 
 class _NotificationMenuState extends State<_NotificationMenu> {
+  static const Duration _cacheTtl = Duration(seconds: 45);
+  static int? _cachedUserId;
+  static DateTime? _cachedAt;
+  static List<_UiNotification> _cachedItems = const [];
+  static int _cachedBadgeCount = 0;
+  static Future<PmDashboardSummary>? _inFlightSummary;
+  static int? _inFlightUserId;
+
   final PmDashboardService _dashboardService = PmDashboardService();
 
   bool _loading = true;
@@ -114,11 +122,7 @@ class _NotificationMenuState extends State<_NotificationMenu> {
   }
 
   Future<void> _refresh() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
+    Future<PmDashboardSummary>? activeSummaryFuture;
     try {
       final authService = AuthService();
       final userIdRaw = authService.currentUser?['user_id'];
@@ -127,20 +131,64 @@ class _NotificationMenuState extends State<_NotificationMenu> {
           : int.tryParse(userIdRaw?.toString() ?? '');
 
       if (userId == null) {
+        if (!mounted) return;
         setState(() {
           _items = const [];
+          _badgeCount = 0;
+          _error = null;
           _loading = false;
         });
         return;
       }
 
-      final summary = await _dashboardService.fetchSummary(userId: userId);
+      final now = DateTime.now();
+      final hasFreshCache =
+          _cachedUserId == userId &&
+          _cachedAt != null &&
+          now.difference(_cachedAt!) <= _cacheTtl;
+
+      if (hasFreshCache) {
+        if (!mounted) return;
+        setState(() {
+          _items = _cachedItems;
+          _badgeCount = _cachedBadgeCount;
+          _error = null;
+          _loading = false;
+        });
+        return;
+      }
+
+      if (mounted) {
+        setState(() {
+          _loading = true;
+          _error = null;
+        });
+      }
+
+      Future<PmDashboardSummary> summaryFuture;
+      if (_inFlightSummary != null && _inFlightUserId == userId) {
+        summaryFuture = _inFlightSummary!;
+      } else {
+        final created = _dashboardService.fetchSummary(userId: userId);
+        _inFlightSummary = created;
+        _inFlightUserId = userId;
+        summaryFuture = created;
+      }
+      activeSummaryFuture = summaryFuture;
+
+      final summary = await summaryFuture;
       final derived = _deriveFromSummary(summary);
+
+      _cachedUserId = userId;
+      _cachedAt = DateTime.now();
+      _cachedItems = derived;
+      _cachedBadgeCount = summary.notificationsCount;
 
       if (!mounted) return;
       setState(() {
         _items = derived;
         _badgeCount = summary.notificationsCount;
+        _error = null;
         _loading = false;
       });
     } catch (e) {
@@ -151,6 +199,11 @@ class _NotificationMenuState extends State<_NotificationMenu> {
         _error = e.toString();
         _loading = false;
       });
+    } finally {
+      if (activeSummaryFuture != null && identical(_inFlightSummary, activeSummaryFuture)) {
+        _inFlightSummary = null;
+        _inFlightUserId = null;
+      }
     }
   }
 

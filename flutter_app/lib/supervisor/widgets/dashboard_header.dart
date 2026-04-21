@@ -169,6 +169,12 @@ class _SupervisorNotificationMenu extends StatefulWidget {
 
 class _SupervisorNotificationMenuState
     extends State<_SupervisorNotificationMenu> {
+  static const Duration _cacheTtl = Duration(seconds: 45);
+  static final Map<int, _SupervisorNotifCacheEntry> _cacheByProject =
+      <int, _SupervisorNotifCacheEntry>{};
+  static final Map<int, Future<_SupervisorNotifSnapshot>> _inFlightByProject =
+      <int, Future<_SupervisorNotifSnapshot>>{};
+
   bool _loading = true;
   String? _error;
   int _badgeCount = 0;
@@ -181,11 +187,6 @@ class _SupervisorNotificationMenuState
   }
 
   Future<void> _refresh() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
     try {
       final auth = AuthService();
       final projectIdRaw = auth.currentUser?['project_id'];
@@ -203,52 +204,49 @@ class _SupervisorNotificationMenuState
         return;
       }
 
-      final response = await http.get(
-        AppConfig.apiUri('subtasks/?project_id=$projectId'),
+      final cached = _cacheByProject[projectId];
+      if (cached != null &&
+          DateTime.now().difference(cached.cachedAt) <= _cacheTtl) {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _error = null;
+          _badgeCount = cached.snapshot.badgeCount;
+          _items = cached.snapshot.items;
+        });
+        return;
+      }
+
+      if (mounted) {
+        setState(() {
+          _loading = true;
+          _error = null;
+        });
+      }
+
+      final inFlight = _inFlightByProject[projectId];
+      final Future<_SupervisorNotifSnapshot> future;
+      if (inFlight != null) {
+        future = inFlight;
+      } else {
+        final created = _fetchNotifications(projectId: projectId);
+        _inFlightByProject[projectId] = created;
+        future = created;
+      }
+
+      final snapshot = await future;
+
+      _cacheByProject[projectId] = _SupervisorNotifCacheEntry(
+        snapshot: snapshot,
+        cachedAt: DateTime.now(),
       );
-
-      if (response.statusCode != 200) {
-        throw Exception('Failed to load: ${response.statusCode}');
-      }
-
-      final decoded = jsonDecode(response.body);
-      if (decoded is! List) {
-        throw Exception('Unexpected response');
-      }
-
-      final all = decoded.whereType<Map<String, dynamic>>().toList();
-      final open = all
-          .where(
-            (t) => (t['status']?.toString().toLowerCase() ?? '') != 'completed',
-          )
-          .toList();
-
-      open.sort((a, b) {
-        final aUpdated = (a['updated_at'] as String?) ?? '';
-        final bUpdated = (b['updated_at'] as String?) ?? '';
-        return bUpdated.compareTo(aUpdated);
-      });
-
-      final items = <_SupervisorUiNotification>[];
-      for (final t in open.take(3)) {
-        final title = (t['title'] as String?) ?? 'Untitled task';
-        final status = (t['status'] as String?) ?? 'pending';
-        items.add(
-          _SupervisorUiNotification(
-            title: title,
-            time: _relativeTime(
-              DateTime.tryParse((t['updated_at'] as String?) ?? ''),
-            ),
-            color: _statusColor(status),
-          ),
-        );
-      }
 
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _badgeCount = open.length;
-        _items = items;
+        _error = null;
+        _badgeCount = snapshot.badgeCount;
+        _items = snapshot.items;
       });
     } catch (e) {
       if (!mounted) return;
@@ -258,7 +256,63 @@ class _SupervisorNotificationMenuState
         _items = const [];
         _error = e.toString();
       });
+    } finally {
+      final auth = AuthService();
+      final projectIdRaw = auth.currentUser?['project_id'];
+      final projectId = projectIdRaw is int
+          ? projectIdRaw
+          : int.tryParse(projectIdRaw?.toString() ?? '');
+      if (projectId != null) {
+        _inFlightByProject.remove(projectId);
+      }
     }
+  }
+
+  Future<_SupervisorNotifSnapshot> _fetchNotifications({
+    required int projectId,
+  }) async {
+    final response = await http.get(
+      AppConfig.apiUri('subtasks/?project_id=$projectId'),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load: ${response.statusCode}');
+    }
+
+    final decoded = jsonDecode(response.body);
+    final rawList = decoded is List
+        ? decoded
+        : (decoded is Map<String, dynamic> && decoded['results'] is List
+              ? decoded['results'] as List<dynamic>
+              : const <dynamic>[]);
+
+    final all = rawList.whereType<Map<String, dynamic>>().toList();
+    final open = all
+        .where((t) => (t['status']?.toString().toLowerCase() ?? '') != 'completed')
+        .toList();
+
+    open.sort((a, b) {
+      final aUpdated = (a['updated_at'] as String?) ?? '';
+      final bUpdated = (b['updated_at'] as String?) ?? '';
+      return bUpdated.compareTo(aUpdated);
+    });
+
+    final items = <_SupervisorUiNotification>[];
+    for (final t in open.take(3)) {
+      final title = (t['title'] as String?) ?? 'Untitled task';
+      final status = (t['status'] as String?) ?? 'pending';
+      items.add(
+        _SupervisorUiNotification(
+          title: title,
+          time: _relativeTime(
+            DateTime.tryParse((t['updated_at'] as String?) ?? ''),
+          ),
+          color: _statusColor(status),
+        ),
+      );
+    }
+
+    return _SupervisorNotifSnapshot(badgeCount: open.length, items: items);
   }
 
   Color _statusColor(String statusRaw) {
@@ -428,6 +482,26 @@ class _SupervisorUiNotification {
     required this.title,
     required this.time,
     required this.color,
+  });
+}
+
+class _SupervisorNotifSnapshot {
+  final int badgeCount;
+  final List<_SupervisorUiNotification> items;
+
+  const _SupervisorNotifSnapshot({
+    required this.badgeCount,
+    required this.items,
+  });
+}
+
+class _SupervisorNotifCacheEntry {
+  final _SupervisorNotifSnapshot snapshot;
+  final DateTime cachedAt;
+
+  const _SupervisorNotifCacheEntry({
+    required this.snapshot,
+    required this.cachedAt,
   });
 }
 

@@ -34,41 +34,12 @@ class ProjectInfosPage extends StatefulWidget {
   State<ProjectInfosPage> createState() => _ProjectInfosPageState();
 }
 
-class BackJobReview {
-  BackJobReview({
-    required this.reviewId,
-    required this.clientName,
-    required this.reviewText,
-    this.createdAt,
-    required this.isResolved,
-  });
-
-  final int reviewId;
-  final String clientName;
-  final String reviewText;
-  final DateTime? createdAt;
-  final bool isResolved;
-
-  factory BackJobReview.fromJson(Map<String, dynamic> json) {
-    return BackJobReview(
-      reviewId: (json['review_id'] as num?)?.toInt() ?? 0,
-      clientName: (json['client_name'] as String?) ?? 'Client',
-      reviewText: (json['review_text'] as String?) ?? '',
-      createdAt: DateTime.tryParse((json['created_at'] as String?) ?? ''),
-      isResolved: json['is_resolved'] == true,
-    );
-  }
-}
-
 class _ProjectInfosPageState extends State<ProjectInfosPage> {
   Map<String, dynamic>? _clientInfo;
   Map<String, dynamic>? _projectInfo;
   List<dynamic>? _phases;
-  List<BackJobReview> _backJobReviews = [];
   bool _isLoading = true;
-  bool _isLoadingBackJobReviews = true;
   String? _error;
-  String? _backJobReviewsError;
   bool _showDaysLeftReminder = true;
 
   @override
@@ -258,6 +229,7 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
       }
 
       if (projectResponse == null) {
+        if (!mounted) return;
         setState(() {
           _error = 'Failed to load project details';
           _isLoading = false;
@@ -265,104 +237,75 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
         return;
       }
 
-      final rawProjectData = jsonDecode(projectResponse.body);
-      final projectData = _extractProjectPayload(rawProjectData);
-      if (projectData == null) {
+      final decodedProject = jsonDecode(projectResponse.body);
+      if (decodedProject is! Map<String, dynamic>) {
+        if (!mounted) return;
         setState(() {
-          _error = 'Unexpected project response format';
+          _error = 'Unexpected project details response';
           _isLoading = false;
         });
         return;
       }
 
-      final projectOwnerUserId = _toInt(projectData['user']);
-      final clientId = _toInt(
-        projectData['client'] ?? projectData['client_id'],
-      );
+      final projectData = decodedProject;
+      final clientId = _toInt(projectData['client']);
       final embeddedClient = projectData['client'];
+      Map<String, dynamic>? fallbackClientInfo;
       if (embeddedClient is Map<String, dynamic>) {
-        _clientInfo = Map<String, dynamic>.from(embeddedClient);
+        fallbackClientInfo = Map<String, dynamic>.from(embeddedClient);
+      } else {
+        final fallbackFirstName = _asNonEmptyString(
+          projectData['client_first_name'],
+        );
+        final fallbackLastName = _asNonEmptyString(
+          projectData['client_last_name'],
+        );
+        final fallbackEmail = _asNonEmptyString(projectData['client_email']);
+        final fallbackPhone = _asNonEmptyString(
+          projectData['client_phone_number'],
+        );
+        final fallbackPhoto = _asNonEmptyString(projectData['client_photo']);
+        final hasFallbackClient =
+            fallbackFirstName != null ||
+            fallbackLastName != null ||
+            fallbackEmail != null ||
+            fallbackPhone != null ||
+            fallbackPhoto != null;
+
+        if (hasFallbackClient) {
+          fallbackClientInfo = {
+            'client_id': clientId,
+            'first_name': fallbackFirstName ?? '',
+            'last_name': fallbackLastName ?? '',
+            'email': fallbackEmail ?? 'N/A',
+            'phone_number': fallbackPhone ?? 'N/A',
+            'photo': fallbackPhoto,
+          };
+        }
       }
 
+      final futures = await Future.wait<dynamic>([
+        _fetchClientInfo(
+          userId: userId,
+          clientId: clientId,
+          scopeSuffix: scopeSuffix,
+        ),
+        _fetchPhases(userId: userId),
+      ]);
+
+      final resolvedClient = futures[0] as Map<String, dynamic>?;
+      final resolvedPhases =
+          (futures[1] as List<dynamic>?) ?? const <dynamic>[];
+
+      if (!mounted) return;
       setState(() {
         _projectInfo = projectData;
-      });
-
-      if (clientId != null) {
-        final candidateClientUrls = <String>[
-          if (userId != null) 'clients/$clientId/?user_id=$userId',
-          if (projectOwnerUserId != null)
-            'clients/$clientId/?user_id=$projectOwnerUserId',
-          'clients/$clientId/?project_id=${widget.projectId}',
-          'clients/$clientId/',
-        ];
-
-        bool fetched = false;
-        for (final url in candidateClientUrls) {
-          final response = await http.get(AppConfig.apiUri(url));
-          if (response.statusCode == 200) {
-            final mapped = _firstRecordFromResponse(jsonDecode(response.body));
-            if (mapped != null) {
-              setState(() {
-                _clientInfo = mapped;
-              });
-              fetched = true;
-              break;
-            }
-          }
-        }
-
-        if (!fetched) {
-          final listResponse = await http.get(
-            AppConfig.apiUri(
-              'clients/?project_id=${widget.projectId}$scopeSuffix',
-            ),
-          );
-          if (listResponse.statusCode == 200) {
-            final mapped = _firstRecordFromResponse(
-              jsonDecode(listResponse.body),
-            );
-            if (mapped != null) {
-              setState(() {
-                _clientInfo = mapped;
-              });
-            }
-          }
-        }
-      } else {
-        final listResponse = await http.get(
-          AppConfig.apiUri(
-            'clients/?project_id=${widget.projectId}$scopeSuffix',
-          ),
-        );
-        if (listResponse.statusCode == 200) {
-          final mapped = _firstRecordFromResponse(
-            jsonDecode(listResponse.body),
-          );
-          if (mapped != null) {
-            setState(() {
-              _clientInfo = mapped;
-            });
-          }
-        }
-      }
-
-      final phasesUrl = userId != null
-          ? 'phases/?project_id=${widget.projectId}&user_id=$userId'
-          : 'phases/?project_id=${widget.projectId}';
-      final phasesResponse = await http.get(AppConfig.apiUri(phasesUrl));
-      if (phasesResponse.statusCode == 200) {
-        setState(() {
-          _phases = jsonDecode(phasesResponse.body) as List<dynamic>;
-        });
-      }
-
-      await _fetchBackJobReviews();
-
-      setState(() {
+        _clientInfo = resolvedClient ?? fallbackClientInfo;
+        _phases = resolvedPhases;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = 'Error loading project details: $e';
         _isLoading = false;
@@ -370,135 +313,70 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
     }
   }
 
-  Future<void> _fetchBackJobReviews() async {
-    try {
-      final response = await http.get(
-        AppConfig.apiUri('back-job-reviews/?project_id=${widget.projectId}'),
-      );
+  Future<Map<String, dynamic>?> _fetchClientInfo({
+    required dynamic userId,
+    required int? clientId,
+    required String scopeSuffix,
+  }) async {
+    if (clientId != null) {
+      final candidateClientUrls = <String>[
+        if (userId != null) 'clients/$clientId/?user_id=$userId',
+        'clients/$clientId/?project_id=${widget.projectId}',
+        'clients/$clientId/',
+      ];
 
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body) as List<dynamic>;
-        if (!mounted) return;
-        setState(() {
-          _backJobReviews = data
-              .whereType<Map<String, dynamic>>()
-              .map((item) => BackJobReview.fromJson(item))
-              .toList();
-          _isLoadingBackJobReviews = false;
-          _backJobReviewsError = null;
-        });
-      } else {
-        if (!mounted) return;
-        setState(() {
-          _isLoadingBackJobReviews = false;
-          _backJobReviewsError = 'Failed to load back job reviews';
-        });
+      for (final url in candidateClientUrls) {
+        try {
+          final response = await http.get(AppConfig.apiUri(url));
+          if (response.statusCode == 200) {
+            final mapped = _firstRecordFromResponse(jsonDecode(response.body));
+            if (mapped != null) {
+              return mapped;
+            }
+          }
+        } catch (_) {
+          // Keep trying remaining candidate endpoints.
+        }
+      }
+    }
+
+    try {
+      final listResponse = await http.get(
+        AppConfig.apiUri('clients/?project_id=${widget.projectId}$scopeSuffix'),
+      );
+      if (listResponse.statusCode == 200) {
+        return _firstRecordFromResponse(jsonDecode(listResponse.body));
       }
     } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _isLoadingBackJobReviews = false;
-        _backJobReviewsError = 'Unable to load back job reviews';
-      });
+      // Fall back to null.
     }
+
+    return null;
   }
 
-  String _formatReviewDate(DateTime? dt) {
-    if (dt == null) return '';
-    return '${dt.month}/${dt.day}/${dt.year}';
-  }
+  Future<List<dynamic>> _fetchPhases({required dynamic userId}) async {
+    final phasesUrl = userId != null
+        ? 'phases/?project_id=${widget.projectId}&user_id=$userId'
+        : 'phases/?project_id=${widget.projectId}';
 
-  Widget _buildBackJobReviewsSection() {
-    if (_isLoadingBackJobReviews) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(12),
-          child: CircularProgressIndicator(),
-        ),
-      );
+    try {
+      final phasesResponse = await http.get(AppConfig.apiUri(phasesUrl));
+      if (phasesResponse.statusCode != 200) return const <dynamic>[];
+      final decoded = jsonDecode(phasesResponse.body);
+      if (decoded is List) return decoded;
+      if (decoded is Map<String, dynamic>) {
+        if (decoded['results'] is List) {
+          return decoded['results'] as List<dynamic>;
+        }
+        if (decoded['data'] is List) {
+          return decoded['data'] as List<dynamic>;
+        }
+      }
+    } catch (_) {
+      // Fall back to empty list.
     }
 
-    if (_backJobReviewsError != null) {
-      return Text(
-        _backJobReviewsError!,
-        style: const TextStyle(color: Color(0xFF6B7280)),
-      );
-    }
-
-    if (_backJobReviews.isEmpty) {
-      return const Text(
-        'No back job reviews submitted yet.',
-        style: TextStyle(color: Color(0xFF6B7280)),
-      );
-    }
-
-    return Column(
-      children: _backJobReviews.map((review) {
-        return Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFFE5E7EB)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      review.clientName,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF0C1935),
-                      ),
-                    ),
-                  ),
-                  if (review.createdAt != null)
-                    Text(
-                      _formatReviewDate(review.createdAt),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF6B7280),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                review.reviewText,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: Color(0xFF374151),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: review.isResolved
-                      ? const Color(0xFFE5F8ED)
-                      : const Color(0xFFFFF2E8),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  review.isResolved ? 'Resolved' : 'Open',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: review.isResolved
-                        ? const Color(0xFF10B981)
-                        : const Color(0xFFFF7A18),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
-    );
+    return const <dynamic>[];
   }
 
   Widget _buildProfileAvatar({
@@ -792,6 +670,8 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           child: Card(
+            color: Colors.white,
+            surfaceTintColor: Colors.transparent,
             elevation: 2,
             margin: EdgeInsets.zero,
             shape: RoundedRectangleBorder(
@@ -870,6 +750,7 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
                               margin: const EdgeInsets.only(bottom: 8),
                               child: Card(
                                 color: Colors.white,
+                                surfaceTintColor: Colors.transparent,
                                 margin: EdgeInsets.zero,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(8),
@@ -1258,31 +1139,6 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
                 ),
                 const SizedBox(height: 8),
                 _clientCard(isMobile: isMobile),
-                const SizedBox(height: 20),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF9FAFB),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFE5E7EB)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Client Back Job Reviews',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF0C1935),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      _buildBackJobReviewsSection(),
-                    ],
-                  ),
-                ),
                 const SizedBox(height: 20),
                 const Divider(),
                 const SizedBox(height: 24),

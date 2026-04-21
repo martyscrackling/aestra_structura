@@ -771,6 +771,8 @@ class _ReportsPageState extends State<ReportsPage> {
               child: ConstrainedBox(
                 constraints: BoxConstraints(minWidth: constraints.maxWidth),
                 child: DataTable(
+                  headingRowColor: const WidgetStatePropertyAll(Colors.white),
+                  dataRowColor: const WidgetStatePropertyAll(Colors.white),
                   columnSpacing: isMobile ? 18 : 32,
                   headingTextStyle: labelStyle,
                   columns: const [
@@ -1002,6 +1004,8 @@ class _ReportsPageState extends State<ReportsPage> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Card(
+                        color: Colors.white,
+                        surfaceTintColor: Colors.transparent,
                         elevation: 1,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -1039,6 +1043,8 @@ class _ReportsPageState extends State<ReportsPage> {
                   Row(
                     children: [
                       Card(
+                        color: Colors.white,
+                        surfaceTintColor: Colors.transparent,
                         elevation: 1,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -1076,6 +1082,8 @@ class _ReportsPageState extends State<ReportsPage> {
                 const SizedBox(height: 12),
 
                 Card(
+                  color: Colors.white,
+                  surfaceTintColor: Colors.transparent,
                   elevation: 2,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),

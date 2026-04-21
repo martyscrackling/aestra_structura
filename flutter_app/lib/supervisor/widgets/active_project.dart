@@ -33,6 +33,7 @@ class ActiveProject extends StatefulWidget {
 class _ActiveProjectState extends State<ActiveProject> {
   List<Map<String, dynamic>> _projects = [];
   Map<int, List<dynamic>> _phasesByProjectId = {};
+  Map<int, double> _progressByProjectId = {};
   int? _selectedProjectId;
   bool _isLoading = true;
   final TextEditingController _searchController = TextEditingController();
@@ -184,10 +185,8 @@ class _ActiveProjectState extends State<ActiveProject> {
       final fallbackProjectId = authService.currentUser?['project_id'];
       final scopeSuffix = userId != null ? '&user_id=$userId' : '';
 
-      print('Fetching projects for supervisor_id: $supervisorId');
-
       if (supervisorId == null && fallbackProjectId == null) {
-        print('No supervisor_id or fallback project_id found for this user');
+        if (!mounted) return;
         setState(() {
           _isLoading = false;
           _projects = [];
@@ -207,12 +206,8 @@ class _ActiveProjectState extends State<ActiveProject> {
         projectResponse = await http.get(AppConfig.apiUri(projectUrl));
       }
 
-      print('Projects API response status: ${projectResponse.statusCode}');
-
       if (projectResponse.statusCode != 200) {
-        print(
-          'Failed to fetch projects: ${projectResponse.statusCode} ${projectResponse.body}',
-        );
+        if (!mounted) return;
         setState(() {
           _isLoading = false;
           _projects = [];
@@ -222,55 +217,24 @@ class _ActiveProjectState extends State<ActiveProject> {
 
       final decoded = jsonDecode(projectResponse.body);
 
-      final List<Map<String, dynamic>> projects;
-      if (decoded is List) {
-        projects = decoded
-            .whereType<Map<String, dynamic>>()
-            .map((e) => Map<String, dynamic>.from(e))
-            .toList();
-      } else if (decoded is Map<String, dynamic>) {
-        projects = [Map<String, dynamic>.from(decoded)];
-      } else {
-        projects = [];
-      }
-
-      print('Projects fetched successfully: ${projects.length}');
-
-      final Map<int, List<dynamic>> phasesByProjectId = {};
-      for (final project in projects) {
-        final projectIdRaw = project['project_id'];
-        if (projectIdRaw == null) continue;
-
-        final int projectId = projectIdRaw is int
-            ? projectIdRaw
-            : int.parse(projectIdRaw.toString());
-
-        try {
-          final phasesUrl = userId != null
-              ? 'phases/?project_id=$projectId&user_id=$userId'
-              : 'phases/?project_id=$projectId';
-          final phasesResponse = await http.get(AppConfig.apiUri(phasesUrl));
-          if (phasesResponse.statusCode == 200) {
-            phasesByProjectId[projectId] =
-                jsonDecode(phasesResponse.body) as List<dynamic>;
-          } else {
-            phasesByProjectId[projectId] = const [];
-          }
-        } catch (e) {
-          print('Error fetching phases for project $projectId: $e');
-          phasesByProjectId[projectId] = const [];
-        }
-      }
+      final projects = _parseProjectsPayload(decoded);
+      final phasesByProjectId = await _fetchPhasesByProjectId(
+        projects: projects,
+        userId: userId,
+      );
+      final progressByProjectId = _buildProgressByProjectId(phasesByProjectId);
 
       final firstProjectId = projects.isNotEmpty
           ? (projects.first['project_id'] is int
                 ? projects.first['project_id'] as int
-                : int.parse(projects.first['project_id'].toString()))
+                : int.tryParse(projects.first['project_id'].toString()))
           : null;
 
+      if (!mounted) return;
       setState(() {
         _projects = projects;
         _phasesByProjectId = phasesByProjectId;
+        _progressByProjectId = progressByProjectId;
         _selectedProjectId = firstProjectId;
         _isLoading = false;
       });
@@ -280,8 +244,8 @@ class _ActiveProjectState extends State<ActiveProject> {
           widget.onProjectLoaded!(firstProjectId);
         });
       }
-    } catch (e) {
-      print('Error fetching supervisor projects: $e');
+    } catch (_) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
         _projects = [];
@@ -289,8 +253,83 @@ class _ActiveProjectState extends State<ActiveProject> {
     }
   }
 
-  double _calculateProgress(int projectId) {
-    final phases = _phasesByProjectId[projectId] ?? const [];
+  List<Map<String, dynamic>> _parseProjectsPayload(dynamic payload) {
+    if (payload is List) {
+      return payload
+          .whereType<Map<String, dynamic>>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList(growable: false);
+    }
+    if (payload is Map<String, dynamic>) {
+      return [Map<String, dynamic>.from(payload)];
+    }
+    return <Map<String, dynamic>>[];
+  }
+
+  List<dynamic> _parsePhasesPayload(dynamic payload) {
+    if (payload is List) {
+      return payload;
+    }
+    if (payload is Map<String, dynamic>) {
+      if (payload['results'] is List) {
+        return payload['results'] as List<dynamic>;
+      }
+      if (payload['data'] is List) {
+        return payload['data'] as List<dynamic>;
+      }
+    }
+    return <dynamic>[];
+  }
+
+  Future<Map<int, List<dynamic>>> _fetchPhasesByProjectId({
+    required List<Map<String, dynamic>> projects,
+    required dynamic userId,
+  }) async {
+    final futures = projects.map((project) async {
+      final projectIdRaw = project['project_id'];
+      if (projectIdRaw == null) return null;
+
+      final int? projectId = projectIdRaw is int
+          ? projectIdRaw
+          : int.tryParse(projectIdRaw.toString());
+      if (projectId == null || projectId <= 0) return null;
+
+      final phasesUrl = userId != null
+          ? 'phases/?project_id=$projectId&user_id=$userId'
+          : 'phases/?project_id=$projectId';
+
+      try {
+        final phasesResponse = await http.get(AppConfig.apiUri(phasesUrl));
+        if (phasesResponse.statusCode == 200) {
+          final decoded = jsonDecode(phasesResponse.body);
+          return MapEntry(projectId, _parsePhasesPayload(decoded));
+        }
+      } catch (_) {
+        // Keep fallback behavior.
+      }
+
+      return MapEntry(projectId, const <dynamic>[]);
+    }).toList(growable: false);
+
+    final resolved = await Future.wait<MapEntry<int, List<dynamic>>?>(futures);
+    final map = <int, List<dynamic>>{};
+    for (final entry in resolved.whereType<MapEntry<int, List<dynamic>>>()) {
+      map[entry.key] = entry.value;
+    }
+    return map;
+  }
+
+  Map<int, double> _buildProgressByProjectId(
+    Map<int, List<dynamic>> phasesByProjectId,
+  ) {
+    final progress = <int, double>{};
+    for (final entry in phasesByProjectId.entries) {
+      progress[entry.key] = _calculateProgressFromPhases(entry.value);
+    }
+    return progress;
+  }
+
+  double _calculateProgressFromPhases(List<dynamic> phases) {
     if (phases.isEmpty) return 0.0;
 
     // Count all subtasks across all phases (matching task_progress.dart)
@@ -510,10 +549,11 @@ class _ActiveProjectState extends State<ActiveProject> {
 
                 final int projectId = projectIdRaw is int
                     ? projectIdRaw
-                    : int.parse(projectIdRaw.toString());
+                  : int.tryParse(projectIdRaw.toString()) ?? -1;
+                if (projectId <= 0) return const SizedBox.shrink();
 
                 final location = _getLocation(project);
-                final progress = _calculateProgress(projectId);
+                final progress = _progressByProjectId[projectId] ?? 0.0;
                 final progressPercentage = (progress * 100).round();
                 final startDate = _formatDate(
                   project['start_date']?.toString(),

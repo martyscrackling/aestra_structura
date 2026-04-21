@@ -11,6 +11,7 @@ class Worker {
   final String name;
   final String role;
   final String status;
+  final bool isAssignedToOtherProject;
   final List<String> assignedProjectNames;
   final String? imageUrl;
 
@@ -19,6 +20,7 @@ class Worker {
     required this.name,
     required this.role,
     required this.status,
+    this.isAssignedToOtherProject = false,
     this.assignedProjectNames = const [],
     this.imageUrl,
   });
@@ -123,6 +125,12 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
                 if (assignedProjects is List) {
                   for (final project in assignedProjects.cast<dynamic>()) {
                     if (project is! Map<String, dynamic>) continue;
+                    final assignedProjectIdRaw = project['project_id'];
+                    final assignedProjectId = assignedProjectIdRaw is int
+                        ? assignedProjectIdRaw
+                        : int.tryParse(assignedProjectIdRaw?.toString() ?? '');
+                    if (assignedProjectId == projectId) continue;
+
                     final projectName = project['project_name']
                         ?.toString()
                         .trim();
@@ -135,13 +143,17 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
                   }
                 }
 
+                final assignmentStatus =
+                    (json['assignment_status'] ?? 'Available').toString();
+                final isAssignedToOtherProject =
+                    assignmentStatus.toLowerCase() == 'assigned';
+
                 return Worker(
                   workerId: workerId,
                   name: '${json['first_name']} ${json['last_name']}',
                   role: json['role'] ?? 'Field Worker',
-                  status:
-                      json['assignment_status'] ??
-                      'Available', // Use backend-computed status
+                  status: assignmentStatus,
+                  isAssignedToOtherProject: isAssignedToOtherProject,
                   assignedProjectNames: assignedProjectNames,
                 );
               })
@@ -585,8 +597,12 @@ class _WorkerChecklistItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final assignedProjectsText = worker.assignedProjectNames.join(' • ');
-    final hasAssignments = assignedProjectsText.isNotEmpty;
-    final statusLabel = hasAssignments ? assignedProjectsText : 'Available';
+      final hasAssignments = worker.isAssignedToOtherProject;
+      final statusLabel = hasAssignments
+      ? (assignedProjectsText.isNotEmpty
+        ? assignedProjectsText
+        : 'Assigned to another project')
+      : 'Available';
 
     final statusBadge = Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

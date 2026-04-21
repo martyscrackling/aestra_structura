@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import '../../services/app_config.dart';
+import '../../services/supervisor_dashboard_data_service.dart';
 
 class Workers extends StatefulWidget {
   final int projectId;
@@ -32,36 +30,12 @@ class _WorkersState extends State<Workers> {
   }
 
   Future<List<Map<String, dynamic>>> _fetchWorkers() async {
-    try {
-      final response = await http.get(
-        AppConfig.apiUri('field-workers/?project_id=${widget.projectId}'),
-      );
-
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        return List<Map<String, dynamic>>.from(data);
-      }
-      return [];
-    } catch (e) {
-      print('Error fetching workers: $e');
-      return [];
-    }
+    return SupervisorDashboardDataService.fetchWorkersForProject(
+      widget.projectId,
+    );
   }
 
-  IconData _getRoleIcon(String role) {
-    switch (role.toLowerCase()) {
-      case 'painter':
-        return Icons.format_paint;
-      case 'electrician':
-        return Icons.electrical_services;
-      case 'plumber':
-        return Icons.plumbing;
-      case 'carpenter':
-        return Icons.handyman;
-      default:
-        return Icons.person;
-    }
-  }
+  IconData _workerIcon() => Icons.engineering_outlined;
 
   @override
   Widget build(BuildContext context) {
@@ -138,7 +112,7 @@ class _WorkersState extends State<Workers> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            _getRoleIcon(role),
+                            _workerIcon(),
                             size: 32,
                             color: const Color.fromARGB(255, 243, 146, 1),
                           ),

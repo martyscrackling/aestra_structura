@@ -363,6 +363,8 @@ class _InventoryPageState extends State<InventoryPage> {
 
                       // Table Container
                       Card(
+                        color: Colors.white,
+                        surfaceTintColor: Colors.transparent,
                         elevation: 2,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -494,6 +496,8 @@ class _InventoryPageState extends State<InventoryPage> {
                               child: const Text('No active tools currently'),
                             )
                           : Card(
+                              color: Colors.white,
+                              surfaceTintColor: Colors.transparent,
                               elevation: 2,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),

@@ -31,6 +31,12 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
   bool _isLoading = true;
   String? _error;
 
+  int? _extractSupervisorIdFromProjectData(Map<String, dynamic> projectData) {
+    final raw = projectData['supervisor'] ?? projectData['supervisor_id'];
+    if (raw is int) return raw;
+    return int.tryParse(raw?.toString() ?? '');
+  }
+
   String? _resolveMediaUrl(dynamic raw) {
     if (raw == null) return null;
     final value = raw.toString().trim();
@@ -216,9 +222,11 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
               print(
                 '✅ Supervisor found in project data: ${_supervisors.first['first_name']} ${_supervisors.first['last_name']}',
               );
-            } else if (projectData['supervisor'] is int) {
+            } else if (_extractSupervisorIdFromProjectData(projectData) != null) {
               // Supervisor is just an ID, fetch full supervisor details
-              final supervisorId = projectData['supervisor'] as int;
+              final supervisorId = _extractSupervisorIdFromProjectData(
+                projectData,
+              )!;
               print(
                 '🔍 Supervisor is stored as ID: $supervisorId, fetching full details...',
               );
@@ -297,162 +305,52 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
         phasesList = decodedPhases['data'] as List<dynamic>;
       }
 
-      print('📊 Total phases: ${phasesList.length}');
-
       final Map<int, Map<String, dynamic>> workersMap = {};
 
-      // Go through each phase and its subtasks
-      for (var phase in phasesList) {
-        try {
-          final phaseMap = phase as Map<String, dynamic>;
-          final phaseId = phaseMap['phase_id'] ?? phaseMap['id'];
-          final phaseName = phaseMap['phase_name'] ?? 'Unknown';
-
-          print('🔍 Processing Phase: $phaseName (ID: $phaseId)');
-
-          // Get subtasks for this phase
-          final subtasksUrl = userId != null
-              ? 'subtasks/?phase_id=$phaseId&user_id=$userId'
-              : 'subtasks/?phase_id=$phaseId';
-
-          print('  🔍 Fetching subtasks from: $subtasksUrl');
-          final subtasksResponse = await http.get(
-            AppConfig.apiUri(subtasksUrl),
-          );
-
-          if (subtasksResponse.statusCode == 200) {
-            final decodedSubtasks = jsonDecode(subtasksResponse.body);
-            List<dynamic> subtasksList = [];
-
-            if (decodedSubtasks is List) {
-              subtasksList = decodedSubtasks;
-            } else if (decodedSubtasks is Map &&
-                decodedSubtasks['results'] != null) {
-              subtasksList = decodedSubtasks['results'] as List<dynamic>;
-            } else if (decodedSubtasks is Map &&
-                decodedSubtasks['data'] != null) {
-              subtasksList = decodedSubtasks['data'] as List<dynamic>;
-            }
-
-            print('  📊 Subtasks found: ${subtasksList.length}');
-
-            // For each subtask, get assigned workers
-            for (var subtask in subtasksList) {
-              try {
-                final subtaskMap = subtask as Map<String, dynamic>;
-                final subtaskId = subtaskMap['subtask_id'] ?? subtaskMap['id'];
-                final subtaskTitle = subtaskMap['title'] ?? 'Unknown';
-
-                print('    🔍 Subtask: $subtaskTitle (ID: $subtaskId)');
-
-                // Try multiple endpoints to get worker assignments
-                final List<String> assignmentUrls = [
-                  'subtask-field-workers/?subtask_id=$subtaskId',
-                  'subtask-assignments/?subtask_id=$subtaskId',
-                  'field-workers/?subtask_id=$subtaskId',
-                ];
-
-                for (final assignUrl in assignmentUrls) {
-                  print('      🔍 Trying: $assignUrl');
-
-                  try {
-                    final assignResponse = await http.get(
-                      AppConfig.apiUri(assignUrl),
-                    );
-
-                    if (assignResponse.statusCode == 200) {
-                      print('      ✅ Success with: $assignUrl');
-                      final decodedAssigns = jsonDecode(assignResponse.body);
-                      List<dynamic> assignmentsList = [];
-
-                      if (decodedAssigns is List) {
-                        assignmentsList = decodedAssigns;
-                      } else if (decodedAssigns is Map &&
-                          decodedAssigns['results'] != null) {
-                        assignmentsList =
-                            decodedAssigns['results'] as List<dynamic>;
-                      } else if (decodedAssigns is Map &&
-                          decodedAssigns['data'] != null) {
-                        assignmentsList =
-                            decodedAssigns['data'] as List<dynamic>;
-                      }
-
-                      print(
-                        '      📊 Assignments found: ${assignmentsList.length}',
-                      );
-
-                      // Process each assignment
-                      for (var assignment in assignmentsList) {
-                        final assignMap = assignment as Map<String, dynamic>;
-
-                        // Try to get worker data directly or by ID
-                        Map<String, dynamic>? workerData;
-                        int? workerId;
-
-                        // Check if worker data is embedded in assignment
-                        if (assignMap['field_worker'] is Map) {
-                          workerData =
-                              assignMap['field_worker'] as Map<String, dynamic>;
-                          workerId =
-                              workerData['id'] ?? workerData['fieldworker_id'];
-                        } else if (assignMap['field_worker'] is int) {
-                          workerId = assignMap['field_worker'] as int;
-                        }
-
-                        // If we have worker data, add it
-                        if (workerData != null && workerId != null) {
-                          workersMap[workerId] = workerData;
-                          print(
-                            '        ✅ Worker found in assignment: ${workerData['first_name']} ${workerData['last_name']}',
-                          );
-                        } else if (workerId != null) {
-                          // Fetch full worker details
-                          try {
-                            final workerUrl = userId != null
-                                ? 'field-workers/$workerId/?user_id=$userId'
-                                : 'field-workers/$workerId/';
-
-                            print(
-                              '        🔍 Fetching worker details from: $workerUrl',
-                            );
-                            final workerResp = await http.get(
-                              AppConfig.apiUri(workerUrl),
-                            );
-
-                            if (workerResp.statusCode == 200) {
-                              final workerInfo =
-                                  jsonDecode(workerResp.body)
-                                      as Map<String, dynamic>;
-                              workersMap[workerId] = workerInfo;
-                              print(
-                                '        ✅ Worker loaded: ${workerInfo['first_name']} ${workerInfo['last_name']}',
-                              );
-                            }
-                          } catch (e) {
-                            print(
-                              '        ⚠️ Error fetching worker $workerId: $e',
-                            );
-                          }
-                        }
-                      }
-
-                      break; // Found working endpoint, exit loop
-                    }
-                  } catch (e) {
-                    print('      ⚠️ Error with $assignUrl: $e');
-                  }
-                }
-              } catch (e) {
-                print('    ⚠️ Error processing subtask: $e');
-              }
-            }
-          } else {
-            print(
-              '  ❌ Failed to fetch subtasks: ${subtasksResponse.statusCode}',
-            );
+      // Fast path: phases payload already includes subtasks and assigned_workers.
+      for (final phase in phasesList.whereType<Map<String, dynamic>>()) {
+        final subtasks = (phase['subtasks'] as List<dynamic>? ?? const []);
+        for (final subtask in subtasks.whereType<Map<String, dynamic>>()) {
+          final assignedWorkers =
+              (subtask['assigned_workers'] as List<dynamic>? ?? const []);
+          for (final worker in assignedWorkers.whereType<Map<String, dynamic>>()) {
+            final rawId = worker['fieldworker_id'] ?? worker['id'];
+            final workerId = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
+            if (workerId == null) continue;
+            workersMap[workerId] = Map<String, dynamic>.from(worker);
           }
-        } catch (e) {
-          print('🔍 Error processing phase: $e');
+        }
+      }
+
+      // Fallback: if assignments were not embedded, fetch workers once by project.
+      if (workersMap.isEmpty) {
+        try {
+          final workersUrl = userId != null
+              ? 'field-workers/?project_id=${widget.projectId}&user_id=$userId'
+              : 'field-workers/?project_id=${widget.projectId}';
+          final workersResponse = await http.get(AppConfig.apiUri(workersUrl));
+          if (workersResponse.statusCode == 200) {
+            final decodedWorkers = jsonDecode(workersResponse.body);
+            List<dynamic> workersList = [];
+            if (decodedWorkers is List) {
+              workersList = decodedWorkers;
+            } else if (decodedWorkers is Map && decodedWorkers['results'] != null) {
+              workersList = decodedWorkers['results'] as List<dynamic>;
+            } else if (decodedWorkers is Map && decodedWorkers['data'] != null) {
+              workersList = decodedWorkers['data'] as List<dynamic>;
+            }
+
+            for (final worker in workersList.whereType<Map<String, dynamic>>()) {
+              final rawId = worker['fieldworker_id'] ?? worker['id'];
+              final workerId = rawId is int
+                  ? rawId
+                  : int.tryParse(rawId?.toString() ?? '');
+              if (workerId == null) continue;
+              workersMap[workerId] = Map<String, dynamic>.from(worker);
+            }
+          }
+        } catch (_) {
+          // Ignore fallback fetch errors and keep current results.
         }
       }
 
@@ -460,8 +358,6 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
         _workers = workersMap.values.toList();
         _isLoading = false;
       });
-
-      print('✅ Loaded ${_workers.length} unique workers');
     } catch (e) {
       print('❌ ERROR: $e');
       setState(() {
@@ -949,8 +845,10 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
               projectData['supervisor'] as Map<String, dynamic>,
             ];
             print('✅ Found 1 supervisor in project.supervisor');
-          } else if (projectData['supervisor'] is int) {
-            final supervisorId = projectData['supervisor'] as int;
+          } else if (_extractSupervisorIdFromProjectData(projectData) != null) {
+            final supervisorId = _extractSupervisorIdFromProjectData(
+              projectData,
+            )!;
             try {
               final supervisorUrl = userId != null
                   ? 'supervisors/$supervisorId/?user_id=$userId'
@@ -1049,7 +947,7 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
                 ],
               ),
             )
-          else if (_workers.isEmpty)
+          else if (_workers.isEmpty && _supervisors.isEmpty)
             Container(
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(

@@ -122,6 +122,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
         widget.projectId ?? authService.currentUser?['project_id'];
 
     if (projectId == null) {
+      if (!mounted) return;
       setState(() {
         _phases = [];
         _phasesError = 'No project assigned to this supervisor yet.';
@@ -136,21 +137,15 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
     });
 
     try {
-      // Fetch project details
-      final projectResponse = await http.get(
-        AppConfig.apiUri('projects/$projectId/'),
-      );
+      final resolved = await Future.wait<dynamic>([
+        _fetchProjectInfo(projectId: projectId),
+        _fetchPhasesForProject(projectId: projectId),
+      ]);
 
-      if (projectResponse.statusCode == 200) {
-        _projectInfo = jsonDecode(projectResponse.body) as Map<String, dynamic>;
-      }
+      final projectInfo = resolved[0] as Map<String, dynamic>?;
+      final payload = (resolved[1] as List<dynamic>?) ?? <dynamic>[];
 
-      final response = await http.get(
-        AppConfig.apiUri('phases/?project_id=$projectId'),
-      );
-      if (response.statusCode == 200) {
-        final List<dynamic> payload =
-            jsonDecode(response.body) as List<dynamic>;
+      if (payload.isNotEmpty) {
         final List<Phase> phases = payload.map((phaseJson) {
           final Map<String, dynamic> phaseMap =
               phaseJson as Map<String, dynamic>;
@@ -191,14 +186,15 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
 
         if (!mounted) return;
         setState(() {
+          _projectInfo = projectInfo;
           _phases = phases;
           _isLoadingPhases = false;
         });
       } else {
         if (!mounted) return;
         setState(() {
-          _phasesError =
-              'Failed to load phases (status ${response.statusCode}).';
+          _projectInfo = projectInfo;
+          _phasesError = 'Failed to load phases.';
           _isLoadingPhases = false;
         });
       }
@@ -209,6 +205,49 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
         _isLoadingPhases = false;
       });
     }
+  }
+
+  Future<Map<String, dynamic>?> _fetchProjectInfo({required dynamic projectId}) async {
+    try {
+      final projectResponse = await http.get(
+        AppConfig.apiUri('projects/$projectId/'),
+      );
+      if (projectResponse.statusCode == 200) {
+        return jsonDecode(projectResponse.body) as Map<String, dynamic>;
+      }
+    } catch (_) {
+      // Keep existing fallback behavior.
+    }
+    return null;
+  }
+
+  Future<List<dynamic>> _fetchPhasesForProject({required dynamic projectId}) async {
+    try {
+      final response = await http.get(
+        AppConfig.apiUri('phases/?project_id=$projectId'),
+      );
+      if (response.statusCode == 200) {
+        return _parsePhasesPayload(jsonDecode(response.body));
+      }
+    } catch (_) {
+      // Keep existing fallback behavior.
+    }
+    return <dynamic>[];
+  }
+
+  List<dynamic> _parsePhasesPayload(dynamic payload) {
+    if (payload is List) {
+      return payload;
+    }
+    if (payload is Map<String, dynamic>) {
+      if (payload['results'] is List) {
+        return payload['results'] as List<dynamic>;
+      }
+      if (payload['data'] is List) {
+        return payload['data'] as List<dynamic>;
+      }
+    }
+    return <dynamic>[];
   }
 
   String _mapBackendStatus(String? backendStatus) {

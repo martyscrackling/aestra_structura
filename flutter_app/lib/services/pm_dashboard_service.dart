@@ -215,8 +215,45 @@ class PmTaskTodayItem {
 
 class PmDashboardService {
   static const Duration _timeout = Duration(seconds: 30);
+  static const Duration _cacheTtl = Duration(seconds: 45);
 
-  Future<PmDashboardSummary> fetchSummary({required int userId}) async {
+  static final Map<int, _PmDashboardCacheEntry> _cacheByUser = {};
+  static final Map<int, Future<PmDashboardSummary>> _inFlightByUser = {};
+
+  Future<PmDashboardSummary> fetchSummary({
+    required int userId,
+    bool preferCache = true,
+  }) async {
+    if (preferCache) {
+      final cached = _cacheByUser[userId];
+      if (cached != null && DateTime.now().difference(cached.cachedAt) <= _cacheTtl) {
+        return cached.summary;
+      }
+    }
+
+    final inFlight = _inFlightByUser[userId];
+    if (inFlight != null) {
+      return inFlight;
+    }
+
+    final requestFuture = _fetchSummaryFromApi(userId: userId);
+    _inFlightByUser[userId] = requestFuture;
+
+    try {
+      final summary = await requestFuture;
+      _cacheByUser[userId] = _PmDashboardCacheEntry(
+        summary: summary,
+        cachedAt: DateTime.now(),
+      );
+      return summary;
+    } finally {
+      if (identical(_inFlightByUser[userId], requestFuture)) {
+        _inFlightByUser.remove(userId);
+      }
+    }
+  }
+
+  Future<PmDashboardSummary> _fetchSummaryFromApi({required int userId}) async {
     final uri = AppConfig.apiUri('pm/dashboard/?user_id=$userId');
 
     final response = await http.get(uri).timeout(_timeout);
@@ -230,6 +267,104 @@ class PmDashboardService {
       throw Exception(decoded['message'] ?? 'Dashboard request failed');
     }
 
-    return PmDashboardSummary.fromJson(decoded);
+    final summary = PmDashboardSummary.fromJson(decoded);
+    final workerCounts = await _fetchWorkerManagementCounts(userId: userId);
+
+    return PmDashboardSummary(
+      totalProjects: summary.totalProjects,
+      recentProjects: summary.recentProjects,
+      totalTasks: summary.totalTasks,
+      completedTasks: summary.completedTasks,
+      inProgressTasks: summary.inProgressTasks,
+      pendingTasks: summary.pendingTasks,
+      assignedTasks: summary.assignedTasks,
+      completionRate: summary.completionRate,
+      activitySeries: summary.activitySeries,
+      supervisorsCount: workerCounts.supervisorsCount,
+      fieldWorkersTotal: workerCounts.fieldWorkersTotal,
+      fieldWorkersByRole: workerCounts.fieldWorkersByRole,
+      tasksToday: summary.tasksToday,
+      notificationsCount: summary.notificationsCount,
+      notificationsItems: summary.notificationsItems,
+    );
   }
+
+  Future<_PmWorkerCounts> _fetchWorkerManagementCounts({
+    required int userId,
+  }) async {
+    final supervisorsUri = AppConfig.apiUri('supervisors/?user_id=$userId');
+    final fieldWorkersUri = AppConfig.apiUri('field-workers/?user_id=$userId');
+
+    final responses = await Future.wait<http.Response>([
+      http.get(supervisorsUri).timeout(_timeout),
+      http.get(fieldWorkersUri).timeout(_timeout),
+    ]);
+
+    final supervisorsResponse = responses[0];
+    final fieldWorkersResponse = responses[1];
+
+    final supervisors = supervisorsResponse.statusCode == 200
+        ? _extractListPayload(jsonDecode(supervisorsResponse.body))
+        : const <Map<String, dynamic>>[];
+
+    final fieldWorkers = fieldWorkersResponse.statusCode == 200
+        ? _extractListPayload(jsonDecode(fieldWorkersResponse.body))
+        : const <Map<String, dynamic>>[];
+
+    final byRole = <String, int>{};
+    for (final worker in fieldWorkers) {
+      final role = (worker['role'] ?? 'Unknown').toString().trim();
+      if (role.isEmpty) continue;
+      byRole.update(role, (value) => value + 1, ifAbsent: () => 1);
+    }
+
+    return _PmWorkerCounts(
+      supervisorsCount: supervisors.length,
+      fieldWorkersTotal: fieldWorkers.length,
+      fieldWorkersByRole: byRole,
+    );
+  }
+
+  List<Map<String, dynamic>> _extractListPayload(dynamic decoded) {
+    if (decoded is List) {
+      return decoded
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList(growable: false);
+    }
+
+    if (decoded is Map<String, dynamic>) {
+      final results = decoded['results'];
+      if (results is List) {
+        return results
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList(growable: false);
+      }
+    }
+
+    return const <Map<String, dynamic>>[];
+  }
+}
+
+class _PmWorkerCounts {
+  final int supervisorsCount;
+  final int fieldWorkersTotal;
+  final Map<String, int> fieldWorkersByRole;
+
+  const _PmWorkerCounts({
+    required this.supervisorsCount,
+    required this.fieldWorkersTotal,
+    required this.fieldWorkersByRole,
+  });
+}
+
+class _PmDashboardCacheEntry {
+  final PmDashboardSummary summary;
+  final DateTime cachedAt;
+
+  const _PmDashboardCacheEntry({
+    required this.summary,
+    required this.cachedAt,
+  });
 }

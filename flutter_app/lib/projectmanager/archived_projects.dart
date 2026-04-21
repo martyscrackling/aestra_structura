@@ -44,9 +44,6 @@ class _ArchivedProjectsPageState extends State<ArchivedProjectsPage> {
 
   List<ProjectOverviewData> get _visibleProjects {
     final query = _searchQuery.trim().toLowerCase();
-    print(
-      '🔍 _visibleArchivedProjects called with searchQuery=$_searchQuery',
-    );
 
     final filtered = query.isEmpty
         ? List<ProjectOverviewData>.from(_archivedProjects)
@@ -180,9 +177,6 @@ class _ArchivedProjectsPageState extends State<ArchivedProjectsPage> {
       final authService = AuthService();
       final userId = authService.currentUser?['user_id'];
 
-      print('🔍 _fetchArchivedProjects called');
-      print('🔍 User ID: $userId');
-
       if (userId == null) {
         setState(() {
           _error = 'User not logged in';
@@ -192,77 +186,28 @@ class _ArchivedProjectsPageState extends State<ArchivedProjectsPage> {
       }
 
       final url = AppConfig.apiUri('projects/?user_id=$userId');
-      print('🔍 Fetching from: $url');
 
       final response = await http.get(url);
 
-      print('✅ Response status: ${response.statusCode}');
-
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
-        print('📊 Projects fetched: ${data.length}');
 
-        // Include projects that are archived by status or already 100% complete.
-        const archivedStatuses = {'deactivated', 'cancelled', 'completed'};
+        // Filter for archived statuses: Deactivated, Cancelled, Completed
+        final archivedStatuses = ['Deactivated', 'Cancelled', 'Completed'];
+        final archivedData =
+            data.where((p) => archivedStatuses.contains(p['status'])).toList();
 
-        List<ProjectOverviewData> projects = [];
-        for (var project in data) {
-          try {
-            print('📌 Processing archived project: ${project['project_name']}');
-
-            final int projectId = (project['project_id'] as int?) ?? 0;
-            final String projectName =
-                (project['project_name'] as String?) ?? 'Unknown';
-            final String status = (project['status'] as String?) ?? 'Unknown';
-            final String startDateStr =
-                (project['start_date'] as String?) ?? '';
-            final String endDateStr = (project['end_date'] as String?) ?? '';
-            final String budget = (project['budget']?.toString()) ?? '0';
-            final String createdAt = (project['created_at'] as String?) ?? '';
-            final String projectType =
-                (project['project_type'] as String?) ?? '';
-            final metrics = await _calculateProjectMetrics(projectId);
-            final bool isCompletedByProgress = metrics.progress >= 1.0;
-            final bool isArchivedByStatus =
-                archivedStatuses.contains(status.toLowerCase());
-
-            if (!isArchivedByStatus && !isCompletedByProgress) {
-              continue;
-            }
-
-            final String computedStatus =
-                isCompletedByProgress ? 'Completed' : status;
-            final int projectWorkforceCount = await _fetchProjectWorkforceCount(
-              projectId: projectId,
-              userId: userId,
-            );
-
-            print('✅ Archived Project ID: $projectId, Name: $projectName');
-
-            projects.add(
-              ProjectOverviewData(
-                projectId: projectId,
-                title: projectName,
-                status: computedStatus,
-                location: _buildLocation(project),
-                startDate: _formatDate(startDateStr),
-                endDate: _formatDate(endDateStr),
-                progress: metrics.progress,
-                crewCount: metrics.assignedCrewCount > 0
-                    ? metrics.assignedCrewCount
-                    : projectWorkforceCount,
-                image: _getProjectImage(project),
-                projectType: projectType,
-                budget: budget,
-                createdAt: createdAt,
+        final futures = archivedData
+            .whereType<Map<String, dynamic>>()
+            .map(
+              (project) => _buildArchivedProjectOverview(
+                project: project,
+                userId: userId,
               ),
-            );
-          } catch (e) {
-            print('❌ Error processing archived project: $e');
-          }
-        }
-
-        print('📊 Archived projects: ${projects.length}');
+            )
+            .toList(growable: false);
+        final resolved = await Future.wait(futures);
+        final projects = resolved.whereType<ProjectOverviewData>().toList(growable: false);
 
         setState(() {
           _archivedProjects = projects;
@@ -280,6 +225,51 @@ class _ArchivedProjectsPageState extends State<ArchivedProjectsPage> {
         _isLoading = false;
       });
       print('Error fetching archived projects: $e');
+    }
+  }
+
+  Future<ProjectOverviewData?> _buildArchivedProjectOverview({
+    required Map<String, dynamic> project,
+    required dynamic userId,
+  }) async {
+    try {
+      final projectId = _parseInt(project['project_id']) ?? 0;
+      final projectName = (project['project_name'] as String?) ?? 'Unknown';
+      final status = (project['status'] as String?) ?? 'Unknown';
+      final startDateStr = (project['start_date'] as String?) ?? '';
+      final endDateStr = (project['end_date'] as String?) ?? '';
+      final budget = (project['budget']?.toString()) ?? '0';
+      final createdAt = (project['created_at'] as String?) ?? '';
+      final projectType = (project['project_type'] as String?) ?? '';
+
+      final metricsFuture = _calculateProjectMetrics(projectId);
+      final workforceFuture = _fetchProjectWorkforceCount(
+        projectId: projectId,
+        userId: userId,
+      );
+
+      final metrics = await metricsFuture;
+      final projectWorkforceCount = await workforceFuture;
+
+      return ProjectOverviewData(
+        projectId: projectId,
+        title: projectName,
+        status: status,
+        location: _buildLocation(project),
+        startDate: _formatDate(startDateStr),
+        endDate: _formatDate(endDateStr),
+        progress: metrics.progress,
+        crewCount: metrics.assignedCrewCount > 0
+            ? metrics.assignedCrewCount
+            : projectWorkforceCount,
+        image: _getProjectImage(project),
+        projectType: projectType,
+        budget: budget,
+        createdAt: createdAt,
+      );
+    } catch (e) {
+      print('❌ Error processing archived project: $e');
+      return null;
     }
   }
 
@@ -372,61 +362,125 @@ class _ArchivedProjectsPageState extends State<ArchivedProjectsPage> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
           ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline,
-                      size: 64, color: Color(0xFFDC2626)),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Error Loading Projects',
-                    style: Theme.of(context)
-                        .textTheme
-                        .headlineSmall
-                        ?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(_error!),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: () {
-                      setState(() {
-                        _isLoading = true;
-                        _error = null;
-                      });
-                      _fetchArchivedProjects();
-                    },
-                    child: const Text('Try Again'),
-                  ),
-                ],
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(0xFFDC2626).withOpacity(0.1),
+                      ),
+                      child: const Icon(
+                        Icons.error_outline,
+                        size: 64,
+                        color: Color(0xFFDC2626),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Error Loading Projects',
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF1F2937),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      _error!,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Color(0xFF6B7280),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 32),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.arrow_back, size: 18),
+                          label: const Text('Back'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFE5E7EB),
+                            foregroundColor: const Color(0xFF1F2937),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _isLoading = true;
+                              _error = null;
+                            });
+                            _fetchArchivedProjects();
+                          },
+                          icon: const Icon(Icons.refresh, size: 18),
+                          label: const Text('Try Again'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             )
           : _archivedProjects.isEmpty
           ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.inbox, size: 80, color: Colors.grey[300]),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No Archived Projects',
-                    style: Theme.of(context)
-                        .textTheme
-                        .headlineSmall
-                        ?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Deactivated, cancelled, or completed projects will appear here.',
-                    style: TextStyle(color: Colors.grey[600]),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Back to Active Projects'),
-                  ),
-                ],
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.grey[100],
+                      ),
+                      child: Icon(
+                        Icons.inbox_outlined,
+                        size: 64,
+                        color: Colors.grey[400],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'No Archived Projects',
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF1F2937),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Deactivated, cancelled, or completed projects will appear here.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 32),
+                    ElevatedButton.icon(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.arrow_back, size: 18),
+                      label: const Text('Back to Active Projects'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0C1935),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             )
           : Column(
@@ -443,10 +497,33 @@ class _ArchivedProjectsPageState extends State<ArchivedProjectsPage> {
                 if (visibleProjects.isEmpty)
                   Center(
                     child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Text(
-                        'No projects match your search.',
-                        style: TextStyle(color: Colors.grey[600]),
+                      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 32),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.search_off,
+                            size: 56,
+                            color: Colors.grey[400],
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No projects match your search',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF1F2937),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Try adjusting your filters or search query',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   )
@@ -483,39 +560,48 @@ class _ArchivedProjectsHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               IconButton(
-                onPressed: () => Navigator.maybePop(context),
-                icon: const Icon(Icons.arrow_back, size: 22),
-                color: const Color(0xFF1F2937),
-                tooltip: 'Back',
-                splashRadius: 20,
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.arrow_back, color: Color(0xFF1F2937)),
+                tooltip: 'Back to Projects',
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
               ),
               const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  'Archived Projects',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1F2937),
-                  ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text(
+                      'Archived Projects',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1F2937),
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Deactivated, cancelled & completed',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          const Text(
-            'View deactivated, cancelled, and completed projects.',
-            style: TextStyle(fontSize: 14, color: Color(0xFF6B7280)),
-          ),
           const SizedBox(height: 16),
-          _SearchField(isMobile: true, controller: searchController),
-          const SizedBox(height: 12),
-          _SortOrderDropdown(
-            value: sortOrder,
-            onChanged: onSortOrderChanged,
-            isMobile: true,
+          Row(
+            children: [
+              Expanded(
+                child: _SearchField(isMobile: true, controller: searchController),
+              ),
+              const SizedBox(width: 8),
+              _SortOrderDropdown(
+                value: sortOrder,
+                onChanged: onSortOrderChanged,
+                isMobile: true,
+              ),
+            ],
           ),
         ],
       );
@@ -524,34 +610,27 @@ class _ArchivedProjectsHeader extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        IconButton(
+          onPressed: () => Navigator.pop(context),
+          icon: const Icon(Icons.arrow_back, color: Color(0xFF1F2937)),
+          tooltip: 'Back to Projects',
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+        ),
+        const SizedBox(width: 12),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                IconButton(
-                  onPressed: () => Navigator.maybePop(context),
-                  icon: const Icon(Icons.arrow_back, size: 22),
-                  color: const Color(0xFF1F2937),
-                  tooltip: 'Back',
-                  splashRadius: 20,
-                  padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 32, minHeight: 32),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Archived Projects',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1F2937),
-                  ),
-                ),
-              ],
+          children: const [
+            Text(
+              'Archived Projects',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1F2937),
+              ),
             ),
-            const SizedBox(height: 4),
-            const Text(
+            SizedBox(height: 4),
+            Text(
               'View deactivated, cancelled, and completed projects.',
               style: TextStyle(fontSize: 14, color: Color(0xFF6B7280)),
             ),
