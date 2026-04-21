@@ -1,7 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
 
+import '../services/app_config.dart';
 import '../services/auth_service.dart';
 import '../services/pm_dashboard_service.dart';
 import 'widgets/sidebar.dart';
@@ -11,6 +14,7 @@ import 'widgets/activity_widget.dart';
 import 'widgets/task_summary_widget.dart';
 import 'widgets/task_today_widget.dart';
 import 'widgets/active_workers_widget.dart';
+import 'modals/upgrade_plan_modal.dart';
 
 void main() {
   runApp(
@@ -39,6 +43,9 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
   PmDashboardSummary? _summary;
   final PmDashboardService _dashboardService = PmDashboardService();
 
+  String? _trialStatus;
+  int? _trialDaysRemaining;
+
   @override
   void initState() {
     super.initState();
@@ -65,7 +72,26 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
         throw Exception('Missing user id');
       }
 
-      final summary = await _dashboardService.fetchSummary(userId: userId);
+      final summaryFuture = _dashboardService.fetchSummary(userId: userId);
+      
+      // Fetch subscription status
+      try {
+        final subRes = await http.get(
+          AppConfig.apiUri('subscription/check/?user_id=$userId'),
+          headers: {"Content-Type": "application/json"},
+        );
+        if (subRes.statusCode == 200) {
+          final data = jsonDecode(subRes.body);
+          if (data['success'] == true) {
+            _trialStatus = data['subscription_status'];
+            _trialDaysRemaining = data['trial_days_remaining'];
+          }
+        }
+      } catch (_) {
+        // Ignored, don't fail the dashboard load
+      }
+
+      final summary = await summaryFuture;
       if (!mounted) return;
       setState(() {
         _summary = summary;
@@ -135,6 +161,65 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
       bottomNavigationBar: !isDesktop
           ? const _BottomNavBar(currentPage: 'Dashboard')
           : null,
+    );
+  }
+
+  Widget _buildTrialBanner() {
+    if (_trialStatus != 'trial') return const SizedBox.shrink();
+
+    final daysStr = _trialDaysRemaining != null ? _trialDaysRemaining.toString() : 'few';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF4E5), // Amber light background
+        border: Border.all(color: const Color(0xFFFFB74D), width: 1),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ]
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.timer_outlined, color: Color(0xFFE65100), size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: RichText(
+              text: TextSpan(
+                style: const TextStyle(color: Color(0xFFE65100), fontSize: 14, fontFamily: 'Inter'),
+                children: [
+                  const TextSpan(
+                    text: 'Trial Mode – ',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  TextSpan(
+                    text: 'Your trial expires in $daysStr days.',
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          ElevatedButton(
+            onPressed: () {
+              UpgradePlanModal.show(context);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFE65100),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Upgrade Now', style: TextStyle(fontWeight: FontWeight.w600)),
+          )
+        ],
+      ),
     );
   }
 
@@ -426,6 +511,9 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Trial Banner (if applicable)
+        _buildTrialBanner(),
+
         // Recent Projects
         RecentProjects(projects: summary.recentProjects),
         SizedBox(height: spacing),

@@ -816,17 +816,20 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
     _SubscriptionPlanOption(
       years: 1,
       amountLabel: '₱5,000',
-      subtitle: 'Best for annual budgeting',
+      subtitle: 'Billed annually',
+      isPopular: false,
     ),
     _SubscriptionPlanOption(
       years: 3,
       amountLabel: '₱13,000',
-      subtitle: 'Save more for long-term projects',
+      subtitle: 'Save 13% • Billed every 3 years',
+      isPopular: true,
     ),
     _SubscriptionPlanOption(
       years: 5,
       amountLabel: '₱22,000',
-      subtitle: 'Maximum value for enterprise planning',
+      subtitle: 'Save 12% • Billed every 5 years',
+      isPopular: false,
     ),
   ];
 
@@ -847,81 +850,81 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
             backgroundColor: Colors.transparent,
             insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
             child: Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(color: const Color(0xFFE8EDF3)),
+                borderRadius: BorderRadius.circular(24),
                 boxShadow: const [
                   BoxShadow(
-                    color: Color(0x33101C24),
-                    blurRadius: 36,
-                    offset: Offset(0, 14),
+                    color: Colors.black26,
+                    blurRadius: 20,
+                    offset: Offset(0, 10),
                   ),
                 ],
               ),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 560),
+                constraints: const BoxConstraints(maxWidth: 500),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 42,
-                          height: 42,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFF3E7),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(Icons.workspace_premium, color: Color(0xFFFF8C00)),
-                        ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Choose a Subscription Plan',
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w800,
-                                  color: Color(0xFF0B1437),
-                                ),
-                              ),
-                              SizedBox(height: 3),
-                              Text(
-                                'Select your preferred duration to continue to payment.',
-                                style: TextStyle(color: Color(0xFF6B7280), fontSize: 13.5),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                    const Icon(
+                      Icons.workspace_premium,
+                      color: Color(0xFFFF6F00),
+                      size: 48,
                     ),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Upgrade Your Plan',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: -0.5,
+                        color: Color(0xFF0A173D),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Select a subscription plan to continue using all Premium features without interruption.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 14, color: Colors.black54),
+                    ),
+                    const SizedBox(height: 24),
                     ..._planOptions.map(
                       (plan) => Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: InkWell(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(16),
                           onTap: () => Navigator.of(dialogContext).pop(plan),
                           child: Ink(
-                            padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: const Color(0xFFE5EAF0)),
-                              gradient: LinearGradient(
-                                colors: plan.years == 3
-                                    ? const [Color(0xFFFFF8EF), Color(0xFFFFFFFF)]
-                                    : const [Color(0xFFF8FBFF), Color(0xFFFFFFFF)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
+                              border: Border.all(
+                                color: plan.isPopular
+                                    ? const Color(0xFFFF6F00)
+                                    : Colors.grey.shade300,
+                                width: plan.isPopular ? 2 : 1,
                               ),
+                              borderRadius: BorderRadius.circular(16),
+                              color: plan.isPopular
+                                  ? const Color(0xFFFF6F00).withValues(alpha: 0.05)
+                                  : Colors.white,
                             ),
+                            padding: const EdgeInsets.all(16),
                             child: Row(
                               children: [
+                                Container(
+                                  width: 24,
+                                  height: 24,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: plan.isPopular
+                                          ? const Color(0xFFFF6F00)
+                                          : Colors.grey.shade400,
+                                      width: 2,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -929,60 +932,54 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
                                       Row(
                                         children: [
                                           Text(
-                                            '${plan.years} year${plan.years > 1 ? 's' : ''}',
+                                            '${plan.years} Year${plan.years > 1 ? 's' : ''}',
                                             style: const TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w700,
-                                              color: Color(0xFF0B1437),
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF0A173D),
                                             ),
                                           ),
-                                          if (plan.years == 3) ...[
+                                          if (plan.isPopular) ...[
                                             const SizedBox(width: 8),
                                             Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                              padding: const EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 4,
+                                              ),
                                               decoration: BoxDecoration(
-                                                color: const Color(0xFFFF8C00),
-                                                borderRadius: BorderRadius.circular(999),
+                                                color: const Color(0xFFFF6F00),
+                                                borderRadius: BorderRadius.circular(8),
                                               ),
                                               child: const Text(
                                                 'POPULAR',
                                                 style: TextStyle(
                                                   color: Colors.white,
-                                                  fontWeight: FontWeight.w700,
                                                   fontSize: 10,
-                                                  letterSpacing: 0.3,
+                                                  fontWeight: FontWeight.bold,
                                                 ),
                                               ),
                                             ),
                                           ],
                                         ],
                                       ),
-                                      const SizedBox(height: 5),
+                                      const SizedBox(height: 4),
                                       Text(
                                         plan.subtitle,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 13,
-                                          color: Color(0xFF6B7280),
+                                          color: Colors.grey.shade600,
                                         ),
                                       ),
                                     ],
                                   ),
                                 ),
-                                const SizedBox(width: 12),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Text(
-                                      plan.amountLabel,
-                                      style: const TextStyle(
-                                        fontSize: 19,
-                                        fontWeight: FontWeight.w800,
-                                        color: Color(0xFFFF8C00),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    const Icon(Icons.arrow_forward_rounded, color: Color(0xFF96A1B1)),
-                                  ],
+                                Text(
+                                  plan.amountLabel,
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF0A173D),
+                                  ),
                                 ),
                               ],
                             ),
@@ -990,13 +987,13 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
                         ),
                       ),
                     ),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton.icon(
-                        onPressed: () => Navigator.of(dialogContext).pop(),
-                        icon: const Icon(Icons.close_rounded, size: 18),
-                        label: const Text('Cancel'),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.grey.shade600,
                       ),
+                      child: const Text('Cancel'),
                     ),
                   ],
                 ),
@@ -1488,20 +1485,58 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
                                     key: const ValueKey('gcash-form'),
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      TextField(
-                                        controller: gcashNumberController,
-                                        keyboardType: TextInputType.phone,
-                                        decoration: _modalInputDecoration(
-                                          'GCash Number',
-                                          hint: '09XXXXXXXXX',
+                                      Center(
+                                        child: Column(
+                                          children: [
+                                            Container(
+                                              width: 180,
+                                              height: 180,
+                                              padding: const EdgeInsets.all(12),
+                                              decoration: BoxDecoration(
+                                                color: Colors.white,
+                                                borderRadius: BorderRadius.circular(16),
+                                                border: Border.all(color: Colors.blue.shade200, width: 2),
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: Colors.blue.withValues(alpha: 0.1),
+                                                    blurRadius: 10,
+                                                    spreadRadius: 2,
+                                                  ),
+                                                ],
+                                              ),
+                                              child: Column(
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                children: const [
+                                                  Icon(Icons.qr_code_2, size: 100, color: Color(0xFF005CEE)), // GCash Blue
+                                                  SizedBox(height: 8),
+                                                  Text(
+                                                    'AESTRA STRUCTURA',
+                                                    style: TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 12,
+                                                      color: Color(0xFF005CEE),
+                                                    ),
+                                                    textAlign: TextAlign.center,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            const SizedBox(height: 16),
+                                            const Text(
+                                              'Scan this QR code using your GCash app to pay. Once completed, enter the reference number below.',
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(color: Colors.black54, fontSize: 13),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                      const SizedBox(height: 9),
-                                      const Text(
-                                        'You will be redirected to GCash authorization after confirmation.',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Color(0xFF6B7280),
+                                      const SizedBox(height: 16),
+                                      TextField(
+                                        controller: gcashNumberController,
+                                        keyboardType: TextInputType.number,
+                                        decoration: _modalInputDecoration(
+                                          'GCash Ref. No. (e.g. 1000293...)',
+                                          hint: 'Reference Number',
                                         ),
                                       ),
                                     ],
@@ -1708,11 +1743,13 @@ class _SubscriptionPlanOption {
   final int years;
   final String amountLabel;
   final String subtitle;
+  final bool isPopular;
 
   const _SubscriptionPlanOption({
     required this.years,
     required this.amountLabel,
     required this.subtitle,
+    this.isPopular = false,
   });
 }
 
