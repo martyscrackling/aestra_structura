@@ -1,0 +1,15 @@
+{% if request.user.is_superuser and superadmin_sidebar_sections %}
+<aside class="superadmin-sidebar">
+    <h2>Admin Navigation</h2>
+    <p>Quick access to key user and payment records.</p>
+    <nav>
+        {% for section in superadmin_sidebar_sections %}
+        <a href="{{ section.url }}" class="superadmin-nav-link">
+            <span class="superadmin-nav-title">{{ section.title }}</span>
+            <span class="superadmin-nav-meta">{{ section.count }}</span>
+            <small>{{ section.description }}</small>
+        </a>
+        {% endfor %}
+    </nav>
+</aside>
+{% endif %}

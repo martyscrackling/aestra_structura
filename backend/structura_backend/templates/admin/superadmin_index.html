@@ -1,0 +1,20 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'app/admin/superadmin.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="superadmin-shell">
+    {% include "admin/includes/superadmin_sidebar.html" %}
+
+    <section class="superadmin-main">
+        <div class="superadmin-header-card">
+            <h1>Super Admin Control Panel</h1>
+            <p>Use the sidebar for common workflows, then dive into full model management below.</p>
+        </div>
+    </section>
+</div>
+{% endblock %}

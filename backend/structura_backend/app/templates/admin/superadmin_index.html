@@ -1,0 +1,38 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'app/admin/superadmin.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="superadmin-shell">
+    {% if request.user.is_superuser and superadmin_sidebar_sections %}
+    <aside class="superadmin-sidebar">
+        <h2>Admin Navigation</h2>
+        <p>Quick access to key user and payment records.</p>
+        <nav>
+            {% for section in superadmin_sidebar_sections %}
+            <a href="{{ section.url }}" class="superadmin-nav-link">
+                <span class="superadmin-nav-title">{{ section.title }}</span>
+                <span class="superadmin-nav-meta">{{ section.count }}</span>
+                <small>{{ section.description }}</small>
+            </a>
+            {% endfor %}
+        </nav>
+    </aside>
+    {% endif %}
+
+    <section class="superadmin-main">
+        <div class="superadmin-header-card">
+            <h1>Super Admin Control Panel</h1>
+            <p>Use the sidebar for common workflows, then dive into full model management below.</p>
+        </div>
+
+        <div id="content-main">
+            {% include "admin/app_list.html" with app_list=app_list show_changelinks=True %}
+        </div>
+    </section>
+</div>
+{% endblock %}

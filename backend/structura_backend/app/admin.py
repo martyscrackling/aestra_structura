@@ -1,8 +1,12 @@
+from django import forms
 from django.contrib import admin
+from django.http import JsonResponse
 from django.utils.html import format_html
 from django.utils import timezone
 from django.db.models import Q
-from datetime import timedelta
+from django.urls import path, reverse
+from django.utils.http import urlencode
+from datetime import datetime, time, timedelta
 from .models import (
     User, SubscriptionWarning, PaymentHistory, 
     Project, Client, Supervisors, FieldWorker
@@ -100,6 +104,20 @@ class PaymentHistoryInline(admin.TabularInline):
     fields = ('payment_date', 'amount', 'subscription_years', 'payment_status', 'notes')
 
 
+class SubscriptionActivationForm(forms.Form):
+    subscription_start_date = forms.DateField()
+    subscription_years = forms.IntegerField(min_value=1)
+    payment_date = forms.DateField()
+
+
+def _add_years_to_date(start_date, years):
+    try:
+        return start_date.replace(year=start_date.year + years)
+    except ValueError:
+        # Handle leap day edge case by capping to Feb 28 on non-leap years.
+        return start_date.replace(month=2, day=28, year=start_date.year + years)
+
+
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
     list_display = (
@@ -134,9 +152,7 @@ class UserAdmin(admin.ModelAdmin):
             'fields': (
                 'subscription_status', 'subscription_status_indicator',
                 'trial_start_date', 'trial_end_date', 'trial_days_remaining_display',
-                'subscription_start_date', 'subscription_end_date', 
-                'subscription_days_remaining_display', 'subscription_years',
-                'payment_date'
+                'subscription_days_remaining_display',
             )
         }),
         ('Email Warnings', {
@@ -155,6 +171,72 @@ class UserAdmin(admin.ModelAdmin):
         'send_trial_warning_bulk', 'extend_trial_7days', 'extend_trial_14days',
         'activate_subscription_1year', 'mark_subscription_expired'
     ]
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                '<path:object_id>/activate-subscription/',
+                self.admin_site.admin_view(self.activate_subscription_view),
+                name='app_user_activate_subscription',
+            ),
+        ]
+        return custom_urls + urls
+
+    def change_view(self, request, object_id, form_url='', extra_context=None):
+        extra_context = extra_context or {}
+        if request.user.is_superuser and object_id:
+            extra_context['show_subscription_modal'] = True
+            extra_context['subscription_activate_url'] = reverse(
+                'admin:app_user_activate_subscription',
+                args=[object_id],
+            )
+        return super().change_view(request, object_id, form_url, extra_context=extra_context)
+
+    def activate_subscription_view(self, request, object_id):
+        if not request.user.is_superuser:
+            return JsonResponse({'ok': False, 'message': 'Forbidden'}, status=403)
+
+        user_obj = self.get_object(request, object_id)
+        if user_obj is None:
+            return JsonResponse({'ok': False, 'message': 'User not found'}, status=404)
+
+        if request.method != 'POST':
+            return JsonResponse({'ok': False, 'message': 'Method not allowed'}, status=405)
+
+        form = SubscriptionActivationForm(request.POST)
+        if not form.is_valid():
+            serialized_errors = {
+                field: [str(error) for error in errors]
+                for field, errors in form.errors.items()
+            }
+            return JsonResponse({'ok': False, 'errors': serialized_errors}, status=400)
+
+        start_date = form.cleaned_data['subscription_start_date']
+        years = form.cleaned_data['subscription_years']
+        payment_date = form.cleaned_data['payment_date']
+        end_date = _add_years_to_date(start_date, years)
+
+        start_datetime = timezone.make_aware(datetime.combine(start_date, time.min))
+        end_datetime = timezone.make_aware(datetime.combine(end_date, time.min))
+        payment_datetime = timezone.make_aware(datetime.combine(payment_date, time.min))
+
+        user_obj.subscription_status = 'active'
+        user_obj.subscription_start_date = start_datetime
+        user_obj.subscription_end_date = end_datetime
+        user_obj.subscription_years = years
+        user_obj.payment_date = payment_datetime
+        user_obj.save(
+            update_fields=[
+                'subscription_status',
+                'subscription_start_date',
+                'subscription_end_date',
+                'subscription_years',
+                'payment_date',
+            ]
+        )
+
+        return JsonResponse({'ok': True, 'message': 'Subscription activated successfully.'})
 
     def full_name(self, obj):
         """Display user's full name"""
@@ -407,11 +489,88 @@ class SupervisorsAdmin(admin.ModelAdmin):
         'created_by',
     )
     list_filter = ('role', 'project_id')
-    search_fields = ('email', 'first_name', 'last_name', 'phone')
+    search_fields = ('email', 'first_name', 'last_name', 'phone_number')
     readonly_fields = ('supervisor_id',)
+
+
+@admin.register(Client)
+class ClientAdmin(admin.ModelAdmin):
+    list_display = (
+        'client_id',
+        'email',
+        'first_name',
+        'last_name',
+        'project_id',
+        'status',
+        'created_by',
+    )
+    list_filter = ('status', 'project_id')
+    search_fields = ('email', 'first_name', 'last_name', 'phone_number')
+    readonly_fields = ('client_id', 'created_at')
+
+
+def _build_admin_link(base_url, params=None):
+    if not params:
+        return base_url
+    return f"{base_url}?{urlencode(params)}"
+
+
+def _superadmin_dashboard_context(request):
+    if not request.user.is_superuser:
+        return {}
+
+    user_changelist_url = reverse('admin:app_user_changelist')
+    supervisors_changelist_url = reverse('admin:app_supervisors_changelist')
+    clients_changelist_url = reverse('admin:app_client_changelist')
+    payment_changelist_url = reverse('admin:app_paymenthistory_changelist')
+
+    sidebar_sections = [
+        {
+            'title': 'Project Manager',
+            'description': 'Manage all project manager accounts.',
+            'url': _build_admin_link(user_changelist_url, {'role': 'ProjectManager'}),
+            'count': User.objects.filter(role='ProjectManager').count(),
+        },
+        {
+            'title': 'Supervisor',
+            'description': 'Review and update supervisor records.',
+            'url': supervisors_changelist_url,
+            'count': Supervisors.objects.count(),
+        },
+        {
+            'title': 'Client',
+            'description': 'View all client user accounts.',
+            'url': clients_changelist_url,
+            'count': Client.objects.count(),
+        },
+        {
+            'title': 'Payments',
+            'description': 'Monitor payment records and status.',
+            'url': payment_changelist_url,
+            'count': PaymentHistory.objects.count(),
+        },
+    ]
+
+    return {
+        'superadmin_sidebar_sections': sidebar_sections,
+    }
+
+
+_original_each_context = admin.site.each_context
+
+
+def _structura_each_context(request):
+    context = _original_each_context(request)
+    context.update(_superadmin_dashboard_context(request))
+    return context
+
+
+admin.site.each_context = _structura_each_context
+admin.site.index_template = 'admin/superadmin_index.html'
 
 
 # Customize admin site
 admin.site.site_header = "Structura SuperAdmin Dashboard"
 admin.site.site_title = "Structura Admin"
 admin.site.index_title = "Trial & Subscription Management"
+admin.site.enable_nav_sidebar = False
