@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../services/app_config.dart';
+import '../services/auth_service.dart';
 import 'models/project_item.dart';
 
 class ProjectViewPage extends StatefulWidget {
@@ -17,11 +18,23 @@ class ProjectViewPage extends StatefulWidget {
 
 class _ProjectViewPageState extends State<ProjectViewPage> {
   late Future<List<_PhaseSection>> _future;
+  final TextEditingController _reviewController = TextEditingController();
+  List<_BackJobReviewItem> _reviews = [];
+  bool _isLoadingReviews = true;
+  bool _isSubmittingReview = false;
+  String? _reviewsError;
 
   @override
   void initState() {
     super.initState();
     _future = _load();
+    _loadBackJobReviews();
+  }
+
+  @override
+  void dispose() {
+    _reviewController.dispose();
+    super.dispose();
   }
 
   Future<List<_PhaseSection>> _load() async {
@@ -75,6 +88,144 @@ class _ProjectViewPageState extends State<ProjectViewPage> {
     if (diff.inDays == 0) return 'Updated today';
     if (diff.inDays == 1) return 'Updated yesterday';
     return 'Updated ${diff.inDays} days ago';
+  }
+
+  Future<void> _loadBackJobReviews() async {
+    final projectId = widget.project.projectId;
+    if (projectId == 0) {
+      setState(() {
+        _reviews = [];
+        _reviewsError = null;
+        _isLoadingReviews = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoadingReviews = true;
+      _reviewsError = null;
+    });
+
+    try {
+      final response = await http.get(
+        AppConfig.apiUri('back-job-reviews/?project_id=$projectId'),
+      );
+      if (response.statusCode != 200) {
+        throw Exception('Failed to load reviews');
+      }
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! List) throw Exception('Unexpected reviews response');
+
+      final reviews = decoded
+          .whereType<Map<String, dynamic>>()
+          .map(_BackJobReviewItem.fromJson)
+          .toList(growable: false);
+
+      if (!mounted) return;
+      setState(() {
+        _reviews = reviews;
+        _isLoadingReviews = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _reviewsError = 'Unable to load back job reviews.';
+        _isLoadingReviews = false;
+      });
+    }
+  }
+
+  Future<void> _submitBackJobReview() async {
+    final reviewText = _reviewController.text.trim();
+    if (reviewText.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a review before submitting.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final currentUser = AuthService().currentUser;
+    final clientIdRaw = currentUser?['client_id'] ?? currentUser?['user_id'];
+    final clientId = int.tryParse('$clientIdRaw');
+    final userId = int.tryParse('${currentUser?['user_id']}');
+    final projectId = widget.project.projectId;
+
+    if (clientId == null || projectId == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to submit review: missing client or project.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSubmittingReview = true;
+    });
+
+    try {
+      final response = await http.post(
+        AppConfig.apiUri('back-job-reviews/'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'project': projectId,
+          'client': clientId,
+          'client_user_id': userId,
+          'review_text': reviewText,
+        }),
+      );
+
+      if (response.statusCode == 201) {
+        _reviewController.clear();
+        await _loadBackJobReviews();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Back job review submitted.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        String detail = 'Failed to submit review (${response.statusCode}).';
+        try {
+          final decoded = jsonDecode(response.body);
+          if (decoded is Map && decoded['detail'] != null) {
+            detail = decoded['detail'].toString();
+          }
+        } catch (_) {}
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(detail),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error submitting review.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmittingReview = false;
+        });
+      }
+    }
+  }
+
+  String _formatReviewDate(DateTime dt) {
+    return '${dt.month}/${dt.day}/${dt.year}';
   }
 
   void _showTasksModal(BuildContext context, _PhaseSection week) {
@@ -273,6 +424,139 @@ class _ProjectViewPageState extends State<ProjectViewPage> {
                   ),
                   const SizedBox(height: 20),
                   Text(
+                    'Back Job Reviews',
+                    style: TextStyle(
+                      fontSize: isMobile ? 16 : 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withAlpha(8),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Tell us what needs to be fixed:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF374151),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _reviewController,
+                          minLines: 2,
+                          maxLines: 4,
+                          decoration: InputDecoration(
+                            hintText:
+                                'Example: Paint finish in bedroom has uneven texture...',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: ElevatedButton(
+                            onPressed: _isSubmittingReview
+                                ? null
+                                : _submitBackJobReview,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFFF7A18),
+                            ),
+                            child: _isSubmittingReview
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Text(
+                                    'Submit Review',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_isLoadingReviews)
+                    const Center(child: CircularProgressIndicator())
+                  else if (_reviewsError != null)
+                    Text(
+                      _reviewsError!,
+                      style: const TextStyle(color: Color(0xFF6B7280)),
+                    )
+                  else if (_reviews.isEmpty)
+                    const Text(
+                      'No back job reviews yet.',
+                      style: TextStyle(color: Color(0xFF6B7280)),
+                    )
+                  else
+                    ..._reviews.map(
+                      (r) => Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFE5E7EB)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      r.clientName,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    _formatReviewDate(r.createdAt),
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF6B7280),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                r.reviewText,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Color(0xFF374151),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 20),
+                  Text(
                     'To Do',
                     style: TextStyle(
                       fontSize: isMobile ? 16 : 18,
@@ -399,4 +683,32 @@ class _TaskItem {
   _TaskItem({required this.title, required this.status});
   final String title;
   final String status;
+}
+
+class _BackJobReviewItem {
+  _BackJobReviewItem({
+    required this.reviewId,
+    required this.clientName,
+    required this.reviewText,
+    required this.createdAt,
+    required this.isResolved,
+  });
+
+  final int reviewId;
+  final String clientName;
+  final String reviewText;
+  final DateTime createdAt;
+  final bool isResolved;
+
+  factory _BackJobReviewItem.fromJson(Map<String, dynamic> json) {
+    return _BackJobReviewItem(
+      reviewId: (json['review_id'] as num?)?.toInt() ?? 0,
+      clientName: (json['client_name'] as String?) ?? 'Client',
+      reviewText: (json['review_text'] as String?) ?? '',
+      createdAt:
+          DateTime.tryParse((json['created_at'] as String?) ?? '') ??
+          DateTime.now(),
+      isResolved: json['is_resolved'] == true,
+    );
+  }
 }

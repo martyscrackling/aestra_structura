@@ -78,6 +78,68 @@ class Subtask {
   }
 }
 
+class BackJobReview {
+  final int reviewId;
+  final String clientName;
+  final String reviewText;
+  final DateTime? createdAt;
+  final bool isResolved;
+
+  BackJobReview({
+    required this.reviewId,
+    required this.clientName,
+    required this.reviewText,
+    required this.createdAt,
+    required this.isResolved,
+  });
+
+  static String _stringValue(dynamic value, {String fallback = ''}) {
+    if (value == null) return fallback;
+    final text = value.toString().trim();
+    return text.isEmpty ? fallback : text;
+  }
+
+  static int _intValue(dynamic value, {int fallback = 0}) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? fallback;
+  }
+
+  static DateTime? _parseDate(dynamic value) {
+    if (value == null) return null;
+    return DateTime.tryParse(value.toString());
+  }
+
+  static bool _parseResolved(dynamic value) {
+    if (value is bool) return value;
+    final text = (value ?? '').toString().trim().toLowerCase();
+    return text == 'true' || text == '1' || text == 'resolved' || text == 'completed';
+  }
+
+  factory BackJobReview.fromJson(Map<String, dynamic> json) {
+    final client = _stringValue(
+      json['client_name'] ?? json['client'] ?? json['customer_name'],
+      fallback: 'Client',
+    );
+    final text = _stringValue(
+      json['review_text'] ??
+          json['review'] ??
+          json['comment'] ??
+          json['remarks'] ??
+          json['feedback'],
+      fallback: 'No review details provided.',
+    );
+
+    return BackJobReview(
+      reviewId: _intValue(json['review_id'] ?? json['id'] ?? json['back_job_review_id']),
+      clientName: client,
+      reviewText: text,
+      createdAt: _parseDate(json['created_at'] ?? json['createdAt'] ?? json['date']),
+      isResolved: _parseResolved(json['is_resolved'] ?? json['resolved'] ?? json['status']),
+    );
+  }
+}
+
 class WeeklyTask {
   final String weekTitle;
   final String description;
@@ -120,8 +182,11 @@ class ProjectTaskDetailsPage extends StatefulWidget {
 
 class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
   List<Phase> _phases = [];
+  List<BackJobReview> _backJobReviews = [];
   bool _isLoading = true;
+  bool _isLoadingReviews = true;
   String? _error;
+  String? _reviewsError;
   bool _isGanttView = false; // View mode: false = list view, true = gantt chart
 
   // Calculate overall project progress based on phases (matching task_progress.dart)
@@ -150,6 +215,13 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
   }
 
   Future<void> _fetchPhases() async {
+    setState(() {
+      _isLoading = true;
+      _isLoadingReviews = true;
+      _error = null;
+      _reviewsError = null;
+    });
+
     try {
       final response = await http.get(
         AppConfig.apiUri('phases/?project_id=${widget.projectId}'),
@@ -159,20 +231,186 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
         final List<dynamic> data = jsonDecode(response.body);
         setState(() {
           _phases = data.map((json) => Phase.fromJson(json)).toList();
-          _isLoading = false;
         });
       } else {
         setState(() {
           _error = 'Failed to load phases';
-          _isLoading = false;
         });
       }
     } catch (e) {
       setState(() {
         _error = e.toString();
+      });
+    } finally {
+      await _fetchBackJobReviews();
+      if (!mounted) return;
+      setState(() {
         _isLoading = false;
       });
     }
+  }
+
+  Future<void> _fetchBackJobReviews() async {
+    try {
+      final response = await http.get(
+        AppConfig.apiUri('back-job-reviews/?project_id=${widget.projectId}'),
+      );
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        List<dynamic> data = [];
+
+        if (decoded is List<dynamic>) {
+          data = decoded;
+        } else if (decoded is Map<String, dynamic>) {
+          final wrapped =
+              decoded['results'] ??
+              decoded['data'] ??
+              decoded['reviews'] ??
+              decoded['items'];
+          if (wrapped is List<dynamic>) {
+            data = wrapped;
+          }
+        }
+
+        final reviews = data
+            .whereType<Map>()
+            .map((json) => BackJobReview.fromJson(Map<String, dynamic>.from(json)))
+            .toList();
+
+        reviews.sort((a, b) {
+          final aDate = a.createdAt;
+          final bDate = b.createdAt;
+          if (aDate == null && bDate == null) return 0;
+          if (aDate == null) return 1;
+          if (bDate == null) return -1;
+          return bDate.compareTo(aDate);
+        });
+
+        if (!mounted) return;
+        setState(() {
+          _backJobReviews = reviews;
+          _isLoadingReviews = false;
+          _reviewsError = null;
+        });
+      } else {
+        if (!mounted) return;
+        setState(() {
+          _isLoadingReviews = false;
+          _reviewsError = 'Failed to load back job reviews';
+        });
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingReviews = false;
+        _reviewsError = 'Unable to load back job reviews';
+      });
+    }
+  }
+
+  String _formatReviewDate(DateTime? dt) {
+    if (dt == null) return '';
+    return '${dt.month}/${dt.day}/${dt.year}';
+  }
+
+  Widget _buildBackJobReviewsSection() {
+    if (_isLoadingReviews) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (_reviewsError != null) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Text(
+          _reviewsError!,
+          style: const TextStyle(color: Color(0xFF6B7280)),
+        ),
+      );
+    }
+
+    if (_backJobReviews.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.only(bottom: 16),
+        child: Text(
+          'No back job reviews submitted by the client yet.',
+          style: TextStyle(color: Color(0xFF6B7280)),
+        ),
+      );
+    }
+
+    return Column(
+      children: _backJobReviews.map((review) {
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      review.clientName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF0C1935),
+                      ),
+                    ),
+                  ),
+                  if (review.createdAt != null)
+                    Text(
+                      _formatReviewDate(review.createdAt),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF6B7280),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                review.reviewText,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF374151),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: review.isResolved
+                      ? const Color(0xFFE5F8ED)
+                      : const Color(0xFFFFF2E8),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  review.isResolved ? 'Resolved' : 'Open',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: review.isResolved
+                        ? const Color(0xFF10B981)
+                        : const Color(0xFFFF7A18),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
   }
 
   List<Phase> get _todoPhases =>
@@ -348,6 +586,57 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
               ],
             ),
             const SizedBox(height: 24),
+
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FAFB),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE5E7EB)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Client Back Job Reviews',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF0C1935),
+                          ),
+                        ),
+                      ),
+                      if (!_isLoadingReviews && _reviewsError == null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '${_backJobReviews.length}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF1D4ED8),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  _buildBackJobReviewsSection(),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
 
             // Tabs
             Row(

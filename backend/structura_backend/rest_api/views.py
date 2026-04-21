@@ -138,6 +138,7 @@ from .serializers import (
     SupervisorsSerializer,
     FieldWorkerSerializer,
     ClientSerializer,
+    BackJobReviewSerializer,
     PhaseSerializer,
     SubtaskSerializer,
     SubtaskFieldWorkerSerializer,
@@ -1419,6 +1420,91 @@ class ClientViewSet(viewsets.ModelViewSet):
             data,
             status=status.HTTP_200_OK,
         )
+
+
+class BackJobReviewViewSet(viewsets.ModelViewSet):
+    queryset = models.BackJobReview.objects.select_related('project', 'client').all()
+    serializer_class = BackJobReviewSerializer
+
+    def get_queryset(self):
+        queryset = self.queryset
+        project_id = self.request.query_params.get('project_id')
+        client_id = self.request.query_params.get('client_id')
+        is_resolved = self.request.query_params.get('is_resolved')
+
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+        if client_id:
+            queryset = queryset.filter(client_id=client_id)
+        if is_resolved in ['true', 'false']:
+            queryset = queryset.filter(is_resolved=(is_resolved == 'true'))
+        return queryset
+
+    def create(self, request, *args, **kwargs):
+        mutable_data = request.data.copy()
+        project_id = mutable_data.get('project')
+        client_id = mutable_data.get('client')
+        client_user_id = mutable_data.get('client_user_id')
+
+        if not project_id:
+            return Response(
+                {'detail': 'project is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        project = models.Project.objects.filter(project_id=project_id).first()
+        if project is None:
+            return Response(
+                {'detail': 'Project not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        client = None
+
+        # 1) Preferred: explicit client_id
+        if client_id not in [None, '']:
+            client = models.Client.objects.filter(client_id=client_id).first()
+            # Legacy fallback: some clients send User.user_id instead of Client.client_id.
+            if client is None:
+                client = (
+                    models.Client.objects.filter(user_id_id=client_id).first()
+                    or models.Client.objects.filter(project_id=project).first()
+                )
+
+        # 2) Fallback: explicit client_user_id from mobile app
+        if client is None and client_user_id not in [None, '']:
+            client = models.Client.objects.filter(user_id_id=client_user_id).first()
+
+        # 3) Fallback: project assignment links
+        if client is None:
+            if project.client_id:
+                client = models.Client.objects.filter(client_id=project.client_id).first()
+            if client is None:
+                client = models.Client.objects.filter(project_id=project).first()
+
+        if client is None:
+            return Response(
+                {'detail': 'Client not found for this project.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        assigned_via_client_fk = client.project_id_id == project.project_id
+        assigned_via_project_fk = project.client_id == client.client_id
+
+        if not assigned_via_client_fk and not assigned_via_project_fk:
+            return Response(
+                {'detail': 'Client is not assigned to this project.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        mutable_data['project'] = project.project_id
+        mutable_data['client'] = client.client_id
+
+        serializer = self.get_serializer(data=mutable_data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
 
 # Phase ViewSet

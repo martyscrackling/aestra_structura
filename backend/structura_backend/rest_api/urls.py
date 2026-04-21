@@ -18,6 +18,7 @@ from .views import (
     SupervisorsViewSet,
     FieldWorkerViewSet,
     ClientViewSet,
+    BackJobReviewViewSet,
     PhaseViewSet,
     SubtaskViewSet,
     SubtaskFieldWorkerViewSet,
@@ -38,6 +39,7 @@ router.register(r'projects', ProjectViewSet, basename='project')
 router.register(r'supervisors', SupervisorsViewSet, basename='supervisors')
 router.register(r'field-workers', FieldWorkerViewSet, basename='fieldworker')
 router.register(r'clients', ClientViewSet, basename='client')
+router.register(r'back-job-reviews', BackJobReviewViewSet, basename='back-job-review')
 router.register(r'phases', PhaseViewSet, basename='phase')
 router.register(r'subtasks', SubtaskViewSet, basename='subtask')
 router.register(r'subtask-assignments', SubtaskFieldWorkerViewSet, basename='subtask-assignment')

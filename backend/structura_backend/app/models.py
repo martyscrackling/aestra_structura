@@ -232,6 +232,7 @@ class Project(models.Model):
     STATUS_CHOICES = [
         ('Active', 'Active'),
         ('On Hold', 'On Hold'),
+        ('Completed', 'Completed'),
         ('Deactivated', 'Deactivated'),
     ]
 
@@ -258,6 +259,30 @@ class Project(models.Model):
     budget = models.DecimalField(max_digits=12, decimal_places=2)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Active')
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def get_progress(self):
+        """Calculate project progress based on subtask completion"""
+        total_subtasks = 0
+        completed_subtasks = 0
+        
+        for phase in self.phases.all():
+            subtasks = phase.subtasks.all()
+            total_subtasks += subtasks.count()
+            completed_subtasks += subtasks.filter(status='completed').count()
+        
+        if total_subtasks == 0:
+            return 0.0
+        
+        return completed_subtasks / total_subtasks
+
+    def update_status_based_on_progress(self):
+        """Automatically update status to Completed if progress reaches 100%"""
+        progress = self.get_progress()
+        if progress >= 1.0 and self.status != 'Completed':
+            self.status = 'Completed'
+            self.save(update_fields=['status'])
+            return True
+        return False
 
     def __str__(self):
         return self.project_name
@@ -431,6 +456,33 @@ class Client(models.Model):
     def __str__(self):
         project_name = self.project_id.project_name if self.project_id else "Unassigned"
         return f"{self.first_name} {self.last_name} - {project_name}"
+
+
+class BackJobReview(models.Model):
+    review_id = models.AutoField(primary_key=True)
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='back_job_reviews',
+    )
+    client = models.ForeignKey(
+        Client,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='back_job_reviews',
+    )
+    review_text = models.TextField(max_length=2000)
+    is_resolved = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        project_name = self.project.project_name if self.project else 'Unknown Project'
+        return f"BackJobReview #{self.review_id} - {project_name}"
 
 
 # Phase Model
