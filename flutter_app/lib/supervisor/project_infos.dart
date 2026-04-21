@@ -158,22 +158,6 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
     return null;
   }
 
-  Map<String, dynamic>? _extractProjectPayload(dynamic decoded) {
-    if (decoded is! Map<String, dynamic>) return null;
-
-    final projectNode = decoded['project'];
-    if (projectNode is Map<String, dynamic>) {
-      return Map<String, dynamic>.from(projectNode);
-    }
-
-    final dataNode = decoded['data'];
-    if (dataNode is Map<String, dynamic>) {
-      return Map<String, dynamic>.from(dataNode);
-    }
-
-    return decoded;
-  }
-
   String? _resolveMediaUrl(dynamic raw) {
     if (raw == null) return null;
     final value = raw.toString().trim();
@@ -265,20 +249,8 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
         return;
       }
 
-      final rawProjectData = jsonDecode(projectResponse.body);
-      final projectData = _extractProjectPayload(rawProjectData);
-      if (projectData == null) {
-        setState(() {
-          _error = 'Unexpected project response format';
-          _isLoading = false;
-        });
-        return;
-      }
-
-      final projectOwnerUserId = _toInt(projectData['user']);
-      final clientId = _toInt(
-        projectData['client'] ?? projectData['client_id'],
-      );
+      final projectData = jsonDecode(projectResponse.body);
+      final clientId = _toInt(projectData['client']);
       final embeddedClient = projectData['client'];
       if (embeddedClient is Map<String, dynamic>) {
         _clientInfo = Map<String, dynamic>.from(embeddedClient);
@@ -291,8 +263,6 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
       if (clientId != null) {
         final candidateClientUrls = <String>[
           if (userId != null) 'clients/$clientId/?user_id=$userId',
-          if (projectOwnerUserId != null)
-            'clients/$clientId/?user_id=$projectOwnerUserId',
           'clients/$clientId/?project_id=${widget.projectId}',
           'clients/$clientId/',
         ];
