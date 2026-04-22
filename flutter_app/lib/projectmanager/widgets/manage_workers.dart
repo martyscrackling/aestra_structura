@@ -48,6 +48,8 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
   String? _error;
   String _searchQuery = '';
   String _selectedRole = 'All';
+  TimeOfDay? _shiftStartTime;
+  TimeOfDay? _shiftEndTime;
 
   final List<String> _roles = [
     'All',
@@ -200,9 +202,67 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
     });
   }
 
+  String _formatTime(TimeOfDay time) {
+    final hour = time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod;
+    final minute = time.minute.toString().padLeft(2, '0');
+    final period = time.period == DayPeriod.am ? 'AM' : 'PM';
+    return '$hour:$minute $period';
+  }
+
+  String _formatTimeForApi(TimeOfDay time) {
+    final hour = time.hour.toString().padLeft(2, '0');
+    final minute = time.minute.toString().padLeft(2, '0');
+    return '$hour:$minute:00';
+  }
+
+  bool get _hasValidShift {
+    if (_shiftStartTime == null || _shiftEndTime == null) {
+      return false;
+    }
+    final startMinutes = (_shiftStartTime!.hour * 60) + _shiftStartTime!.minute;
+    final endMinutes = (_shiftEndTime!.hour * 60) + _shiftEndTime!.minute;
+    // Allow overnight shifts (e.g., 8:00 PM -> 3:00 AM).
+    // Only reject identical times, which are ambiguous for scheduling.
+    return startMinutes != endMinutes;
+  }
+
+  bool get _isOvernightShift {
+    if (_shiftStartTime == null || _shiftEndTime == null) return false;
+    final startMinutes = (_shiftStartTime!.hour * 60) + _shiftStartTime!.minute;
+    final endMinutes = (_shiftEndTime!.hour * 60) + _shiftEndTime!.minute;
+    return endMinutes < startMinutes;
+  }
+
+  Future<void> _pickShiftTime({required bool isStart}) async {
+    final initialTime = isStart
+        ? (_shiftStartTime ?? const TimeOfDay(hour: 8, minute: 0))
+        : (_shiftEndTime ?? const TimeOfDay(hour: 16, minute: 0));
+    final picked = await showTimePicker(context: context, initialTime: initialTime);
+    if (picked == null || !mounted) return;
+    setState(() {
+      if (isStart) {
+        _shiftStartTime = picked;
+      } else {
+        _shiftEndTime = picked;
+      }
+    });
+  }
+
   void _saveAssignments() async {
     if (_selectedWorkerIds.isEmpty) {
       Navigator.pop(context);
+      return;
+    }
+
+    if (!_hasValidShift) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please set a valid shift schedule before assigning workers.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
       return;
     }
 
@@ -223,7 +283,12 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
 
       // Create assignments payload
       final assignments = _selectedWorkerIds.map((workerId) {
-        return {'subtask': widget.subtask.subtaskId, 'field_worker': workerId};
+        return {
+          'subtask': widget.subtask.subtaskId,
+          'field_worker': workerId,
+          'shift_start': _formatTimeForApi(_shiftStartTime!),
+          'shift_end': _formatTimeForApi(_shiftEndTime!),
+        };
       }).toList();
 
       print('📤 Saving assignments: $assignments');
@@ -369,6 +434,85 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
                           horizontal: 16,
                           vertical: 12,
                         ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Shift Schedule',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF0C1935),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _pickShiftTime(isStart: true),
+                            icon: const Icon(Icons.schedule, size: 18),
+                            label: Text(
+                              _shiftStartTime == null
+                                  ? 'Shift Start'
+                                  : _formatTime(_shiftStartTime!),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              alignment: Alignment.centerLeft,
+                              foregroundColor: const Color(0xFF0C1935),
+                              side: const BorderSide(color: Color(0xFFE5E7EB)),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 12,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _pickShiftTime(isStart: false),
+                            icon: const Icon(Icons.schedule, size: 18),
+                            label: Text(
+                              _shiftEndTime == null
+                                  ? 'Shift End'
+                                  : _formatTime(_shiftEndTime!),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              alignment: Alignment.centerLeft,
+                              foregroundColor: const Color(0xFF0C1935),
+                              side: const BorderSide(color: Color(0xFFE5E7EB)),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 12,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _shiftStartTime != null && _shiftEndTime != null
+                          ? (_hasValidShift
+                                ? (_isOvernightShift
+                                      ? 'Overnight shift: ${_formatTime(_shiftStartTime!)} - ${_formatTime(_shiftEndTime!)} (next day)'
+                                      : 'Shift: ${_formatTime(_shiftStartTime!)} - ${_formatTime(_shiftEndTime!)}')
+                                : 'Shift start and end cannot be the same.')
+                          : 'Set the shift time first (e.g., 8:00 AM - 4:00 PM).',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: _shiftStartTime != null && _shiftEndTime != null
+                            ? (_hasValidShift
+                                  ? const Color(0xFF10B981)
+                                  : Colors.red)
+                            : const Color(0xFF6B7280),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -559,7 +703,9 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
                   ),
                   const SizedBox(width: 12),
                   ElevatedButton(
-                    onPressed: _saveAssignments,
+                    onPressed: _selectedWorkerIds.isNotEmpty && _hasValidShift
+                        ? _saveAssignments
+                        : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFFF7A18),
                       foregroundColor: Colors.white,

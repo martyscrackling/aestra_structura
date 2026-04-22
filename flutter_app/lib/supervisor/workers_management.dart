@@ -454,6 +454,13 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
     return '₱${payrate}/hr';
   }
 
+  String _formatShiftSchedule(dynamic shiftSchedule) {
+    if (shiftSchedule == null) return 'Not set';
+    final schedule = shiftSchedule.toString().trim();
+    if (schedule.isEmpty) return 'Not set';
+    return schedule;
+  }
+
   String _formatCurrency(dynamic value) {
     if (value == null) return 'Not set';
     final parsed = double.tryParse(value.toString());
@@ -559,6 +566,7 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
         final phoneNumber = worker['phone_number'] ?? 'N/A';
         final birthdate = _formatDate(worker['birthdate']);
         final payrate = _formatPayrate(worker['payrate']);
+        final shiftSchedule = _formatShiftSchedule(worker['shift_schedule']);
         final dateHired = _formatDate(worker['created_at']);
         final sssDeduction = _formatDeductionWithFallback(
           worker['sss_weekly_total'],
@@ -728,6 +736,7 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                     const SizedBox(height: 12),
                     _buildDetailRow("Date Hired", dateHired),
                     _buildDetailRow("Payrate (Hourly)", payrate),
+                    _buildDetailRow("Shift Schedule", shiftSchedule),
                     _buildDetailRow("Weekly Salary", weeklySalary),
                     _buildDetailRow(
                       "Total Weekly Deduction",

@@ -562,6 +562,8 @@ class SubtaskFieldWorker(models.Model):
     assignment_id = models.AutoField(primary_key=True)
     subtask = models.ForeignKey(Subtask, on_delete=models.CASCADE, related_name='assigned_workers')
     field_worker = models.ForeignKey(FieldWorker, on_delete=models.CASCADE, related_name='subtask_assignments')
+    shift_start = models.TimeField(null=True, blank=True)
+    shift_end = models.TimeField(null=True, blank=True)
     assigned_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

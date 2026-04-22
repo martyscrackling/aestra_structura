@@ -429,10 +429,25 @@ class _AttendancePageState extends State<AttendancePage> {
     return null;
   }
 
-  String _timeOfDayToTimeString(TimeOfDay time) {
-    final hh = time.hour.toString().padLeft(2, '0');
-    final mm = time.minute.toString().padLeft(2, '0');
+  String _dateTimeToTimeString(DateTime dateTime) {
+    final hh = dateTime.hour.toString().padLeft(2, '0');
+    final mm = dateTime.minute.toString().padLeft(2, '0');
     return '$hh:$mm:00';
+  }
+
+  int _calculateLateMinutes({
+    required int shiftStartMinutes,
+    required int nowMinutes,
+    int? shiftEndMinutes,
+  }) {
+    // Overnight shift case (e.g., 20:00 -> 03:00):
+    // if current time is in the post-midnight segment (<= shift end),
+    // treat shift start as previous day.
+    final isOvernight = shiftEndMinutes != null && shiftEndMinutes < shiftStartMinutes;
+    if (isOvernight && nowMinutes <= shiftEndMinutes) {
+      return (nowMinutes + 1440) - shiftStartMinutes;
+    }
+    return nowMinutes - shiftStartMinutes;
   }
 
   int? _asInt(dynamic value) {
@@ -617,35 +632,43 @@ class _AttendancePageState extends State<AttendancePage> {
     return false;
   }
 
-  Future<String?> _pickScanTime() async {
-    final seededNow = AppTimeService.now();
-    final now = TimeOfDay(hour: seededNow.hour, minute: seededNow.minute);
-    final picked = await showTimePicker(
+  Future<bool> _authorizeLateTimeIn({
+    required String workerLabel,
+    required String shiftStart,
+    required String computedTimeIn,
+    required int lateMinutes,
+  }) async {
+    if (!mounted) return false;
+    final approved = await showDialog<bool>(
       context: context,
-      initialTime: now,
-      helpText: 'Set attendance time',
-      confirmText: 'Use time',
-      cancelText: 'Cancel',
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(
-              context,
-            ).colorScheme.copyWith(primary: primary),
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: Colors.white,
+        title: const Text('Late Time-In Authorization'),
+        content: Text(
+          '$workerLabel is $lateMinutes minute${lateMinutes == 1 ? '' : 's'} late.\n\n'
+          'Scheduled shift start: ${_formatTime(shiftStart)}\n'
+          'Adjusted attendance time: ${_formatTime(computedTimeIn)}\n\n'
+          'Allow this late attendance?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
           ),
-          child: child!,
-        );
-      },
+          ElevatedButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: primary),
+            child: const Text('Authorize'),
+          ),
+        ],
+      ),
     );
-
-    if (picked == null) return null;
-    return _timeOfDayToTimeString(picked);
+    return approved == true;
   }
 
   Future<void> _recordAttendanceFromScan({
     required String action,
     required int fieldWorkerId,
-    required String time,
   }) async {
     final projectId = _activeProjectId();
 
@@ -692,10 +715,72 @@ class _AttendancePageState extends State<AttendancePage> {
       return;
     }
 
+    final worker = projectWorkers.firstWhere(
+      (w) => _asInt(
+            w['fieldworker_id'] ??
+                w['field_worker_id'] ??
+                w['worker_id'] ??
+                w['id'],
+          ) ==
+          fieldWorkerId,
+      orElse: () => <String, dynamic>{},
+    );
+    final shiftStartRaw = (worker['shift_start'] ?? '').toString().trim();
+    final shiftEndRaw = (worker['shift_end'] ?? '').toString().trim();
+    final workerName =
+        '${(worker['first_name'] ?? '').toString().trim()} ${(worker['last_name'] ?? '').toString().trim()}'
+            .trim();
+
     final attendanceData = <String, dynamic>{'field_worker': fieldWorkerId};
     final scanNow = AppTimeService.now();
     final scanDate = DateTime(scanNow.year, scanNow.month, scanNow.day);
+    final nowTime = _dateTimeToTimeString(scanNow);
     Map<String, dynamic>? existingForAction;
+    var actionTime = nowTime;
+
+    if (action == 'Time In') {
+      if (shiftStartRaw.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No shift schedule found for this worker in the selected project.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      final shiftStartMinutes = _timeStringToMinutes(shiftStartRaw);
+      final shiftEndMinutes = _timeStringToMinutes(shiftEndRaw);
+      final nowMinutes = _timeStringToMinutes(nowTime);
+      if (shiftStartMinutes == null || nowMinutes == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Unable to resolve shift schedule time.')),
+        );
+        return;
+      }
+
+      actionTime = shiftStartRaw;
+      final lateMinutes = _calculateLateMinutes(
+        shiftStartMinutes: shiftStartMinutes,
+        nowMinutes: nowMinutes,
+        shiftEndMinutes: shiftEndMinutes,
+      );
+      if (lateMinutes > 15) {
+        actionTime = nowTime;
+        final approved = await _authorizeLateTimeIn(
+          workerLabel: workerName.isEmpty ? 'Worker #$fieldWorkerId' : workerName,
+          shiftStart: shiftStartRaw,
+          computedTimeIn: actionTime,
+          lateMinutes: lateMinutes,
+        );
+        if (!approved) return;
+      }
+    } else if (action == 'Time Out' && shiftEndRaw.isNotEmpty) {
+      actionTime = shiftEndRaw;
+    }
 
     if (action == 'Time Out') {
       final existing = await _fetchExistingAttendanceRecord(
@@ -706,7 +791,7 @@ class _AttendancePageState extends State<AttendancePage> {
       final inMinutes = _timeStringToMinutes(
         (existing?['check_in_time'] ?? '').toString(),
       );
-      final outMinutes = _timeStringToMinutes(time);
+      final outMinutes = _timeStringToMinutes(actionTime);
 
       if (inMinutes == null) {
         if (!mounted) return;
@@ -729,19 +814,19 @@ class _AttendancePageState extends State<AttendancePage> {
 
     switch (action) {
       case 'Time In':
-        attendanceData['check_in_time'] = time;
+        attendanceData['check_in_time'] = actionTime;
         attendanceData['status'] = 'on_site';
         break;
       case 'Time Out':
-        attendanceData['check_out_time'] = time;
+        attendanceData['check_out_time'] = actionTime;
         attendanceData['status'] = 'absent';
         break;
       case 'Break In':
-        attendanceData['break_in_time'] = time;
+        attendanceData['break_in_time'] = actionTime;
         attendanceData['status'] = 'on_break';
         break;
       case 'Break Out':
-        attendanceData['break_out_time'] = time;
+        attendanceData['break_out_time'] = actionTime;
         attendanceData['status'] = 'on_site';
         break;
       default:
@@ -766,7 +851,9 @@ class _AttendancePageState extends State<AttendancePage> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('✓ $action recorded for worker #$fieldWorkerId'),
+          content: Text(
+            '✓ $action recorded for worker #$fieldWorkerId at ${_formatTime(actionTime)}',
+          ),
           duration: const Duration(seconds: 3),
         ),
       );
@@ -908,7 +995,13 @@ class _AttendancePageState extends State<AttendancePage> {
 
   String _formatTime(String? time) {
     if (time == null || time.isEmpty) return '--';
-    return time;
+    final minutes = _timeStringToMinutes(time);
+    if (minutes == null) return time;
+    final hour24 = minutes ~/ 60;
+    final minute = minutes % 60;
+    final period = hour24 >= 12 ? 'PM' : 'AM';
+    final hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12;
+    return '$hour12:${minute.toString().padLeft(2, '0')} $period';
   }
 
   Widget _buildProjectSelector({required bool isCompact}) {
@@ -1638,11 +1731,15 @@ class _AttendancePageState extends State<AttendancePage> {
                         ),
                         Expanded(
                           flex: 2,
-                          child: Text(record['check_in_time'] ?? '—'),
+                          child: Text(
+                            _formatTime(record['check_in_time'] as String?),
+                          ),
                         ),
                         Expanded(
                           flex: 2,
-                          child: Text(record['check_out_time'] ?? '—'),
+                          child: Text(
+                            _formatTime(record['check_out_time'] as String?),
+                          ),
                         ),
                         Expanded(
                           flex: 2,
@@ -2185,12 +2282,8 @@ class _AttendancePageState extends State<AttendancePage> {
 
     return InkWell(
       onTap: () async {
-        final selectedTime = await _pickScanTime();
-        if (selectedTime == null) {
-          return;
-        }
         Navigator.pop(context);
-        _showQRScannerDialog(action, selectedTime);
+        _showQRScannerDialog(action);
       },
       borderRadius: BorderRadius.circular(12),
       child: Container(
@@ -2235,7 +2328,7 @@ class _AttendancePageState extends State<AttendancePage> {
     );
   }
 
-  void _showQRScannerDialog(String action, String selectedTime) {
+  void _showQRScannerDialog(String action) {
     final color = _getActionColor(action);
     final MobileScannerController controller = MobileScannerController();
     bool isHandlingScan = false;
@@ -2300,7 +2393,7 @@ class _AttendancePageState extends State<AttendancePage> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Scan worker QR code • Time: $selectedTime',
+                              'Scan worker QR code',
                               style: TextStyle(
                                 color: Colors.white70,
                                 fontSize: 12,
@@ -2355,7 +2448,6 @@ class _AttendancePageState extends State<AttendancePage> {
                                 _recordAttendanceFromScan(
                                   action: action,
                                   fieldWorkerId: id,
-                                  time: selectedTime,
                                 ),
                               );
                               break;

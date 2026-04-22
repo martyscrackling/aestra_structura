@@ -1170,10 +1170,12 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
                 .values_list('project_id', flat=True)
             )
             queryset = models.FieldWorker.objects.filter(
+                Q(project_id__in=sv_project_ids) |
                 Q(subtask_assignments__subtask__phase__project_id__in=sv_project_ids)
             )
             if project_id:
                 queryset = queryset.filter(
+                    Q(project_id=project_id) |
                     Q(subtask_assignments__subtask__phase__project_id=project_id)
                 )
             return queryset.distinct()
@@ -1187,16 +1189,23 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
         # (from any of their projects or directly assigned)
         if include_other_projects:
             queryset = models.FieldWorker.objects.filter(
-                Q(user_id=pm_user_id) | Q(project_id__user_id=pm_user_id)
+                Q(user_id=pm_user_id)
+                | Q(project_id__user_id=pm_user_id)
+                | Q(subtask_assignments__subtask__phase__project__user_id=pm_user_id)
             ).distinct()
             return queryset
 
         # Default behavior: filter by project if specified
         queryset = models.FieldWorker.objects.filter(
-            Q(user_id=pm_user_id) | Q(project_id__user_id=pm_user_id)
+            Q(user_id=pm_user_id)
+            | Q(project_id__user_id=pm_user_id)
+            | Q(subtask_assignments__subtask__phase__project__user_id=pm_user_id)
         ).distinct()
         if project_id:
-            queryset = queryset.filter(project_id=project_id)
+            queryset = queryset.filter(
+                Q(project_id=project_id)
+                | Q(subtask_assignments__subtask__phase__project_id=project_id)
+            )
         return queryset
 
     def get_serializer_context(self):

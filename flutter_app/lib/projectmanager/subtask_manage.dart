@@ -371,6 +371,29 @@ class _ViewWorkForceModalState extends State<ViewWorkForceModal> {
   bool _isLoading = true;
   String? _error;
 
+  String _formatApiTime(String? value) {
+    if (value == null || value.isEmpty) return '';
+    final parts = value.split(':');
+    if (parts.length < 2) return value;
+    final hour24 = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour24 == null || minute == null) return value;
+    final period = hour24 >= 12 ? 'PM' : 'AM';
+    final hour12 = (hour24 % 12 == 0) ? 12 : hour24 % 12;
+    final minuteText = minute.toString().padLeft(2, '0');
+    return '$hour12:$minuteText $period';
+  }
+
+  String _buildShiftLabel(Map<String, dynamic> assignment) {
+    final shiftStart = assignment['shift_start']?.toString();
+    final shiftEnd = assignment['shift_end']?.toString();
+    if ((shiftStart == null || shiftStart.isEmpty) ||
+        (shiftEnd == null || shiftEnd.isEmpty)) {
+      return 'No shift schedule set';
+    }
+    return '${_formatApiTime(shiftStart)} - ${_formatApiTime(shiftEnd)}';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -417,6 +440,7 @@ class _ViewWorkForceModalState extends State<ViewWorkForceModal> {
               'name': '${workerData['first_name']} ${workerData['last_name']}',
               'role': workerData['role'] ?? 'Field Worker',
               'phone': workerData['phone_number'] ?? 'N/A',
+              'shift_label': _buildShiftLabel(assignment),
             });
           }
         }
@@ -690,6 +714,25 @@ class _ViewWorkForceModalState extends State<ViewWorkForceModal> {
                                         const SizedBox(width: 6),
                                         Text(
                                           worker['phone'],
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.schedule,
+                                          size: 14,
+                                          color: Colors.grey[600],
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          worker['shift_label'] ??
+                                              'No shift schedule set',
                                           style: TextStyle(
                                             fontSize: 13,
                                             color: Colors.grey[600],

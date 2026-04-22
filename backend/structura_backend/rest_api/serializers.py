@@ -485,6 +485,9 @@ class SupervisorSerializer(serializers.ModelSerializer):
 class FieldWorkerSerializer(serializers.ModelSerializer):
     assignment_status = serializers.SerializerMethodField()
     assigned_projects = serializers.SerializerMethodField()
+    shift_schedule = serializers.SerializerMethodField()
+    current_project_shift_start = serializers.SerializerMethodField()
+    current_project_shift_end = serializers.SerializerMethodField()
     
     class Meta:
         model = models.FieldWorker
@@ -523,6 +526,9 @@ class FieldWorkerSerializer(serializers.ModelSerializer):
             'photo',
             'assignment_status',
             'assigned_projects',
+            'shift_schedule',
+            'current_project_shift_start',
+            'current_project_shift_end',
             'created_at',
         ]
         extra_kwargs = {
@@ -599,6 +605,63 @@ class FieldWorkerSerializer(serializers.ModelSerializer):
             {'project_id': pid, 'project_name': pname}
             for pid, pname in sorted(project_map.items(), key=lambda item: item[1].lower())
         ]
+
+    def get_shift_schedule(self, obj):
+        assignments = (
+            models.SubtaskFieldWorker.objects
+            .filter(field_worker_id=obj.fieldworker_id)
+            .select_related('subtask__phase__project')
+        )
+
+        formatted_ranges = []
+        seen = set()
+        for assignment in assignments:
+            shift_start = assignment.shift_start
+            shift_end = assignment.shift_end
+            if shift_start is None and shift_end is None:
+                continue
+
+            start_text = shift_start.strftime('%I:%M %p') if shift_start is not None else 'N/A'
+            end_text = shift_end.strftime('%I:%M %p') if shift_end is not None else 'N/A'
+            project = getattr(getattr(getattr(assignment, 'subtask', None), 'phase', None), 'project', None)
+            project_name = (getattr(project, 'project_name', '') or '').strip() or 'Unassigned Project'
+            shift_text = f'{project_name}: {start_text} - {end_text}'
+            if shift_text in seen:
+                continue
+            seen.add(shift_text)
+            formatted_ranges.append(shift_text)
+
+        if not formatted_ranges:
+            return 'Not set'
+        return '; '.join(formatted_ranges)
+
+    def _get_current_project_shift_assignment(self, obj):
+        current_project_id = self.context.get('current_project_id')
+        if current_project_id is None:
+            return None
+        return (
+            models.SubtaskFieldWorker.objects
+            .filter(
+                field_worker_id=obj.fieldworker_id,
+                subtask__phase__project_id=current_project_id,
+                shift_start__isnull=False,
+                shift_end__isnull=False,
+            )
+            .order_by('shift_start', 'assignment_id')
+            .first()
+        )
+
+    def get_current_project_shift_start(self, obj):
+        assignment = self._get_current_project_shift_assignment(obj)
+        if assignment is None or assignment.shift_start is None:
+            return None
+        return assignment.shift_start.strftime('%H:%M:%S')
+
+    def get_current_project_shift_end(self, obj):
+        assignment = self._get_current_project_shift_assignment(obj)
+        if assignment is None or assignment.shift_end is None:
+            return None
+        return assignment.shift_end.strftime('%H:%M:%S')
 
     def validate(self, attrs):
         cash_advance_balance = _to_decimal(
@@ -959,12 +1022,116 @@ class PhaseSerializer(serializers.ModelSerializer):
 
 
 class SubtaskFieldWorkerSerializer(serializers.ModelSerializer):
+    def _time_to_minutes(self, value):
+        return value.hour * 60 + value.minute
+
+    def _to_segments(self, start, end):
+        """Convert a shift into one or two minute-based segments."""
+        start_min = self._time_to_minutes(start)
+        end_min = self._time_to_minutes(end)
+
+        # Equal values are treated as a full-day shift to avoid ambiguity.
+        if start_min == end_min:
+            return [(0, 1440)]
+        if end_min > start_min:
+            return [(start_min, end_min)]
+        # Overnight shift (e.g., 20:00 -> 04:00).
+        return [(start_min, 1440), (0, end_min)]
+
+    def _segments_overlap(self, left_segments, right_segments):
+        for left_start, left_end in left_segments:
+            for right_start, right_end in right_segments:
+                if max(left_start, right_start) < min(left_end, right_end):
+                    return True
+        return False
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+
+        worker = attrs.get(
+            'field_worker',
+            self.instance.field_worker if self.instance is not None else None,
+        )
+        subtask = attrs.get(
+            'subtask',
+            self.instance.subtask if self.instance is not None else None,
+        )
+        shift_start = attrs.get(
+            'shift_start',
+            self.instance.shift_start if self.instance is not None else None,
+        )
+        shift_end = attrs.get(
+            'shift_end',
+            self.instance.shift_end if self.instance is not None else None,
+        )
+
+        if worker is None or subtask is None:
+            return attrs
+
+        # Require complete shift boundaries when one side is provided.
+        if (shift_start is None) != (shift_end is None):
+            raise serializers.ValidationError(
+                {'detail': 'Both shift_start and shift_end are required.'}
+            )
+
+        # No schedule means nothing to compare for time conflicts.
+        if shift_start is None or shift_end is None:
+            return attrs
+
+        current_project_id = getattr(getattr(subtask, 'phase', None), 'project_id', None)
+        incoming_segments = self._to_segments(shift_start, shift_end)
+
+        existing_assignments = (
+            models.SubtaskFieldWorker.objects
+            .filter(field_worker=worker)
+            .exclude(shift_start__isnull=True)
+            .exclude(shift_end__isnull=True)
+            .select_related('subtask__phase__project')
+        )
+        if self.instance is not None:
+            existing_assignments = existing_assignments.exclude(pk=self.instance.pk)
+
+        for assignment in existing_assignments:
+            existing_subtask = assignment.subtask
+            existing_project = getattr(getattr(existing_subtask, 'phase', None), 'project', None)
+            existing_project_id = getattr(existing_project, 'project_id', None)
+
+            # Restrict only across different projects.
+            if existing_project_id == current_project_id:
+                continue
+
+            existing_segments = self._to_segments(assignment.shift_start, assignment.shift_end)
+            if not self._segments_overlap(incoming_segments, existing_segments):
+                continue
+
+            existing_project_name = (
+                getattr(existing_project, 'project_name', None) or 'another project'
+            )
+            raise serializers.ValidationError(
+                {
+                    'non_field_errors': [
+                        (
+                            'Shift conflict detected. This worker already has '
+                            f'a shift on "{existing_project_name}" '
+                            f'({assignment.shift_start.strftime("%I:%M %p")} - '
+                            f'{assignment.shift_end.strftime("%I:%M %p")}).'
+                        )
+                    ],
+                    'conflict_project_id': existing_project_id,
+                    'conflict_project_name': existing_project_name,
+                }
+            )
+
+        return attrs
+
     class Meta:
         model = models.SubtaskFieldWorker
         fields = [
             'assignment_id',
             'subtask',
             'field_worker',
+            'shift_start',
+            'shift_end',
             'assigned_at',
         ]
         extra_kwargs = {
