@@ -891,6 +891,42 @@ class ClientSerializer(serializers.ModelSerializer):
             })
         return value
 
+    def update(self, instance, validated_data):
+        # These write-only invitation fields are only relevant for create.
+        validated_data.pop('invited_by_email', None)
+        validated_data.pop('invited_by_name', None)
+        validated_data.pop('project_name', None)
+
+        next_email = validated_data.get('email', instance.email)
+
+        try:
+            with transaction.atomic():
+                # Keep linked User.email in sync when this legacy relation exists.
+                linked_user = getattr(instance, 'user_id', None)
+                if linked_user is not None and next_email:
+                    email_changed = (linked_user.email or '').strip().lower() != (
+                        str(next_email).strip().lower()
+                    )
+                    if email_changed:
+                        if models.User.objects.exclude(pk=linked_user.pk).filter(
+                            email=next_email
+                        ).exists():
+                            raise serializers.ValidationError(
+                                {'email': ['This email is already used by another user account.']}
+                            )
+                        linked_user.email = next_email
+                        linked_user.save(update_fields=['email'])
+
+                for attr, value in validated_data.items():
+                    setattr(instance, attr, value)
+                instance.save()
+        except IntegrityError:
+            raise serializers.ValidationError(
+                {'email': ['A client with this email already exists.']}
+            )
+
+        return instance
+
 
 class BackJobReviewSerializer(serializers.ModelSerializer):
     client_name = serializers.SerializerMethodField()

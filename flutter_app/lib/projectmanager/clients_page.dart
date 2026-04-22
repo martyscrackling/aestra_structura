@@ -46,7 +46,6 @@ class _ClientsPageState extends State<ClientsPage> {
     return clients.where((client) {
       return client.name.toLowerCase().contains(query) ||
           client.email.toLowerCase().contains(query) ||
-          client.company.toLowerCase().contains(query) ||
           client.phone.toLowerCase().contains(query);
     }).toList();
   }
@@ -69,7 +68,7 @@ class _ClientsPageState extends State<ClientsPage> {
           return ClientInfo(
             id: client['client_id'],
             name: '${client['first_name']} ${client['last_name']}',
-            company: 'AESTRA Build Corp.',
+            company: '',
             email: client['email'],
             phone: client['phone_number'],
             location: 'Philippines',
@@ -387,17 +386,19 @@ class ClientCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     SizedBox(height: isMobile ? 2 : 4),
-                    Text(
-                      info.company,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFFFF7A18),
+                    if (info.company.trim().isNotEmpty) ...[
+                      Text(
+                        info.company,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFFFF7A18),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    SizedBox(height: isMobile ? 2 : 4),
+                      SizedBox(height: isMobile ? 2 : 4),
+                    ],
                     Row(
                       children: [
                         const Icon(
