@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../settings_page.dart';
+import '../notification_page.dart';
 import '../../services/auth_service.dart';
 import '../../services/pm_dashboard_service.dart';
 import 'package:go_router/go_router.dart';
@@ -198,8 +200,7 @@ class _NotificationMenuState extends State<_NotificationMenu> {
         _loading = false;
       });
     } finally {
-      if (activeSummaryFuture != null &&
-          identical(_inFlightSummary, activeSummaryFuture)) {
+      if (activeSummaryFuture != null && identical(_inFlightSummary, activeSummaryFuture)) {
         _inFlightSummary = null;
         _inFlightUserId = null;
       }
@@ -252,7 +253,9 @@ class _NotificationMenuState extends State<_NotificationMenu> {
       onOpened: _refresh,
       onSelected: (value) {
         if (value == 1) {
-          context.go('/notifications');
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const NotificationPage()));
         }
       },
       itemBuilder: (context) {
@@ -440,7 +443,7 @@ class _ProfileMenu extends StatelessWidget {
 
   String _displayName(Map<String, dynamic>? user) {
     if (user == null) return 'User';
-
+    
     // Try first and last name
     final first = (user['first_name'] as String?)?.trim() ?? '';
     final last = (user['last_name'] as String?)?.trim() ?? '';
@@ -468,7 +471,7 @@ class _ProfileMenu extends StatelessWidget {
 
   String _displayRole(Map<String, dynamic>? user) {
     if (user == null) return 'Account';
-
+    
     final role = (user['role'] as String?)?.trim();
     if (role != null && role.isNotEmpty) return role;
 
@@ -481,10 +484,14 @@ class _ProfileMenu extends StatelessWidget {
   void _handleAction(BuildContext context, _ProfileAction action) {
     switch (action) {
       case _ProfileAction.settings:
-        context.go('/settings');
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => SettingsPage()));
         break;
       case _ProfileAction.notifications:
-        context.go('/notifications');
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const NotificationPage()));
         break;
       case _ProfileAction.logout:
         _performLogout(context);

@@ -21,25 +21,17 @@ class _ClientsPageState extends State<ClientsPage> {
   String _resolvePhotoUrl(dynamic rawPhoto) {
     final photo = (rawPhoto?.toString() ?? '').trim();
     if (photo.isEmpty) return '';
-
-    String url;
     if (photo.startsWith('http://') || photo.startsWith('https://')) {
-      url = photo;
-    } else {
-      // AppConfig.apiBaseUrl includes `/api/`; media is served from the same origin under `/media/`.
-      final apiBase = Uri.parse(AppConfig.apiBaseUrl);
-      final origin = apiBase.origin;
-      if (photo.startsWith('/')) {
-        url = '$origin$photo';
-      } else {
-        url = '$origin/$photo';
-      }
+      return photo;
     }
 
-    final uri = Uri.parse(url);
-    final params = Map<String, String>.from(uri.queryParameters);
-    params['cb'] = DateTime.now().millisecondsSinceEpoch.toString();
-    return uri.replace(queryParameters: params).toString();
+    // AppConfig.apiBaseUrl includes `/api/`; media is served from the same origin under `/media/`.
+    final apiBase = Uri.parse(AppConfig.apiBaseUrl);
+    final origin = apiBase.origin;
+    if (photo.startsWith('/')) {
+      return '$origin$photo';
+    }
+    return '$origin/$photo';
   }
 
   @override
@@ -54,6 +46,7 @@ class _ClientsPageState extends State<ClientsPage> {
     return clients.where((client) {
       return client.name.toLowerCase().contains(query) ||
           client.email.toLowerCase().contains(query) ||
+          client.company.toLowerCase().contains(query) ||
           client.phone.toLowerCase().contains(query);
     }).toList();
   }
@@ -76,7 +69,7 @@ class _ClientsPageState extends State<ClientsPage> {
           return ClientInfo(
             id: client['client_id'],
             name: '${client['first_name']} ${client['last_name']}',
-            company: '',
+            company: 'AESTRA Build Corp.',
             email: client['email'],
             phone: client['phone_number'],
             location: 'Philippines',
@@ -127,14 +120,7 @@ class _ClientsPageState extends State<ClientsPage> {
                 return const Center(child: Text('No clients found'));
               } else {
                 final filteredClients = _filterClients(snapshot.data!);
-                return _ActiveClientsSection(
-                  clients: filteredClients,
-                  onClientUpdated: () {
-                    setState(() {
-                      _clientsFuture = _fetchClients();
-                    });
-                  },
-                );
+                return _ActiveClientsSection(clients: filteredClients);
               }
             },
           ),
@@ -293,13 +279,9 @@ class _AddClientButton extends StatelessWidget {
 }
 
 class _ActiveClientsSection extends StatelessWidget {
-  const _ActiveClientsSection({
-    required this.clients,
-    required this.onClientUpdated,
-  });
+  const _ActiveClientsSection({required this.clients});
 
   final List<ClientInfo> clients;
-  final VoidCallback onClientUpdated;
 
   @override
   Widget build(BuildContext context) {
@@ -334,10 +316,7 @@ class _ActiveClientsSection extends StatelessWidget {
                   .map(
                     (client) => SizedBox(
                       width: cardWidth,
-                      child: ClientCard(
-                        info: client,
-                        onClientUpdated: onClientUpdated,
-                      ),
+                      child: ClientCard(info: client),
                     ),
                   )
                   .toList(),
@@ -350,14 +329,9 @@ class _ActiveClientsSection extends StatelessWidget {
 }
 
 class ClientCard extends StatelessWidget {
-  const ClientCard({
-    super.key,
-    required this.info,
-    required this.onClientUpdated,
-  });
+  const ClientCard({super.key, required this.info});
 
   final ClientInfo info;
-  final VoidCallback onClientUpdated;
 
   @override
   Widget build(BuildContext context) {
@@ -413,19 +387,17 @@ class ClientCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     SizedBox(height: isMobile ? 2 : 4),
-                    if (info.company.trim().isNotEmpty) ...[
-                      Text(
-                        info.company,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFFFF7A18),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    Text(
+                      info.company,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFFFF7A18),
                       ),
-                      SizedBox(height: isMobile ? 2 : 4),
-                    ],
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    SizedBox(height: isMobile ? 2 : 4),
                     Row(
                       children: [
                         const Icon(
@@ -494,15 +466,14 @@ class ClientCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(30),
                     ),
                   ),
-                  onPressed: () async {
-                    await Navigator.of(context).push(
+                  onPressed: () {
+                    Navigator.of(context).push(
                       PageRouteBuilder(
                         pageBuilder: (context, animation, secondaryAnimation) =>
                             ClientProfilePage(client: info),
                         transitionDuration: Duration.zero,
                       ),
                     );
-                    onClientUpdated();
                   },
                   child: Text(
                     isMobile ? 'View' : 'View profile',

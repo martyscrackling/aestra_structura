@@ -16,7 +16,6 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _quantityController = TextEditingController(text: '1');
-  final _priceController = TextEditingController();
   final List<TextEditingController> _serialNumberControllers = [
     TextEditingController(),
   ];
@@ -100,7 +99,6 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
         serialNumber: serialNumbers.isNotEmpty ? serialNumbers.first : null,
         serialNumbers: serialNumbers,
         quantity: int.tryParse(_quantityController.text.trim()) ?? 1,
-        price: double.parse(_priceController.text.trim()),
         location: _locationController.text.trim().isNotEmpty
             ? _locationController.text.trim()
             : null,
@@ -140,7 +138,6 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
   void dispose() {
     _nameController.dispose();
     _quantityController.dispose();
-    _priceController.dispose();
     for (final controller in _serialNumberControllers) {
       controller.dispose();
     }
@@ -650,21 +647,6 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
       Text(
         'Set number of units to add serial fields for each unit.',
         style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-      ),
-      const SizedBox(height: 12),
-      _buildTextField(
-        controller: _priceController,
-        hintText: 'Price / Unit *',
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        validator: (value) {
-          if (value == null || value.trim().isEmpty) {
-            return 'Please enter a price per unit';
-          }
-          if (double.tryParse(value.trim()) == null) {
-            return 'Please enter a valid number';
-          }
-          return null;
-        },
       ),
       const SizedBox(height: 12),
       ..._buildSerialNumberFields(),

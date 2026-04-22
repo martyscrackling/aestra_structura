@@ -15,7 +15,6 @@ class ToolItem {
   final String? photoUrl;
   final String? serialNumber;
   final int quantity;
-  final double? price;
   final int assignedProjectsCount;
   final String? location;
   final String? notes;
@@ -31,7 +30,6 @@ class ToolItem {
     this.photoUrl,
     this.serialNumber,
     this.quantity = 1,
-    this.price,
     this.assignedProjectsCount = 0,
     this.location,
     this.notes,
@@ -49,7 +47,6 @@ class ToolItem {
       photoUrl: json['photo_url'],
       serialNumber: json['serial_number'],
       quantity: json['quantity'] ?? 1,
-      price: json['price'] != null ? double.tryParse(json['price'].toString()) : null,
       assignedProjectsCount: json['assigned_projects_count'] ?? 0,
       location: json['location'],
       notes: json['notes'],
@@ -415,17 +412,6 @@ class _InventoryPageState extends State<InventoryPage> {
                                       flex: 1,
                                       child: Text(
                                         'Unit',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    ),
-                                  if (!isMobile)
-                                    const Expanded(
-                                      flex: 1,
-                                      child: Text(
-                                        'Price/Unit',
                                         style: TextStyle(
                                           fontWeight: FontWeight.w700,
                                           fontSize: 13,
@@ -1037,21 +1023,6 @@ class _InventoryPageState extends State<InventoryPage> {
               flex: 1,
               child: Text(
                 _unitsDisplayText(t),
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF374151),
-                  fontWeight: FontWeight.w600,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-
-          // Price (desktop)
-          if (!isMobile)
-            Expanded(
-              flex: 1,
-              child: Text(
-                t.price != null ? '₱${t.price!.toStringAsFixed(2)}' : 'N/A',
                 style: const TextStyle(
                   fontSize: 12,
                   color: Color(0xFF374151),

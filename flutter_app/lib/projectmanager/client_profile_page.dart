@@ -45,93 +45,12 @@ class ClientProfilePage extends StatefulWidget {
 }
 
 class _ClientProfilePageState extends State<ClientProfilePage> {
-  late ClientInfo _client;
   late Future<_ClientProjectsData> _projectsFuture;
 
   @override
   void initState() {
     super.initState();
-    _client = widget.client;
     _projectsFuture = _fetchClientProjects();
-    _refreshClientFromServer();
-  }
-
-  int? _currentUserId() {
-    final raw = AuthService().currentUser?['user_id'];
-    if (raw is int) return raw;
-    return int.tryParse(raw?.toString() ?? '');
-  }
-
-  String _resolvePhotoUrl(dynamic rawPhoto) {
-    final photo = (rawPhoto?.toString() ?? '').trim();
-    if (photo.isEmpty) return _client.avatarUrl;
-
-    String url;
-    if (photo.startsWith('http://') || photo.startsWith('https://')) {
-      url = photo;
-    } else {
-      final apiBase = Uri.parse(AppConfig.apiBaseUrl);
-      final origin = apiBase.origin;
-      if (photo.startsWith('/')) {
-        url = '$origin$photo';
-      } else {
-        url = '$origin/$photo';
-      }
-    }
-
-    final uri = Uri.parse(url);
-    final params = Map<String, String>.from(uri.queryParameters);
-    params['cb'] = DateTime.now().millisecondsSinceEpoch.toString();
-    return uri.replace(queryParameters: params).toString();
-  }
-
-  String _buildClientLocation(Map<String, dynamic> data) {
-    final parts = [
-      data['barangay_name']?.toString().trim() ?? '',
-      data['city_name']?.toString().trim() ?? '',
-      data['province_name']?.toString().trim() ?? '',
-      data['region_name']?.toString().trim() ?? '',
-    ].where((e) => e.isNotEmpty).toList(growable: false);
-
-    if (parts.isNotEmpty) {
-      return parts.join(', ');
-    }
-    return _client.location;
-  }
-
-  Future<void> _refreshClientFromServer() async {
-    final clientId = _client.id;
-    final userId = _currentUserId();
-    if (clientId == null || userId == null) return;
-
-    try {
-      final response = await http.get(
-        AppConfig.apiUri('clients/$clientId/?user_id=$userId'),
-      );
-      if (response.statusCode != 200) return;
-
-      final decoded = jsonDecode(response.body);
-      if (decoded is! Map<String, dynamic>) return;
-
-      final firstName = (decoded['first_name']?.toString() ?? '').trim();
-      final lastName = (decoded['last_name']?.toString() ?? '').trim();
-      final fullName = '$firstName $lastName'.trim();
-
-      if (!mounted) return;
-      setState(() {
-        _client = ClientInfo(
-          id: _client.id,
-          name: fullName.isNotEmpty ? fullName : _client.name,
-          company: '',
-          email: (decoded['email']?.toString() ?? _client.email).trim(),
-          phone: (decoded['phone_number']?.toString() ?? _client.phone).trim(),
-          location: _buildClientLocation(decoded),
-          avatarUrl: _resolvePhotoUrl(decoded['photo']),
-        );
-      });
-    } catch (_) {
-      // Keep current UI data when refresh fails.
-    }
   }
 
   int? _parseInt(dynamic value) {
@@ -160,8 +79,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
 
     final clientField = project['client'];
     if (clientField is Map<String, dynamic>) {
-      return _parseInt(clientField['client_id']) ??
-          _parseInt(clientField['id']);
+      return _parseInt(clientField['client_id']) ?? _parseInt(clientField['id']);
     }
 
     return _parseInt(clientField);
@@ -184,14 +102,14 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
   }
 
   bool _isProjectForSelectedClient(Map<String, dynamic> project) {
-    final selectedClientId = _client.id;
+    final selectedClientId = widget.client.id;
     final projectClientId = _extractClientId(project);
 
     if (selectedClientId != null && projectClientId != null) {
       return selectedClientId == projectClientId;
     }
 
-    final selectedName = _client.name.trim().toLowerCase();
+    final selectedName = widget.client.name.trim().toLowerCase();
     final projectClientName = _extractClientName(project).toLowerCase();
 
     if (selectedName.isEmpty || projectClientName.isEmpty) {
@@ -203,7 +121,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
         selectedName.contains(projectClientName);
   }
 
-  String _buildProjectLocation(Map<String, dynamic> project) {
+  String _buildLocation(Map<String, dynamic> project) {
     String? asText(dynamic value) {
       if (value == null) return null;
       final text = value.toString().trim();
@@ -283,25 +201,17 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
   Future<_ClientProjectsData> _fetchClientProjects() async {
     final userId = AuthService().currentUser?['user_id'];
     if (userId == null) {
-      return const _ClientProjectsData(
-        activeProjects: [],
-        finishedProjects: [],
-      );
+      return const _ClientProjectsData(activeProjects: [], finishedProjects: []);
     }
 
-    final response = await http.get(
-      AppConfig.apiUri('projects/?user_id=$userId'),
-    );
+    final response = await http.get(AppConfig.apiUri('projects/?user_id=$userId'));
     if (response.statusCode != 200) {
       throw Exception('Failed to load projects: ${response.statusCode}');
     }
 
     final data = jsonDecode(response.body);
     if (data is! List) {
-      return const _ClientProjectsData(
-        activeProjects: [],
-        finishedProjects: [],
-      );
+      return const _ClientProjectsData(activeProjects: [], finishedProjects: []);
     }
 
     final activeProjects = <ClientProject>[];
@@ -317,19 +227,15 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
         progress = await _calculateProgressFromPhases(projectId);
       }
 
-      final statusRaw = (rawProject['status']?.toString() ?? 'In Progress')
-          .trim();
-      final isCompleted =
-          statusRaw.toLowerCase() == 'completed' || progress >= 1.0;
+      final statusRaw = (rawProject['status']?.toString() ?? 'In Progress').trim();
+      final isCompleted = statusRaw.toLowerCase() == 'completed' || progress >= 1.0;
       final normalizedStatus = isCompleted
           ? 'Completed'
           : (statusRaw.isEmpty ? 'In Progress' : statusRaw);
 
       final project = ClientProject(
-        projectName:
-            (rawProject['project_name']?.toString() ?? 'Unnamed Project')
-                .trim(),
-        location: _buildProjectLocation(rawProject),
+        projectName: (rawProject['project_name']?.toString() ?? 'Unnamed Project').trim(),
+        location: _buildLocation(rawProject),
         startDate: _formatDate(rawProject['start_date']?.toString() ?? ''),
         endDate: _formatDate(rawProject['end_date']?.toString() ?? ''),
         progress: progress,
@@ -351,7 +257,6 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    final client = _client;
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 768;
 
@@ -404,16 +309,13 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                         // Profile Image
                         CircleAvatar(
                           radius: 50,
-                          backgroundImage: client.avatarUrl.trim().isNotEmpty
-                              ? NetworkImage(client.avatarUrl)
+                          backgroundImage: widget.client.avatarUrl.trim().isNotEmpty
+                              ? NetworkImage(widget.client.avatarUrl)
                               : null,
                           backgroundColor: Colors.grey[200],
-                          child: client.avatarUrl.trim().isNotEmpty
+                          child: widget.client.avatarUrl.trim().isNotEmpty
                               ? null
-                              : const Icon(
-                                  Icons.person_outline,
-                                  color: Color(0xFF6B7280),
-                                ),
+                              : const Icon(Icons.person_outline, color: Color(0xFF6B7280)),
                         ),
                         const SizedBox(height: 16),
                         // Profile Info
@@ -421,7 +323,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             Text(
-                              client.name,
+                              widget.client.name,
                               style: const TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.w700,
@@ -429,33 +331,31 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                               ),
                               textAlign: TextAlign.center,
                             ),
-                            if (client.company.trim().isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                client.company,
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  color: Color(0xFF6B7280),
-                                ),
-                                textAlign: TextAlign.center,
+                            const SizedBox(height: 4),
+                            Text(
+                              widget.client.company,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                color: Color(0xFF6B7280),
                               ),
-                            ],
+                              textAlign: TextAlign.center,
+                            ),
                             const SizedBox(height: 12),
                             _buildInfoRow(
                               Icons.location_on_outlined,
-                              client.location,
+                              widget.client.location,
                               center: true,
                             ),
                             const SizedBox(height: 6),
                             _buildInfoRow(
                               Icons.email_outlined,
-                              client.email,
+                              widget.client.email,
                               center: true,
                             ),
                             const SizedBox(height: 6),
                             _buildInfoRow(
                               Icons.phone_outlined,
-                              client.phone,
+                              widget.client.phone,
                               center: true,
                             ),
                           ],
@@ -465,15 +365,12 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
-                            onPressed: () async {
-                              final saved = await showDialog(
+                            onPressed: () {
+                              showDialog(
                                 context: context,
                                 builder: (context) =>
-                                    ViewEditClientModal(client: client),
+                                    ViewEditClientModal(client: widget.client),
                               );
-                              if (saved == true) {
-                                _refreshClientFromServer();
-                              }
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFFFF7A18),
@@ -507,16 +404,13 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                         // Profile Image
                         CircleAvatar(
                           radius: 50,
-                          backgroundImage: client.avatarUrl.trim().isNotEmpty
-                              ? NetworkImage(client.avatarUrl)
+                          backgroundImage: widget.client.avatarUrl.trim().isNotEmpty
+                              ? NetworkImage(widget.client.avatarUrl)
                               : null,
                           backgroundColor: Colors.grey[200],
-                          child: client.avatarUrl.trim().isNotEmpty
+                          child: widget.client.avatarUrl.trim().isNotEmpty
                               ? null
-                              : const Icon(
-                                  Icons.person_outline,
-                                  color: Color(0xFF6B7280),
-                                ),
+                              : const Icon(Icons.person_outline, color: Color(0xFF6B7280)),
                         ),
                         const SizedBox(width: 24),
                         // Profile Info
@@ -525,46 +419,41 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                client.name,
+                                widget.client.name,
                                 style: const TextStyle(
                                   fontSize: 22,
                                   fontWeight: FontWeight.w700,
                                   color: Color(0xFF0C1935),
                                 ),
                               ),
-                              if (client.company.trim().isNotEmpty) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  client.company,
-                                  style: const TextStyle(
-                                    fontSize: 15,
-                                    color: Color(0xFF6B7280),
-                                  ),
+                              const SizedBox(height: 4),
+                              Text(
+                                widget.client.company,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  color: Color(0xFF6B7280),
                                 ),
-                              ],
+                              ),
                               const SizedBox(height: 12),
                               _buildInfoRow(
                                 Icons.location_on_outlined,
-                                client.location,
+                                widget.client.location,
                               ),
                               const SizedBox(height: 6),
-                              _buildInfoRow(Icons.email_outlined, client.email),
+                              _buildInfoRow(Icons.email_outlined, widget.client.email),
                               const SizedBox(height: 6),
-                              _buildInfoRow(Icons.phone_outlined, client.phone),
+                              _buildInfoRow(Icons.phone_outlined, widget.client.phone),
                             ],
                           ),
                         ),
                         // Edit Button
                         ElevatedButton.icon(
-                          onPressed: () async {
-                            final saved = await showDialog(
+                          onPressed: () {
+                            showDialog(
                               context: context,
                               builder: (context) =>
-                                  ViewEditClientModal(client: client),
+                                  ViewEditClientModal(client: widget.client),
                             );
-                            if (saved == true) {
-                              _refreshClientFromServer();
-                            }
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFFFF7A18),
@@ -611,12 +500,8 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                   );
                 }
 
-                final data =
-                    snapshot.data ??
-                    const _ClientProjectsData(
-                      activeProjects: [],
-                      finishedProjects: [],
-                    );
+                final data = snapshot.data ??
+                    const _ClientProjectsData(activeProjects: [], finishedProjects: []);
 
                 return Column(
                   children: [

@@ -396,13 +396,6 @@ class FieldWorker(models.Model):
     cash_advance_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     deduction_per_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
-    # Damages tracking
-    damages_category = models.CharField(max_length=50, null=True, blank=True)
-    damages_item = models.CharField(max_length=255, null=True, blank=True)
-    damages_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    damages_schedule = models.CharField(max_length=50, null=True, blank=True)
-    damages_deduction_per_salary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-
     # Weekly salary and deduction snapshot values.
     weekly_salary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
@@ -646,7 +639,6 @@ class InventoryItem(models.Model):
     quantity = models.PositiveIntegerField(default=1)
     location = models.CharField(max_length=200, null=True, blank=True)
     notes = models.TextField(null=True, blank=True)
-    price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     photo = models.FileField(upload_to='inventory_images/', null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Available')
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='inventory_items')
