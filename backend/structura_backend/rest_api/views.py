@@ -394,12 +394,9 @@ def login_user(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        account_found = False
-
         # First, try to find user as a regular User (ProjectManager, etc.)
         try:
             user = models.User.objects.get(email=email)
-            account_found = True
             # Check password
             if check_password(password, user.password_hash):
                 # If this is a Client user, also resolve the corresponding Client profile.
@@ -443,13 +440,17 @@ def login_user(request):
                         'type': 'user',  # Indicate this is a regular user/project manager
                     }
                 }, status=status.HTTP_200_OK)
+            else:
+                return Response(
+                    {'success': False, 'message': 'Invalid password'},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
         except models.User.DoesNotExist:
             pass  # Not a User, check if it's a Worker or Client
         
         # If not a regular user, check if they're a Supervisor
         try:
             supervisor = models.Supervisors.objects.get(email=email)
-            account_found = True
             # Check password
             if check_password(password, supervisor.password_hash):
                 # Prefer the explicit FK on the supervisor row, but fall back to
@@ -477,20 +478,24 @@ def login_user(request):
                         'first_name': supervisor.first_name,
                         'middle_name': supervisor.middle_name,
                         'last_name': supervisor.last_name,
-                        'phone': supervisor.phone_number,
-                        'phone_number': supervisor.phone_number,
+                        'phone': supervisor.phone,
+                        'phone_number': supervisor.phone,
                         'role': 'Supervisor',
                         'type': 'Supervisor',  # Indicate this is a supervisor
                         'force_password_change': password == 'PASSWORD',
                     }
                 }, status=status.HTTP_200_OK)
+            else:
+                return Response(
+                    {'success': False, 'message': 'Invalid password'},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
         except models.Supervisors.DoesNotExist:
             pass  # Not a Supervisor, check if it's a Client
         
         # If not a supervisor, check if they're a Client
         try:
             client = models.Client.objects.get(email=email)
-            account_found = True
             # Check password
             if check_password(password, client.password_hash):
                 return Response({
@@ -511,20 +516,16 @@ def login_user(request):
                         'force_password_change': password == 'PASSWORD',
                     }
                 }, status=status.HTTP_200_OK)
+            else:
+                return Response(
+                    {'success': False, 'message': 'Invalid password'},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
         except models.Client.DoesNotExist:
-
-            pass
-
-        if account_found:
             return Response(
-                {'success': False, 'message': 'Invalid password'},
-                status=status.HTTP_401_UNAUTHORIZED
+                {'success': False, 'message': 'Email not found in system'},
+                status=status.HTTP_404_NOT_FOUND
             )
-
-        return Response(
-            {'success': False, 'message': 'Email not found in system'},
-            status=status.HTTP_404_NOT_FOUND
-        )
         
     except Exception as e:
         return Response(
@@ -1741,7 +1742,7 @@ class PhaseViewSet(viewsets.ModelViewSet):
     serializer_class = PhaseSerializer
 
     def get_queryset(self):
-        queryset = models.Phase.objects.all().order_by('-created_at', '-phase_id')
+        queryset = models.Phase.objects.all().order_by('created_at', 'phase_id')
         project_id = self.request.query_params.get('project_id')
         if project_id:
             queryset = queryset.filter(project_id=project_id)
