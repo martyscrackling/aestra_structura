@@ -65,16 +65,24 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
   String _resolvePhotoUrl(dynamic rawPhoto) {
     final photo = (rawPhoto?.toString() ?? '').trim();
     if (photo.isEmpty) return _client.avatarUrl;
+
+    String url;
     if (photo.startsWith('http://') || photo.startsWith('https://')) {
-      return photo;
+      url = photo;
+    } else {
+      final apiBase = Uri.parse(AppConfig.apiBaseUrl);
+      final origin = apiBase.origin;
+      if (photo.startsWith('/')) {
+        url = '$origin$photo';
+      } else {
+        url = '$origin/$photo';
+      }
     }
 
-    final apiBase = Uri.parse(AppConfig.apiBaseUrl);
-    final origin = apiBase.origin;
-    if (photo.startsWith('/')) {
-      return '$origin$photo';
-    }
-    return '$origin/$photo';
+    final uri = Uri.parse(url);
+    final params = Map<String, String>.from(uri.queryParameters);
+    params['cb'] = DateTime.now().millisecondsSinceEpoch.toString();
+    return uri.replace(queryParameters: params).toString();
   }
 
   String _buildClientLocation(Map<String, dynamic> data) {

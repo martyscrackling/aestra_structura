@@ -21,17 +21,25 @@ class _ClientsPageState extends State<ClientsPage> {
   String _resolvePhotoUrl(dynamic rawPhoto) {
     final photo = (rawPhoto?.toString() ?? '').trim();
     if (photo.isEmpty) return '';
+
+    String url;
     if (photo.startsWith('http://') || photo.startsWith('https://')) {
-      return photo;
+      url = photo;
+    } else {
+      // AppConfig.apiBaseUrl includes `/api/`; media is served from the same origin under `/media/`.
+      final apiBase = Uri.parse(AppConfig.apiBaseUrl);
+      final origin = apiBase.origin;
+      if (photo.startsWith('/')) {
+        url = '$origin$photo';
+      } else {
+        url = '$origin/$photo';
+      }
     }
 
-    // AppConfig.apiBaseUrl includes `/api/`; media is served from the same origin under `/media/`.
-    final apiBase = Uri.parse(AppConfig.apiBaseUrl);
-    final origin = apiBase.origin;
-    if (photo.startsWith('/')) {
-      return '$origin$photo';
-    }
-    return '$origin/$photo';
+    final uri = Uri.parse(url);
+    final params = Map<String, String>.from(uri.queryParameters);
+    params['cb'] = DateTime.now().millisecondsSinceEpoch.toString();
+    return uri.replace(queryParameters: params).toString();
   }
 
   @override
@@ -119,7 +127,14 @@ class _ClientsPageState extends State<ClientsPage> {
                 return const Center(child: Text('No clients found'));
               } else {
                 final filteredClients = _filterClients(snapshot.data!);
-                return _ActiveClientsSection(clients: filteredClients);
+                return _ActiveClientsSection(
+                  clients: filteredClients,
+                  onClientUpdated: () {
+                    setState(() {
+                      _clientsFuture = _fetchClients();
+                    });
+                  },
+                );
               }
             },
           ),
@@ -278,9 +293,13 @@ class _AddClientButton extends StatelessWidget {
 }
 
 class _ActiveClientsSection extends StatelessWidget {
-  const _ActiveClientsSection({required this.clients});
+  const _ActiveClientsSection({
+    required this.clients,
+    required this.onClientUpdated,
+  });
 
   final List<ClientInfo> clients;
+  final VoidCallback onClientUpdated;
 
   @override
   Widget build(BuildContext context) {
@@ -315,7 +334,10 @@ class _ActiveClientsSection extends StatelessWidget {
                   .map(
                     (client) => SizedBox(
                       width: cardWidth,
-                      child: ClientCard(info: client),
+                      child: ClientCard(
+                        info: client,
+                        onClientUpdated: onClientUpdated,
+                      ),
                     ),
                   )
                   .toList(),
@@ -328,9 +350,14 @@ class _ActiveClientsSection extends StatelessWidget {
 }
 
 class ClientCard extends StatelessWidget {
-  const ClientCard({super.key, required this.info});
+  const ClientCard({
+    super.key,
+    required this.info,
+    required this.onClientUpdated,
+  });
 
   final ClientInfo info;
+  final VoidCallback onClientUpdated;
 
   @override
   Widget build(BuildContext context) {
@@ -467,14 +494,15 @@ class ClientCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(30),
                     ),
                   ),
-                  onPressed: () {
-                    Navigator.of(context).push(
+                  onPressed: () async {
+                    await Navigator.of(context).push(
                       PageRouteBuilder(
                         pageBuilder: (context, animation, secondaryAnimation) =>
                             ClientProfilePage(client: info),
                         transitionDuration: Duration.zero,
                       ),
                     );
+                    onClientUpdated();
                   },
                   child: Text(
                     isMobile ? 'View' : 'View profile',

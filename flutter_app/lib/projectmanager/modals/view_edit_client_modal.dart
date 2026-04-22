@@ -42,6 +42,34 @@ class _ViewEditClientModalState extends State<ViewEditClientModal> {
   Uint8List? _selectedImageBytes;
   bool _isEditing = true;
 
+  String? _extractErrorMessage(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) {
+        if (decoded['detail'] != null) {
+          return decoded['detail'].toString();
+        }
+        if (decoded['email'] is List && (decoded['email'] as List).isNotEmpty) {
+          return (decoded['email'] as List).first.toString();
+        }
+        for (final value in decoded.values) {
+          if (value is List && value.isNotEmpty) {
+            return value.first.toString();
+          }
+          if (value != null) {
+            final message = value.toString().trim();
+            if (message.isNotEmpty) {
+              return message;
+            }
+          }
+        }
+      }
+    } catch (_) {
+      // Response is not JSON; return null to fall back to default message.
+    }
+    return null;
+  }
+
   String _formatPhoneForDisplay(String value) {
     final digits = PhilippinePhoneInputFormatter.normalizeDigits(value);
     if (digits.isEmpty) return '';
@@ -259,7 +287,10 @@ class _ViewEditClientModalState extends State<ViewEditClientModal> {
     final streamed = await request.send();
     final response = await http.Response.fromStream(streamed);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('Failed to upload photo (${response.statusCode}).');
+      final serverMessage = _extractErrorMessage(response.body);
+      throw Exception(
+        serverMessage ?? 'Failed to upload photo (${response.statusCode}).',
+      );
     }
   }
 
@@ -310,30 +341,24 @@ class _ViewEditClientModalState extends State<ViewEditClientModal> {
         Navigator.of(context).pop(true);
       } else {
         String message = 'Failed to save changes (${response.statusCode}).';
-        try {
-          final decoded = jsonDecode(response.body);
-          if (decoded is Map<String, dynamic>) {
-            if (decoded['email'] is List &&
-                (decoded['email'] as List).isNotEmpty) {
-              message = (decoded['email'] as List).first.toString();
-            } else if (decoded['detail'] != null) {
-              message = decoded['detail'].toString();
-            } else if (decoded.isNotEmpty) {
-              message = decoded.values.first.toString();
-            }
-          }
-        } catch (_) {
-          // Keep default message if response body is not JSON.
+        final serverMessage = _extractErrorMessage(response.body);
+        if (serverMessage != null && serverMessage.isNotEmpty) {
+          message = serverMessage;
         }
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(message)));
       }
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Failed to save changes.')));
+      final message = e.toString().replaceFirst('Exception: ', '').trim();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            message.isNotEmpty ? message : 'Failed to save changes.',
+          ),
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() => _isSaving = false);
