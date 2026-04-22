@@ -632,6 +632,40 @@ class _AttendancePageState extends State<AttendancePage> {
     return false;
   }
 
+  Future<bool> _authorizeOvertime({
+    required String workerLabel,
+    required String shiftEnd,
+    required String computedTimeOut,
+    required int overtimeMinutes,
+  }) async {
+    if (!mounted) return false;
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: Colors.white,
+        title: const Text('Overtime Authorization'),
+        content: Text(
+          '$workerLabel is checking out $overtimeMinutes minute${overtimeMinutes == 1 ? '' : 's'} after shift end.\n\n'
+          'Scheduled shift end: ${_formatTime(shiftEnd)}\n'
+          'Current time: ${_formatTime(computedTimeOut)}\n\n'
+          'Authorize this overtime? If not authorized, time out will be recorded as the scheduled shift end.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Use Shift End'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: primary),
+            child: const Text('Authorize Overtime'),
+          ),
+        ],
+      ),
+    );
+    return approved == true;
+  }
+
   Future<bool> _authorizeLateTimeIn({
     required String workerLabel,
     required String shiftStart,
@@ -725,8 +759,8 @@ class _AttendancePageState extends State<AttendancePage> {
           fieldWorkerId,
       orElse: () => <String, dynamic>{},
     );
-    final shiftStartRaw = (worker['shift_start'] ?? '').toString().trim();
-    final shiftEndRaw = (worker['shift_end'] ?? '').toString().trim();
+    final shiftStartRaw = (worker['shift_start'] ?? worker['current_project_shift_start'] ?? '').toString().trim();
+    final shiftEndRaw = (worker['shift_end'] ?? worker['current_project_shift_end'] ?? '').toString().trim();
     final workerName =
         '${(worker['first_name'] ?? '').toString().trim()} ${(worker['last_name'] ?? '').toString().trim()}'
             .trim();
@@ -779,7 +813,25 @@ class _AttendancePageState extends State<AttendancePage> {
         if (!approved) return;
       }
     } else if (action == 'Time Out' && shiftEndRaw.isNotEmpty) {
-      actionTime = shiftEndRaw;
+      final shiftEndMinutes = _timeStringToMinutes(shiftEndRaw);
+      final nowMinutes = _timeStringToMinutes(nowTime);
+
+      if (shiftEndMinutes != null && nowMinutes != null && nowMinutes > shiftEndMinutes) {
+        final overtimeMinutes = nowMinutes - shiftEndMinutes;
+        final approved = await _authorizeOvertime(
+          workerLabel: workerName.isEmpty ? 'Worker #$fieldWorkerId' : workerName,
+          shiftEnd: shiftEndRaw,
+          computedTimeOut: nowTime,
+          overtimeMinutes: overtimeMinutes,
+        );
+        if (approved) {
+          actionTime = nowTime;
+        } else {
+          actionTime = shiftEndRaw;
+        }
+      } else {
+        actionTime = shiftEndRaw;
+      }
     }
 
     if (action == 'Time Out') {

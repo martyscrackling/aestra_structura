@@ -529,6 +529,11 @@ class FieldWorkerSerializer(serializers.ModelSerializer):
             'shift_schedule',
             'current_project_shift_start',
             'current_project_shift_end',
+            'damages_category',
+            'damages_item',
+            'damages_price',
+            'damages_schedule',
+            'damages_deduction_per_salary',
             'created_at',
         ]
         extra_kwargs = {
@@ -555,6 +560,11 @@ class FieldWorkerSerializer(serializers.ModelSerializer):
             'philhealth_weekly_topup': {'required': False, 'allow_null': True},
             'pagibig_weekly_topup': {'required': False, 'allow_null': True},
             'photo': {'required': False, 'allow_null': True},
+            'damages_category': {'required': False, 'allow_null': True},
+            'damages_item': {'required': False, 'allow_null': True},
+            'damages_price': {'required': False, 'allow_null': True},
+            'damages_schedule': {'required': False, 'allow_null': True},
+            'damages_deduction_per_salary': {'required': False, 'allow_null': True},
         }
 
     def get_assignment_status(self, obj):
@@ -966,6 +976,7 @@ class BackJobReviewSerializer(serializers.ModelSerializer):
 
 class SubtaskSerializer(serializers.ModelSerializer):
     assigned_workers = serializers.SerializerMethodField()
+    update_photos = serializers.SerializerMethodField()
 
     class Meta:
         model = models.Subtask
@@ -978,6 +989,7 @@ class SubtaskSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
             'assigned_workers',
+            'update_photos',
         ]
         extra_kwargs = {
             'subtask_id': {'read_only': True},
@@ -1002,10 +1014,22 @@ class SubtaskSerializer(serializers.ModelSerializer):
                 'id': worker_id,
                 'first_name': worker.first_name,
                 'last_name': worker.last_name,
+                'phone_number': worker.phone_number,
                 'role': worker.role,
                 'photo': worker.photo.url if worker.photo else None,
             })
         return workers
+
+    def get_update_photos(self, obj):
+        photos = obj.update_photos.all()
+        return [
+            {
+                'photo_id': photo.photo_id,
+                'photo': photo.photo.url if photo.photo else None,
+                'created_at': photo.created_at,
+            }
+            for photo in photos
+        ]
 
 
 class PhaseSerializer(serializers.ModelSerializer):
@@ -1375,6 +1399,7 @@ class InventoryItemSerializer(serializers.ModelSerializer):
             'category',
             'serial_number',
             'quantity',
+            'price',
             'location',
             'notes',
             'photo',

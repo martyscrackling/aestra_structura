@@ -12,6 +12,7 @@ import '../services/auth_service.dart';
 import '../services/app_config.dart';
 import '../services/file_download/file_download.dart';
 import '../services/app_theme_tokens.dart';
+import '../services/inventory_service.dart';
 import 'widgets/sidebar.dart';
 import 'widgets/mobile_bottom_nav.dart';
 import 'widgets/dashboard_header.dart';
@@ -787,6 +788,453 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
           ),
         );
       },
+    );
+  }
+
+  Future<void> _showWorkerDamagesModal(
+    BuildContext context,
+    Map<String, dynamic> worker,
+  ) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const Center(child: CircularProgressIndicator()),
+    );
+
+    List<Map<String, dynamic>> tools = [];
+    List<Map<String, dynamic>> machinery = [];
+    try {
+      final userId = AuthService().currentUser?['user_id'];
+      if (userId != null) {
+        final items = await InventoryService.getInventoryItemsForSupervisor(supervisorId: userId);
+        tools = items.where((i) => i['category'] == 'Tools').toList();
+        machinery = items.where((i) => i['category'] == 'Machines' || i['category'] == 'Machinery').toList();
+      }
+    } catch (e) {
+      debugPrint('Failed to load inventory: $e');
+    }
+
+    if (!context.mounted) return;
+    Navigator.of(context).pop(); // dismiss loading indicator
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        final workerName = _getWorkerName(worker);
+        
+        String selectedCategory = 'Tools';
+        String selectedItem = '';
+        String price = '';
+        String paymentSchedule = 'Weekly';
+        String deductionAmount = '';
+        final TextEditingController priceController = TextEditingController();
+        final TextEditingController itemSearchController = TextEditingController();
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final isCustom = selectedCategory == 'Custom';
+            
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              backgroundColor: Colors.white,
+              title: Text('Report Damage - $workerName'),
+              content: Container(
+                width: double.maxFinite,
+                constraints: const BoxConstraints(maxWidth: 400),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (worker['damages_item'] != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              _showDamagesSummaryModal(
+                                context,
+                                workerName: workerName,
+                                category: worker['damages_category']?.toString() ?? '',
+                                item: worker['damages_item']?.toString() ?? '',
+                                price: worker['damages_price']?.toString() ?? '',
+                                schedule: worker['damages_schedule']?.toString() ?? '',
+                                deduction: worker['damages_deduction']?.toString() ?? '',
+                              );
+                            },
+                            icon: const Icon(Icons.receipt_long, size: 18),
+                            label: const Text('View Existing Damage Summary'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange.shade600,
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size(double.infinity, 40),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.green.shade200),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.check_circle_outline, color: Colors.green.shade600, size: 20),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'No damages reported for this worker.',
+                                    style: TextStyle(color: Colors.green.shade800, fontWeight: FontWeight.w500, fontSize: 13),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      const Divider(height: 1),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Record New Damage',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Damage Category',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          return DropdownMenu<String>(
+                            initialSelection: selectedCategory,
+                            width: constraints.maxWidth,
+                            enableFilter: false,
+                            enableSearch: false,
+                            requestFocusOnTap: false,
+                            menuStyle: MenuStyle(
+                              backgroundColor: MaterialStateProperty.all(Colors.white),
+                              surfaceTintColor: MaterialStateProperty.all(Colors.white),
+                            ),
+                            inputDecorationTheme: InputDecorationTheme(
+                              filled: true,
+                              fillColor: Colors.white,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                            ),
+                            dropdownMenuEntries: ['Tools', 'Machinery', 'Custom']
+                                .map((c) => DropdownMenuEntry(value: c, label: c))
+                                .toList(),
+                            onSelected: (val) {
+                              if (val != null) {
+                                setModalState(() {
+                                  selectedCategory = val;
+                                  itemSearchController.clear();
+                                  selectedItem = '';
+                                  if (val != 'Custom') {
+                                    priceController.clear();
+                                    price = '';
+                                  }
+                                });
+                              }
+                            },
+                          );
+                        }
+                      ),
+                      const SizedBox(height: 16),
+                      if (!isCustom) ...[
+                        const Text(
+                          'Search Item',
+                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                        ),
+                        const SizedBox(height: 8),
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            return DropdownMenu<String>(
+                              controller: itemSearchController,
+                              width: constraints.maxWidth,
+                              hintText: 'Search or select...',
+                              enableFilter: true,
+                              menuStyle: MenuStyle(
+                                backgroundColor: MaterialStateProperty.all(Colors.white),
+                                surfaceTintColor: MaterialStateProperty.all(Colors.white),
+                              ),
+                              inputDecorationTheme: InputDecorationTheme(
+                                filled: true,
+                                fillColor: Colors.white,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                              ),
+                              dropdownMenuEntries: (selectedCategory == 'Tools' ? tools : machinery)
+                                  .map((item) {
+                                    final name = item['name']?.toString() ?? 'Unknown';
+                                    return DropdownMenuEntry<String>(value: name, label: name);
+                                  })
+                                  .toList(),
+                              onSelected: (String? selection) {
+                                if (selection != null) {
+                                  setModalState(() {
+                                    selectedItem = selection;
+                                    final activeList = selectedCategory == 'Tools' ? tools : machinery;
+                                    final matched = activeList.firstWhere(
+                                      (i) => i['name'] == selection,
+                                      orElse: () => <String, dynamic>{},
+                                    );
+                                    if (matched['price'] != null) {
+                                      priceController.text = matched['price'].toString();
+                                      price = priceController.text;
+                                    } else {
+                                      priceController.text = '0.00';
+                                      price = '0.00';
+                                    }
+                                  });
+                                }
+                              },
+                            );
+                          }
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      const Text(
+                        'Price of Damaged Item (₱)',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: priceController,
+                        enabled: isCustom,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: InputDecoration(
+                          hintText: isCustom ? '0.00' : 'Will be automatically fetched',
+                          filled: !isCustom,
+                          fillColor: !isCustom ? Colors.grey.shade100 : Colors.white,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        ),
+                        onChanged: (val) => price = val,
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Payment Schedule',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          return DropdownMenu<String>(
+                            initialSelection: paymentSchedule,
+                            width: constraints.maxWidth,
+                            enableFilter: false,
+                            enableSearch: false,
+                            requestFocusOnTap: false,
+                            menuStyle: MenuStyle(
+                              backgroundColor: MaterialStateProperty.all(Colors.white),
+                              surfaceTintColor: MaterialStateProperty.all(Colors.white),
+                            ),
+                            inputDecorationTheme: InputDecorationTheme(
+                              filled: true,
+                              fillColor: Colors.white,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                            ),
+                            dropdownMenuEntries: ['Weekly', 'Every 2 Weeks', 'Every 3 Weeks', 'Monthly']
+                                .map((c) => DropdownMenuEntry(value: c, label: c))
+                                .toList(),
+                            onSelected: (val) {
+                              if (val != null) {
+                                setModalState(() => paymentSchedule = val);
+                              }
+                            },
+                          );
+                        }
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Deduction Amount per Schedule (₱)',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: InputDecoration(
+                          hintText: '0.00',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        ),
+                        onChanged: (val) => deductionAmount = val,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    // Show a simple loading indicator
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (_) => const Center(child: CircularProgressIndicator()),
+                    );
+
+                    final url = AppConfig.apiUri('field-workers/${worker['fieldworker_id']}/');
+                    try {
+                      final authService = Provider.of<AuthService>(context, listen: false);
+                      final token = authService.token;
+                      final headers = {
+                        'Content-Type': 'application/json',
+                        if (token != null) 'Authorization': 'Token $token',
+                      };
+                      final response = await http.patch(
+                        url,
+                        headers: headers,
+                        body: jsonEncode({
+                          'damages_category': selectedCategory,
+                          'damages_item': isCustom ? 'Custom Item' : selectedItem,
+                          'damages_price': price.isEmpty ? null : (double.tryParse(price) ?? 0.0),
+                          'damages_schedule': paymentSchedule,
+                          'damages_deduction_per_salary': deductionAmount.isEmpty ? null : (double.tryParse(deductionAmount) ?? 0.0),
+                        }),
+                      );
+                      
+                      if (!context.mounted) return;
+                      Navigator.pop(context); // close loading indicator
+
+                      if (response.statusCode == 200 || response.statusCode == 201) {
+                        worker['damages_category'] = selectedCategory;
+                        worker['damages_item'] = isCustom ? 'Custom Item' : selectedItem;
+                        worker['damages_price'] = price;
+                        worker['damages_schedule'] = paymentSchedule;
+                        worker['damages_deduction'] = deductionAmount;
+                        worker['damages_deduction_per_salary'] = deductionAmount; // Keep reports.dart logic happy
+                        setState(() {});
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Successfully recorded damage for $workerName.')),
+                        );
+
+                        Navigator.pop(context); // Close the report modal first
+                        _showDamagesSummaryModal(
+                          context,
+                          workerName: workerName,
+                          category: selectedCategory,
+                          item: isCustom ? 'Custom Item' : selectedItem,
+                          price: price,
+                          schedule: paymentSchedule,
+                          deduction: deductionAmount,
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Failed to save damage report. ${response.body}')),
+                        );
+                      }
+                    } catch (e) {
+                      if (!context.mounted) return;
+                      Navigator.pop(context); // close loading
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error: $e')),
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1396E9),
+                  ),
+                  child: const Text('Save Report'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showDamagesSummaryModal(
+    BuildContext context, {
+    required String workerName,
+    required String category,
+    required String item,
+    required String price,
+    required String schedule,
+    required String deduction,
+  }) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          backgroundColor: Colors.white,
+          title: const Text('Damage Report Summary'),
+          content: Container(
+            width: double.maxFinite,
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildDamageSummaryRow('Worker', workerName),
+                _buildDamageSummaryRow('Category', category),
+                _buildDamageSummaryRow('Damaged Item', item.isEmpty ? 'Not specified' : item),
+                _buildDamageSummaryRow('Total Price', '₱${price.isEmpty ? '0.00' : price}'),
+                _buildDamageSummaryRow('Payment Schedule', schedule),
+                _buildDamageSummaryRow('Deduction per Pay', '₱${deduction.isEmpty ? '0.00' : deduction}'),
+              ],
+            ),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF7A18),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text('Done', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDamageSummaryRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.black54, fontSize: 14)),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black87, fontSize: 14),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1706,14 +2154,25 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                     maxLines: 2,
                   ),
                   const SizedBox(height: 10),
-                  // Action button
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () => _showWorkerDetailModal(context, worker),
-                      icon: const Icon(Icons.remove_red_eye_outlined, size: 18),
-                      label: const Text('View Details'),
-                    ),
+                  // Action buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => _showWorkerDamagesModal(context, worker),
+                          icon: const Icon(Icons.broken_image_outlined, size: 16),
+                          label: const Text('Damages'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => _showWorkerDetailModal(context, worker),
+                          icon: const Icon(Icons.remove_red_eye_outlined, size: 16),
+                          label: const Text('Details'),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -1771,6 +2230,7 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                 _buildHeaderCell('Role', flex: 2),
                 _buildHeaderCell('Project', flex: isTablet ? 3 : 4),
                 _buildHeaderCell('Status', flex: 2),
+                _buildHeaderCell('Damages', flex: 2),
                 _buildHeaderCell('Actions', flex: 1),
               ],
             ),
@@ -1930,6 +2390,22 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                           ),
                         ),
                       ),
+                      // Damages column
+                      Expanded(
+                        flex: 2,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: OutlinedButton.icon(
+                            onPressed: () => _showWorkerDamagesModal(context, worker),
+                            icon: const Icon(Icons.broken_image_outlined, size: 16),
+                            label: const Text('View', style: TextStyle(fontSize: 12)),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              minimumSize: const Size(0, 32),
+                            ),
+                          ),
+                        ),
+                      ),
                       // Actions column
                       Expanded(
                         flex: 1,
@@ -1960,6 +2436,16 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                                           ? 'Inactive'
                                           : 'Active';
                                     });
+                                  } else if (v == 'view_damage_summary') {
+                                    _showDamagesSummaryModal(
+                                      context,
+                                      workerName: _getWorkerName(worker),
+                                      category: worker['damages_category']?.toString() ?? '',
+                                      item: worker['damages_item']?.toString() ?? '',
+                                      price: worker['damages_price']?.toString() ?? '',
+                                      schedule: worker['damages_schedule']?.toString() ?? '',
+                                      deduction: worker['damages_deduction']?.toString() ?? '',
+                                    );
                                   }
                                 },
                                 itemBuilder: (_) => [
@@ -1975,6 +2461,11 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                                     value: 'remove',
                                     child: Text('Remove (demo)'),
                                   ),
+                                  if (worker['damages_item'] != null)
+                                    const PopupMenuItem(
+                                      value: 'view_damage_summary',
+                                      child: Text('Damage Summary'),
+                                    ),
                                 ],
                                 icon: const Icon(Icons.more_vert, size: 20),
                                 padding: EdgeInsets.zero,
