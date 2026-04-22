@@ -147,12 +147,6 @@ class TaskTodayWidget extends StatelessWidget {
           const SizedBox(width: 12),
           if (task.assignedWorkers.isNotEmpty)
             _buildAvatarStack(task.assignedWorkers),
-          IconButton(
-            icon: const Icon(Icons.more_horiz),
-            onPressed: () {},
-            iconSize: 18,
-            color: Colors.grey,
-          ),
         ],
       ),
     );

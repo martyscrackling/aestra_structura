@@ -7,8 +7,13 @@ enum _ActivityView { daily, monthly }
 
 class ActivityWidget extends StatefulWidget {
   final List<PmActivityPoint> series;
+  final List<PmActivityMonthPoint> monthlySeries;
 
-  const ActivityWidget({super.key, required this.series});
+  const ActivityWidget({
+    super.key,
+    required this.series,
+    required this.monthlySeries,
+  });
 
   @override
   State<ActivityWidget> createState() => _ActivityWidgetState();
@@ -49,23 +54,10 @@ class _ActivityWidgetState extends State<ActivityWidget> {
   }
 
   List<_ActivityChartPoint> _buildMonthlyChartSeries() {
-    final now = DateTime.now();
-    final rollingMonths = List.generate(12, (index) {
-      final date = DateTime(now.year, now.month - (11 - index), 1);
-      return DateTime(date.year, date.month, 1);
-    });
-
-    final totalsByMonth = <String, int>{};
-    for (final point in widget.series) {
-      final key = '${point.day.year}-${point.day.month}';
-      totalsByMonth[key] = (totalsByMonth[key] ?? 0) + point.completed;
-    }
-
-    return rollingMonths.map((date) {
-      final key = '${date.year}-${date.month}';
+    return widget.monthlySeries.map((point) {
       return _ActivityChartPoint(
-        label: _monthLabel(date.month),
-        completed: totalsByMonth[key] ?? 0,
+        label: _monthLabel(point.month),
+        completed: point.completed,
       );
     }).toList();
   }
@@ -365,7 +357,7 @@ class _ActivityWidgetState extends State<ActivityWidget> {
                       }
                       final point = chartSeries[idx];
                       return BarTooltipItem(
-                        '${point.completed} tasks completed\n${point.label}',
+                        '${point.completed} subtasks completed\n${point.label}',
                         const TextStyle(
                           color: Colors.white,
                           fontSize: 12,

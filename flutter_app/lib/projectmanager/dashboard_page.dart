@@ -522,7 +522,10 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
         if (layout == LayoutType.extraSmallPhone ||
             layout == LayoutType.smallPhone ||
             layout == LayoutType.mobile) ...[
-          ActivityWidget(series: summary.activitySeries),
+          ActivityWidget(
+            series: summary.activitySeries,
+            monthlySeries: summary.monthlySeries,
+          ),
           SizedBox(height: spacing),
           TaskSummaryWidget(
             totalProjects: summary.totalProjects,
@@ -536,7 +539,12 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: ActivityWidget(series: summary.activitySeries)),
+              Expanded(
+                child: ActivityWidget(
+                  series: summary.activitySeries,
+                  monthlySeries: summary.monthlySeries,
+                ),
+              ),
               SizedBox(width: spacing),
               Expanded(
                 child: TaskSummaryWidget(
@@ -555,7 +563,10 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
             children: [
               Expanded(
                 flex: 2,
-                child: ActivityWidget(series: summary.activitySeries),
+                child: ActivityWidget(
+                  series: summary.activitySeries,
+                  monthlySeries: summary.monthlySeries,
+                ),
               ),
               SizedBox(width: spacing),
               Expanded(

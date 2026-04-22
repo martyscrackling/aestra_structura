@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/pm_dashboard_service.dart';
+import '../project_info.dart';
 
 class RecentProjects extends StatelessWidget {
   final List<PmRecentProject> projects;
@@ -33,6 +34,8 @@ class RecentProjects extends StatelessWidget {
         ? 16.0
         : 16.0;
 
+    final showCarousel = projects.length >= 4;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -47,14 +50,11 @@ class RecentProjects extends StatelessWidget {
                 color: const Color(0xFF0C1935),
               ),
             ),
-            IconButton(
-              icon: const Icon(Icons.more_horiz),
-              onPressed: () {},
-              iconSize: isSmallPhone ? 18 : 20,
-              color: Colors.grey[600],
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-            ),
+            if (showCarousel)
+              _CarouselControls(
+                onPrevious: () => _carouselKey.currentState?.previous(),
+                onNext: () => _carouselKey.currentState?.next(),
+              ),
           ],
         ),
         SizedBox(height: cardSpacing),
@@ -78,42 +78,172 @@ class RecentProjects extends StatelessWidget {
               style: TextStyle(color: Colors.grey[700]),
             ),
           )
+        else if (showCarousel)
+          _ProjectCarousel(
+            key: _carouselKey,
+            projects: projects,
+            cardSpacing: cardSpacing,
+            isMobile: isMobile,
+            isTablet: isTablet,
+          )
         else
-        // Responsive layout
-        if (isMobile)
-          // Mobile: Stack vertically
-          Column(
-            children: [
-              for (final project in projects) ...[
-                SizedBox(
-                  width: double.infinity,
-                  child: ProjectCard(
-                    title: project.name,
-                    location: project.location,
-                    progress: project.progress,
-                    tasksCompleted: project.tasksCompleted,
-                    totalTasks: project.totalTasks,
+          // Responsive layout for 1-3 projects
+          if (isMobile)
+            // Mobile: Stack vertically
+            Column(
+              children: [
+                for (final project in projects) ...[
+                  SizedBox(
+                    width: double.infinity,
+                    child: ProjectCard(
+                      projectId: project.projectId,
+                      title: project.name,
+                      location: project.location,
+                      progress: project.progress,
+                      tasksCompleted: project.tasksCompleted,
+                      totalTasks: project.totalTasks,
+                      image: project.image,
+                      budget: project.budget,
+                    ),
                   ),
-                ),
-                if (project != projects.last) SizedBox(height: cardSpacing),
+                  if (project != projects.last) SizedBox(height: cardSpacing),
+                ],
               ],
-            ],
-          )
-        else if (isTablet)
-          // Tablet: 2 cards per row
-          Column(
-            children: [
-              _ProjectGrid(
-                projects: projects,
-                columns: 2,
-                spacing: cardSpacing,
-              ),
-            ],
-          )
-        else
-          // Desktop: 3 cards in a row
-          _ProjectGrid(projects: projects, columns: 3, spacing: cardSpacing),
+            )
+          else if (isTablet)
+            // Tablet: 2 cards per row
+            _ProjectGrid(
+              projects: projects,
+              columns: 2,
+              spacing: cardSpacing,
+            )
+          else
+            // Desktop: 3 cards in a row
+            _ProjectGrid(projects: projects, columns: 3, spacing: cardSpacing),
       ],
+    );
+  }
+
+  static final GlobalKey<_ProjectCarouselState> _carouselKey =
+      GlobalKey<_ProjectCarouselState>();
+}
+
+
+class _CarouselControls extends StatelessWidget {
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+
+  const _CarouselControls({required this.onPrevious, required this.onNext});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildButton(Icons.chevron_left, onPrevious),
+        const SizedBox(width: 8),
+        _buildButton(Icons.chevron_right, onNext),
+      ],
+    );
+  }
+
+  Widget _buildButton(IconData icon, VoidCallback onPressed) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: IconButton(
+        icon: Icon(icon, size: 20, color: const Color(0xFF0C1935)),
+        onPressed: onPressed,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+      ),
+    );
+  }
+}
+
+class _ProjectCarousel extends StatefulWidget {
+  final List<PmRecentProject> projects;
+  final double cardSpacing;
+  final bool isMobile;
+  final bool isTablet;
+
+  const _ProjectCarousel({
+    super.key,
+    required this.projects,
+    required this.cardSpacing,
+    required this.isMobile,
+    required this.isTablet,
+  });
+
+  @override
+  State<_ProjectCarousel> createState() => _ProjectCarouselState();
+}
+
+class _ProjectCarouselState extends State<_ProjectCarousel> {
+  late PageController _controller;
+  final int _baseIndex = 1000;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = PageController(
+      initialPage: _baseIndex,
+      viewportFraction: widget.isMobile ? 0.92 : (widget.isTablet ? 0.48 : 0.32),
+    );
+  }
+
+  void previous() {
+    _controller.previousPage(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  void next() {
+    _controller.nextPage(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 200, // Matches ProjectCard height + buffer
+      child: PageView.builder(
+        controller: _controller,
+        itemBuilder: (context, index) {
+          final project = widget.projects[index % widget.projects.length];
+          return Padding(
+            padding: EdgeInsets.symmetric(horizontal: widget.cardSpacing / 4),
+            child: ProjectCard(
+              projectId: project.projectId,
+              title: project.name,
+              location: project.location,
+              progress: project.progress,
+              tasksCompleted: project.tasksCompleted,
+              totalTasks: project.totalTasks,
+              image: project.image,
+              budget: project.budget,
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -149,11 +279,14 @@ class _ProjectGrid extends StatelessWidget {
                 for (final project in row) ...[
                   Expanded(
                     child: ProjectCard(
+                      projectId: project.projectId,
                       title: project.name,
                       location: project.location,
                       progress: project.progress,
                       tasksCompleted: project.tasksCompleted,
                       totalTasks: project.totalTasks,
+                      image: project.image,
+                      budget: project.budget,
                     ),
                   ),
                   if (project != row.last) SizedBox(width: spacing),
@@ -173,19 +306,25 @@ class _ProjectGrid extends StatelessWidget {
 }
 
 class ProjectCard extends StatelessWidget {
+  final int projectId;
   final String title;
   final String location;
   final double progress;
   final int tasksCompleted;
   final int totalTasks;
+  final String? image;
+  final String? budget;
 
   const ProjectCard({
     super.key,
+    required this.projectId,
     required this.title,
     required this.location,
     required this.progress,
     required this.tasksCompleted,
     required this.totalTasks,
+    this.image,
+    this.budget,
   });
 
   @override
@@ -234,14 +373,6 @@ class ProjectCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 4),
-              IconButton(
-                icon: const Icon(Icons.more_horiz),
-                onPressed: () {},
-                iconSize: 18,
-                color: Colors.grey,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-              ),
             ],
           ),
           const SizedBox(height: 4),
@@ -292,7 +423,24 @@ class ProjectCard extends StatelessWidget {
                 style: TextStyle(fontSize: 12, color: Colors.grey[600]),
               ),
               const Spacer(),
-              _buildAvatarStack(),
+              _ViewButton(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    PageRouteBuilder(
+                      pageBuilder: (context, animation, secondaryAnimation) =>
+                          ProjectDetailsPage(
+                        projectTitle: title,
+                        projectLocation: location,
+                        projectImage: image ?? 'assets/images/engineer.jpg',
+                        progress: progress,
+                        budget: budget ?? '0',
+                        projectId: projectId,
+                      ),
+                      transitionDuration: Duration.zero,
+                    ),
+                  );
+                },
+              ),
             ],
           ),
         ],
@@ -300,40 +448,58 @@ class ProjectCard extends StatelessWidget {
     );
   }
 
-  Widget _buildAvatarStack() {
-    return SizedBox(
-      width: 70,
-      height: 24,
-      child: Stack(
-        children: [
-          Positioned(
-            left: 0,
-            child: CircleAvatar(
-              radius: 12,
-              backgroundColor: Colors.blue[300],
-              child: const Icon(Icons.person, size: 12, color: Colors.white),
+}
+
+class _ViewButton extends StatefulWidget {
+  final VoidCallback onPressed;
+
+  const _ViewButton({required this.onPressed});
+
+  @override
+  State<_ViewButton> createState() => _ViewButtonState();
+}
+
+class _ViewButtonState extends State<_ViewButton> {
+  bool _isHovered = false;
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    const darkBlue = Color(0xFF0C1935);
+    const orange = Color(0xFFFF7A18);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _isPressed = true),
+        onTapUp: (_) {
+          setState(() => _isPressed = false);
+        },
+        onTapCancel: () => setState(() => _isPressed = false),
+        onTap: widget.onPressed,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+          decoration: BoxDecoration(
+            color: _isPressed ? darkBlue : Colors.transparent,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: _isPressed
+                  ? darkBlue
+                  : (_isHovered ? orange : orange.withOpacity(0.8)),
+              width: 1.5,
             ),
           ),
-          Positioned(
-            left: 18,
-            child: CircleAvatar(
-              radius: 12,
-              backgroundColor: Colors.orange[300],
-              child: const Icon(Icons.person, size: 12, color: Colors.white),
+          child: Text(
+            'View',
+            style: TextStyle(
+              color: _isPressed ? Colors.white : orange,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
             ),
           ),
-          Positioned(
-            left: 36,
-            child: CircleAvatar(
-              radius: 12,
-              backgroundColor: Colors.grey[400],
-              child: const Text(
-                '+2',
-                style: TextStyle(fontSize: 10, color: Colors.white),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -16,6 +16,7 @@ class PmDashboardSummary {
   final double completionRate;
 
   final List<PmActivityPoint> activitySeries;
+  final List<PmActivityMonthPoint> monthlySeries;
 
   final int supervisorsCount;
   final int fieldWorkersTotal;
@@ -36,6 +37,7 @@ class PmDashboardSummary {
     required this.assignedTasks,
     required this.completionRate,
     required this.activitySeries,
+    required this.monthlySeries,
     required this.supervisorsCount,
     required this.fieldWorkersTotal,
     required this.fieldWorkersByRole,
@@ -57,6 +59,8 @@ class PmDashboardSummary {
     final tasksTodayRaw = (json['tasks_today'] as List<dynamic>? ?? const []);
     final activitySeriesRaw =
         (activity['series'] as List<dynamic>? ?? const []);
+    final monthlySeriesRaw =
+        (activity['monthly_series'] as List<dynamic>? ?? const []);
 
     final notificationsItemsRaw = (notifications['items'] as List<dynamic>?);
 
@@ -85,6 +89,10 @@ class PmDashboardSummary {
           .whereType<Map<String, dynamic>>()
           .map(PmActivityPoint.fromJson)
           .toList(),
+      monthlySeries: monthlySeriesRaw
+          .whereType<Map<String, dynamic>>()
+          .map(PmActivityMonthPoint.fromJson)
+          .toList(),
       supervisorsCount: (workers['supervisors'] as num?)?.toInt() ?? 0,
       fieldWorkersTotal: (workers['field_workers_total'] as num?)?.toInt() ?? 0,
       fieldWorkersByRole: byRoleRaw.map(
@@ -110,6 +118,8 @@ class PmRecentProject {
   final double progress;
   final int tasksCompleted;
   final int totalTasks;
+  final String? image;
+  final String? budget;
 
   const PmRecentProject({
     required this.projectId,
@@ -118,6 +128,8 @@ class PmRecentProject {
     required this.progress,
     required this.tasksCompleted,
     required this.totalTasks,
+    this.image,
+    this.budget,
   });
 
   factory PmRecentProject.fromJson(Map<String, dynamic> json) {
@@ -128,6 +140,8 @@ class PmRecentProject {
       progress: (json['progress'] as num?)?.toDouble() ?? 0.0,
       tasksCompleted: (json['tasks_completed'] as num?)?.toInt() ?? 0,
       totalTasks: (json['total_tasks'] as num?)?.toInt() ?? 0,
+      image: json['project_image'] as String?,
+      budget: json['budget']?.toString(),
     );
   }
 }
@@ -144,6 +158,20 @@ class PmActivityPoint {
         DateTime.tryParse(dayStr) ?? DateTime.fromMillisecondsSinceEpoch(0);
     return PmActivityPoint(
       day: DateTime(parsedDay.year, parsedDay.month, parsedDay.day),
+      completed: (json['completed'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+class PmActivityMonthPoint {
+  final int month;
+  final int completed;
+
+  const PmActivityMonthPoint({required this.month, required this.completed});
+
+  factory PmActivityMonthPoint.fromJson(Map<String, dynamic> json) {
+    return PmActivityMonthPoint(
+      month: (json['month'] as num?)?.toInt() ?? 1,
       completed: (json['completed'] as num?)?.toInt() ?? 0,
     );
   }
@@ -280,6 +308,7 @@ class PmDashboardService {
       assignedTasks: summary.assignedTasks,
       completionRate: summary.completionRate,
       activitySeries: summary.activitySeries,
+      monthlySeries: summary.monthlySeries,
       supervisorsCount: workerCounts.supervisorsCount,
       fieldWorkersTotal: workerCounts.fieldWorkersTotal,
       fieldWorkersByRole: workerCounts.fieldWorkersByRole,

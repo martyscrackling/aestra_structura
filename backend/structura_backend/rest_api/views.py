@@ -8,7 +8,7 @@ from django.contrib.auth.hashers import make_password
 from django.views.decorators.csrf import csrf_exempt
 from django.db.models import Count, Q, Prefetch
 from django.db import transaction
-from django.db.models.functions import TruncDate
+from django.db.models.functions import TruncDate, TruncMonth, ExtractMonth
 from django.utils import timezone
 from django.core.cache import cache
 import json
@@ -2048,7 +2048,7 @@ def pm_dashboard_summary(request):
 
     total_projects = projects_qs.count()
     recent_projects = []
-    for p in projects_qs[:3]:
+    for p in projects_qs[:5]:
         location_parts = []
         if p.street:
             location_parts.append(p.street)
@@ -2072,6 +2072,8 @@ def pm_dashboard_summary(request):
                 'progress': float(progress),
                 'tasks_completed': completed_subtasks,
                 'total_tasks': total_subtasks,
+                'project_image': p.project_image if p.project_image else None,
+                'budget': str(p.budget) if p.budget else "0",
                 'created_at': p.created_at.isoformat() if p.created_at else None,
             }
         )
@@ -2116,6 +2118,25 @@ def pm_dashboard_summary(request):
         day = start_day + timedelta(days=i)
         day_key = day.isoformat()
         activity_series.append({'day': day_key, 'completed': completed_map.get(day_key, 0)})
+
+    # Monthly activity for current year
+    current_year = timezone.now().year
+    monthly_completed = (
+        subtasks_qs.filter(status='completed', updated_at__year=current_year)
+        .annotate(month_index=ExtractMonth('updated_at'))
+        .values('month_index')
+        .annotate(count=Count('subtask_id'))
+        .order_by('month_index')
+    )
+    monthly_map = {
+        row['month_index']: int(row['count']) for row in monthly_completed
+    }
+    monthly_series = []
+    for m in range(1, 13):
+        monthly_series.append({
+            'month': m,
+            'completed': monthly_map.get(m, 0)
+        })
 
     # Workers summary
     supervisors_count = models.Supervisors.objects.filter(project_id__user_id=user_id).count()
@@ -2194,6 +2215,7 @@ def pm_dashboard_summary(request):
                 'start_day': start_day.isoformat(),
                 'end_day': end_day.isoformat(),
                 'series': activity_series,
+                'monthly_series': monthly_series,
             },
             'workers': {
                 'supervisors': supervisors_count,
