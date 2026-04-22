@@ -115,82 +115,12 @@ class _AddClientModalState extends State<AddClientModal> {
     });
 
     if (!result.accepted) {
-      _showOverlayMessage(result.message, backgroundColor: Colors.red);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(result.message)));
     }
 
     return result.accepted;
-  }
-
-  void _showOverlayMessage(
-    String message, {
-    Color backgroundColor = const Color(0xFF1F2937),
-    Duration duration = const Duration(seconds: 4),
-  }) {
-    if (!mounted) return;
-
-    final overlay = Overlay.of(context, rootOverlay: true);
-    if (overlay == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), backgroundColor: backgroundColor),
-      );
-      return;
-    }
-
-    late final OverlayEntry entry;
-    entry = OverlayEntry(
-      builder: (overlayContext) {
-        return Positioned.fill(
-          child: IgnorePointer(
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
-                child: Align(
-                  alignment: Alignment.bottomLeft,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 420),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 14,
-                        ),
-                        decoration: BoxDecoration(
-                          color: backgroundColor,
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x33000000),
-                              blurRadius: 14,
-                              offset: Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: Text(
-                          message,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            height: 1.35,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-
-    overlay.insert(entry);
-    Future.delayed(duration, () {
-      if (entry.mounted) {
-        entry.remove();
-      }
-    });
   }
 
   Future<void> _fetchRegions() async {
@@ -611,7 +541,9 @@ class _AddClientModalState extends State<AddClientModal> {
                   // If delete fails, still keep the user informed.
                 }
 
-                _showOverlayMessage(msg, backgroundColor: Colors.red);
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(msg)));
                 return;
               }
 
@@ -619,7 +551,9 @@ class _AddClientModalState extends State<AddClientModal> {
             }
           }
 
-          _showOverlayMessage(successMessage, backgroundColor: Colors.green);
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(successMessage)));
           Navigator.of(context).pop();
         } else {
           try {
@@ -629,20 +563,20 @@ class _AddClientModalState extends State<AddClientModal> {
                 errorData['error'] ??
                 errorData.toString() ??
                 'Failed to add client';
-            _showOverlayMessage(
-              'Error: $errorMessage',
-              backgroundColor: Colors.red,
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text('Error: $errorMessage')));
           } catch (e) {
-            _showOverlayMessage(
-              'Error: Failed to add client',
-              backgroundColor: Colors.red,
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Error: Failed to add client')),
             );
           }
         }
       } catch (e) {
         if (mounted) {
-          _showOverlayMessage('Error: $e', backgroundColor: Colors.red);
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Error: $e')));
         }
       } finally {
         if (mounted) {
@@ -797,9 +731,8 @@ class _AddClientModalState extends State<AddClientModal> {
                                     if (value == null || value.trim().isEmpty) {
                                       return 'Required';
                                     }
-                                    if (!PhilippinePhoneInputFormatter.isValidFormattedPhone(
-                                      value.trim(),
-                                    )) {
+                                    if (!PhilippinePhoneInputFormatter
+                                        .isValidFormattedPhone(value.trim())) {
                                       return 'Use 09XX-XXX-XXXX';
                                     }
                                     return null;
@@ -1140,9 +1073,10 @@ class _AddClientModalState extends State<AddClientModal> {
                                           value.trim().isEmpty) {
                                         return 'Required';
                                       }
-                                      if (!PhilippinePhoneInputFormatter.isValidFormattedPhone(
-                                        value.trim(),
-                                      )) {
+                                      if (!PhilippinePhoneInputFormatter
+                                          .isValidFormattedPhone(
+                                            value.trim(),
+                                          )) {
                                         return 'Use 09XX-XXX-XXXX';
                                       }
                                       return null;

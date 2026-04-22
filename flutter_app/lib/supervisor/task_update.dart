@@ -174,9 +174,6 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
               status: _mapBackendStatus(subtaskMap['status'] as String?),
               assignedWorkers: assigned,
               notes: subtaskMap['progress_notes'] as String? ?? '',
-              completed:
-                  _mapBackendStatus(subtaskMap['status'] as String?) ==
-                  'Completed',
             );
           }).toList();
 
@@ -210,9 +207,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
     }
   }
 
-  Future<Map<String, dynamic>?> _fetchProjectInfo({
-    required dynamic projectId,
-  }) async {
+  Future<Map<String, dynamic>?> _fetchProjectInfo({required dynamic projectId}) async {
     try {
       final projectResponse = await http.get(
         AppConfig.apiUri('projects/$projectId/'),
@@ -226,9 +221,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
     return null;
   }
 
-  Future<List<dynamic>> _fetchPhasesForProject({
-    required dynamic projectId,
-  }) async {
+  Future<List<dynamic>> _fetchPhasesForProject({required dynamic projectId}) async {
     try {
       final response = await http.get(
         AppConfig.apiUri('phases/?project_id=$projectId'),
@@ -270,40 +263,6 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
     }
   }
 
-  String _toBackendStatus(String uiStatus) {
-    switch (uiStatus) {
-      case 'Completed':
-        return 'completed';
-      case 'In Progress':
-        return 'in_progress';
-      default:
-        return 'pending';
-    }
-  }
-
-  String _statusBadgeLabel(Subtask subtask) {
-    return subtask.status == 'Completed' ? 'Completed' : 'Pending';
-  }
-
-  Color _statusBadgeTextColor(String statusLabel) {
-    if (statusLabel == 'Completed') {
-      return const Color(0xFF757575);
-    }
-    return Colors.grey.shade700;
-  }
-
-  Color _statusBadgeBackgroundColor(String statusLabel) {
-    if (statusLabel == 'Completed') {
-      return const Color(0xFF757575).withOpacity(0.12);
-    }
-    return Colors.grey.shade200;
-  }
-
-  bool _hasStatusToggleChange(Subtask subtask) {
-    final initiallyCompleted = subtask.status == 'Completed';
-    return subtask.completed != initiallyCompleted;
-  }
-
   // compute phase progress as percent of subtasks completed
   int _phaseProgress(int pIndex) {
     final subs = _phases[pIndex].subtasks;
@@ -312,34 +271,19 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
     return ((completed / subs.length) * 100).round();
   }
 
-  // Pick one image at a time for a subtask update (up to 5 photos per subtask)
-  Future<void> _pickPhotoForSubtask(
-    int phaseIndex,
-    int subtaskIndex,
-    StateSetter setModalState,
-  ) async {
-    if (_phases[phaseIndex].subtasks[subtaskIndex].photos.length >= 5) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You can only add up to 5 photos.')),
-      );
-      return;
-    }
-
+  // Pick multiple images for phase level update
+  Future<void> _pickPhotosForPhase(int phaseIndex) async {
     try {
-      final XFile? picked = await _picker.pickImage(
-        source: ImageSource.gallery,
+      final List<XFile>? picked = await _picker.pickMultiImage(
         imageQuality: 80,
       );
-
-      if (picked != null) {
+      if (picked != null && picked.isNotEmpty) {
         setState(() {
-          _phases[phaseIndex].subtasks[subtaskIndex].photos = [
-            ..._phases[phaseIndex].subtasks[subtaskIndex].photos,
-            picked,
+          _phases[phaseIndex].phasePhotos = [
+            ..._phases[phaseIndex].phasePhotos,
+            ...picked,
           ];
         });
-        setModalState(() {});
       }
     } catch (e) {
       if (!mounted) return;
@@ -349,509 +293,346 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
     }
   }
 
-  // Remove photo from subtask
-  void _removeSubtaskPhoto(
-    int phaseIndex,
-    int subtaskIndex,
-    int photoIndex, {
-    StateSetter? setModalState,
-  }) {
+  // Remove photo from phase
+  void _removePhasePhoto(int phaseIndex, int photoIndex) {
     setState(() {
-      _phases[phaseIndex].subtasks[subtaskIndex].photos.removeAt(photoIndex);
+      _phases[phaseIndex].phasePhotos.removeAt(photoIndex);
     });
-    setModalState?.call(() {});
-  }
-
-  Future<http.Response> _submitSubtaskPhaseUpdate({
-    required String subtaskId,
-    required String status,
-    required String notes,
-    required List<XFile> phasePhotos,
-  }) async {
-    if (phasePhotos.isEmpty) {
-      return http.patch(
-        AppConfig.apiUri('subtasks/$subtaskId/'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'status': status, 'progress_notes': notes}),
-      );
-    }
-
-    final request =
-        http.MultipartRequest('PATCH', AppConfig.apiUri('subtasks/$subtaskId/'))
-          ..fields['status'] = status
-          ..fields['progress_notes'] = notes;
-
-    for (final photo in phasePhotos.take(5)) {
-      final bytes = await photo.readAsBytes();
-      request.files.add(
-        http.MultipartFile.fromBytes('images', bytes, filename: photo.name),
-      );
-    }
-
-    final streamed = await request.send();
-    return http.Response.fromStream(streamed);
   }
 
   // Open phase-level update dialog
   void _openPhaseUpdateDialog(int phaseIndex) {
     final phase = _phases[phaseIndex];
-
-    // Draft values should be modal-scoped; opening the modal starts with fresh inputs.
-    for (final subtask in phase.subtasks) {
-      subtask.notes = '';
-      subtask.photos = [];
-    }
+    final notesCtrl = TextEditingController(text: phase.phaseNotes);
 
     showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModalState) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            title: Row(
-              children: [
-                Icon(Icons.update, color: primary),
-                const SizedBox(width: 12),
-                Expanded(child: Text(phase.title)),
-              ],
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Subtasks',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                      color: Colors.grey,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[50],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.grey[200]!),
-                    ),
-                    child: Column(
-                      children: [
-                        for (
-                          var sIndex = 0;
-                          sIndex < phase.subtasks.length;
-                          sIndex++
-                        )
-                          Padding(
-                            padding: EdgeInsets.only(
-                              bottom: sIndex < phase.subtasks.length - 1
-                                  ? 8
-                                  : 0,
-                            ),
-                            child: Row(
-                              children: [
-                                Checkbox(
-                                  value: phase.subtasks[sIndex].completed,
-                                  onChanged: (val) {
-                                    setModalState(() {
-                                      phase.subtasks[sIndex].completed =
-                                          val ?? false;
-                                      if (!_hasStatusToggleChange(
-                                        phase.subtasks[sIndex],
-                                      )) {
-                                        phase.subtasks[sIndex].notes = '';
-                                        phase.subtasks[sIndex].photos = [];
-                                      }
-                                    });
-                                  },
-                                  activeColor: primary,
-                                ),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        phase.subtasks[sIndex].title,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                      Text(
-                                        phase
-                                                .subtasks[sIndex]
-                                                .assignedWorkers
-                                                .isEmpty
-                                            ? 'No workers'
-                                            : phase
-                                                  .subtasks[sIndex]
-                                                  .assignedWorkers
-                                                  .join(', '),
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.grey[600],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Subtask Update Details',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                      color: Colors.grey,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  for (var sIndex = 0; sIndex < phase.subtasks.length; sIndex++)
-                    if (_hasStatusToggleChange(phase.subtasks[sIndex])) ...[
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[50],
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.grey[200]!),
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Row(
+          children: [
+            Icon(Icons.update, color: primary),
+            const SizedBox(width: 12),
+            Expanded(child: Text(phase.title)),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Subtasks',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey[200]!),
+                ),
+                child: Column(
+                  children: [
+                    for (
+                      var sIndex = 0;
+                      sIndex < phase.subtasks.length;
+                      sIndex++
+                    )
+                      Padding(
+                        padding: EdgeInsets.only(
+                          bottom: sIndex < phase.subtasks.length - 1 ? 8 : 0,
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        child: Row(
                           children: [
-                            Text(
-                              phase.subtasks[sIndex].title,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            TextField(
-                              onChanged: (value) {
-                                phase.subtasks[sIndex].notes = value;
+                            Checkbox(
+                              value: phase.subtasks[sIndex].completed,
+                              onChanged: (val) {
+                                ctx.findAncestorStateOfType<State>()?.setState(
+                                  () {
+                                    phase.subtasks[sIndex].completed =
+                                        val ?? false;
+                                  },
+                                );
                               },
-                              decoration: InputDecoration(
-                                hintText: 'Progress note for this subtask...',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                contentPadding: const EdgeInsets.all(10),
-                                isDense: true,
-                              ),
-                              maxLines: 2,
+                              activeColor: primary,
                             ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                OutlinedButton.icon(
-                                  icon: Icon(
-                                    Icons.photo_camera,
-                                    color: primary,
-                                    size: 14,
-                                  ),
-                                  label: Text(
-                                    phase.subtasks[sIndex].photos.isEmpty
-                                        ? 'Add Photo'
-                                        : 'Add More',
-                                  ),
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 7,
-                                    ),
-                                  ),
-                                  onPressed:
-                                      phase.subtasks[sIndex].photos.length >= 5
-                                      ? null
-                                      : () => _pickPhotoForSubtask(
-                                          phaseIndex,
-                                          sIndex,
-                                          setModalState,
-                                        ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '(${phase.subtasks[sIndex].photos.length}/5)',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey[600],
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (phase.subtasks[sIndex].photos.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  for (
-                                    var photoIndex = 0;
-                                    photoIndex <
-                                        phase.subtasks[sIndex].photos.length;
-                                    photoIndex++
-                                  )
-                                    _buildSubtaskPhotoThumb(
-                                      phaseIndex,
-                                      sIndex,
-                                      photoIndex,
-                                      setModalState: setModalState,
+                                  Text(
+                                    phase.subtasks[sIndex].title,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
                                     ),
+                                  ),
+                                  Text(
+                                    phase
+                                            .subtasks[sIndex]
+                                            .assignedWorkers
+                                            .isEmpty
+                                        ? 'No workers'
+                                        : phase.subtasks[sIndex].assignedWorkers
+                                              .join(', '),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
                                 ],
                               ),
-                            ],
+                            ),
                           ],
                         ),
                       ),
-                    ],
-                ],
+                  ],
+                ),
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel'),
+              const SizedBox(height: 16),
+              const Text(
+                'Progress Notes',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                  color: Colors.grey,
+                ),
               ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: primary),
-                onPressed: () async {
-                  Navigator.pop(ctx);
-                  // Show loading
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Row(
-                        children: [
-                          SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white,
-                              ),
-                            ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: notesCtrl,
+                decoration: InputDecoration(
+                  hintText: 'Add progress notes for this phase...',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  contentPadding: const EdgeInsets.all(12),
+                ),
+                maxLines: 4,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Photos',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                icon: Icon(Icons.photo_camera, color: primary, size: 16),
+                label: const Text('Add Photos'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+                onPressed: () => _pickPhotosForPhase(phaseIndex),
+              ),
+              if (phase.phasePhotos.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 90,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: phase.phasePhotos.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, photoIndex) {
+                      return _buildPhasePhotoThumb(phaseIndex, photoIndex);
+                    },
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: primary),
+            onPressed: () async {
+              final notes = notesCtrl.text.trim();
+              Navigator.pop(ctx);
+
+              // Show loading
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Row(
+                    children: [
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
                           ),
-                          SizedBox(width: 16),
-                          Text('Submitting phase update...'),
-                        ],
+                        ),
                       ),
-                      duration: Duration(seconds: 30),
-                    ),
+                      SizedBox(width: 16),
+                      Text('Submitting phase update...'),
+                    ],
+                  ),
+                  duration: Duration(seconds: 30),
+                ),
+              );
+
+              try {
+                // Update all completed subtasks
+                List<Future<http.Response>> requests = [];
+
+                for (var subtask in phase.subtasks) {
+                  if (subtask.completed) {
+                    final requestBody = {
+                      'status': 'completed',
+                      'progress_notes': notes,
+                    };
+
+                    requests.add(
+                      http.patch(
+                        AppConfig.apiUri('subtasks/${subtask.id}/'),
+                        headers: {'Content-Type': 'application/json'},
+                        body: jsonEncode(requestBody),
+                      ),
+                    );
+                  }
+                }
+
+                // Wait for all requests
+                if (requests.isNotEmpty) {
+                  final responses = await Future.wait(requests);
+
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+                  // Check first response for subscription
+                  if (responses.isNotEmpty &&
+                      SubscriptionHelper.handleResponse(
+                        context,
+                        responses[0],
+                      )) {
+                    return;
+                  }
+
+                  // Check if all succeeded
+                  final allSuccess = responses.every(
+                    (r) => r.statusCode == 200,
                   );
 
-                  try {
-                    // Submit only changed subtasks:
-                    // - checked   => mark as completed
-                    // - unchecked => unsubmit if currently completed (back to pending)
-                    final List<Map<String, dynamic>> updateTargets = [];
-                    final List<Future<http.Response>> requests = [];
-
-                    for (var subtask in phase.subtasks) {
-                      final currentStatus = subtask.status;
-                      final subtaskNotes = subtask.notes.trim();
-                      final subtaskPhotos = List<XFile>.from(subtask.photos);
-                      final hasMediaOrNotes =
-                          subtaskNotes.isNotEmpty || subtaskPhotos.isNotEmpty;
-                      String? targetBackendStatus;
-
-                      if (subtask.completed && currentStatus != 'Completed') {
-                        targetBackendStatus = 'completed';
-                      } else if (!subtask.completed &&
-                          currentStatus == 'Completed') {
-                        targetBackendStatus = 'pending';
-                      } else if (hasMediaOrNotes && subtask.completed) {
-                        targetBackendStatus = _toBackendStatus(currentStatus);
+                  if (allSuccess && responses.isNotEmpty) {
+                    setState(() {
+                      phase.phaseNotes = notes;
+                      phase.phasePhotos = [];
+                      for (var subtask in phase.subtasks) {
+                        if (subtask.completed) {
+                          subtask.status = 'Completed';
+                          subtask.completed = false;
+                          subtask.notes = notes;
+                        }
                       }
+                    });
 
-                      if (targetBackendStatus != null) {
-                        updateTargets.add({
-                          'subtask': subtask,
-                          'target_status': targetBackendStatus,
-                        });
-                        requests.add(
-                          _submitSubtaskPhaseUpdate(
-                            subtaskId: subtask.id,
-                            status: targetBackendStatus,
-                            notes: subtaskNotes,
-                            phasePhotos: subtaskPhotos,
-                          ),
-                        );
-                      }
-                    }
-
-                    // Wait for all requests
-                    if (requests.isNotEmpty) {
-                      final responses = await Future.wait(requests);
-
-                      if (!mounted) return;
-                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-
-                      // Check first response for subscription
-                      if (responses.isNotEmpty &&
-                          SubscriptionHelper.handleResponse(
-                            context,
-                            responses[0],
-                          )) {
-                        return;
-                      }
-
-                      // Check if all succeeded
-                      final allSuccess = responses.every(
-                        (r) => r.statusCode == 200,
-                      );
-
-                      if (allSuccess && responses.isNotEmpty) {
-                        setState(() {
-                          for (final target in updateTargets) {
-                            final subtask = target['subtask'] as Subtask;
-                            final targetStatus =
-                                target['target_status'] as String;
-                            if (targetStatus == 'completed') {
-                              subtask.status = 'Completed';
-                              subtask.completed = true;
-                            } else {
-                              subtask.status = 'Pending';
-                              subtask.completed = false;
-                            }
-                            subtask.notes = '';
-                            subtask.photos = [];
-                          }
-                        });
-
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Phase update submitted successfully',
-                            ),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Failed to submit some updates'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                      }
-                    } else {
-                      if (!mounted) return;
-                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'No changes detected. Update a subtask status, note, or photos to submit.',
-                          ),
-                          backgroundColor: Colors.orange,
-                        ),
-                      );
-                    }
-                  } catch (e) {
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Error submitting update: $e'),
+                      const SnackBar(
+                        content: Text('Phase update submitted successfully'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Failed to submit some updates'),
                         backgroundColor: Colors.red,
                       ),
                     );
                   }
-                },
-                child: const Text('Submit Phase Update'),
-              ),
-            ],
-          );
-        },
+                } else {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please select at least one subtask'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Error submitting update: $e'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            child: const Text('Submit Phase Update'),
+          ),
+        ],
       ),
-    ).whenComplete(() {
-      if (!mounted) return;
-      setState(() {
-        phase.phaseNotes = '';
-        phase.phasePhotos = [];
-        for (final subtask in phase.subtasks) {
-          subtask.notes = '';
-          subtask.photos = [];
-        }
-      });
-    });
+    );
   }
 
-  // Build photo thumbnail for subtask
-  Widget _buildSubtaskPhotoThumb(
-    int phaseIndex,
-    int subtaskIndex,
-    int photoIndex, {
-    StateSetter? setModalState,
-  }) {
-    final xfile = _phases[phaseIndex].subtasks[subtaskIndex].photos[photoIndex];
+  // Build photo thumbnail for phase
+  Widget _buildPhasePhotoThumb(int phaseIndex, int photoIndex) {
+    final xfile = _phases[phaseIndex].phasePhotos[photoIndex];
     return Stack(
-      clipBehavior: Clip.none,
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(8),
           child: FutureBuilder<Uint8List>(
             future: xfile.readAsBytes(),
             builder: (context, snap) {
               if (snap.connectionState != ConnectionState.done) {
                 return SizedBox(
-                  width: 36,
-                  height: 36,
+                  width: 120,
+                  height: 80,
                   child: Center(
-                    child: SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
+                    child: CircularProgressIndicator(strokeWidth: 2),
                   ),
                 );
               }
               if (snap.hasError || snap.data == null) {
                 return SizedBox(
-                  width: 36,
-                  height: 36,
-                  child: const Center(
-                    child: Icon(Icons.broken_image, size: 14),
-                  ),
+                  width: 120,
+                  height: 80,
+                  child: Center(child: Icon(Icons.broken_image)),
                 );
               }
               return Image.memory(
                 snap.data!,
-                width: 36,
-                height: 36,
+                width: 120,
+                height: 80,
                 fit: BoxFit.cover,
               );
             },
           ),
         ),
         Positioned(
-          top: -6,
-          right: -6,
+          top: 4,
+          right: 4,
           child: GestureDetector(
-            onTap: () => _removeSubtaskPhoto(
-              phaseIndex,
-              subtaskIndex,
-              photoIndex,
-              setModalState: setModalState,
-            ),
+            onTap: () => _removePhasePhoto(phaseIndex, photoIndex),
             child: Container(
-              padding: const EdgeInsets.all(2),
+              padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
                 color: Colors.black54,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Icon(Icons.close, size: 10, color: Colors.white),
+              child: const Icon(Icons.close, size: 14, color: Colors.white),
             ),
           ),
         ),
@@ -1070,6 +851,17 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                           ),
                           child: Row(
                             children: [
+                              Checkbox(
+                                value:
+                                    _phases[pIndex].subtasks[sIndex].completed,
+                                onChanged: (val) {
+                                  setState(() {
+                                    _phases[pIndex].subtasks[sIndex].completed =
+                                        val ?? false;
+                                  });
+                                },
+                                activeColor: primary,
+                              ),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1095,35 +887,6 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                                       ),
                                     ),
                                   ],
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: _statusBadgeBackgroundColor(
-                                    _statusBadgeLabel(
-                                      _phases[pIndex].subtasks[sIndex],
-                                    ),
-                                  ),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  _statusBadgeLabel(
-                                    _phases[pIndex].subtasks[sIndex],
-                                  ),
-                                  style: TextStyle(
-                                    color: _statusBadgeTextColor(
-                                      _statusBadgeLabel(
-                                        _phases[pIndex].subtasks[sIndex],
-                                      ),
-                                    ),
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 12,
-                                  ),
                                 ),
                               ),
                             ],
