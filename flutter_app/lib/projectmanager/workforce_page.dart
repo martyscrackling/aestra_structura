@@ -954,6 +954,27 @@ class WorkerProfileCard extends StatelessWidget {
                         color: Color(0xFF6B7280),
                       ),
                     ),
+                    if (worker.phaseName != null || worker.subtaskTitle != null) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.assignment_ind_outlined, size: 12, color: Color(0xFFFF7A18)),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              '${worker.phaseName ?? 'N/A'} > ${worker.subtaskTitle ?? 'N/A'}',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFFFF7A18),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -1027,6 +1048,8 @@ class WorkerInfo {
     required this.role,
     required this.avatarUrl,
     this.type = 'Supervisor',
+    this.phaseName,
+    this.subtaskTitle,
   });
 
   final int? userId;
@@ -1038,4 +1061,6 @@ class WorkerInfo {
   final String role;
   final String avatarUrl;
   final String type; // 'Supervisor' or 'Field Worker'
+  final String? phaseName;
+  final String? subtaskTitle;
 }

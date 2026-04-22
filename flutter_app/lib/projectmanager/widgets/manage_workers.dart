@@ -5,6 +5,7 @@ import '../project_details_page.dart';
 import '../../services/app_config.dart';
 import '../../services/subscription_helper.dart';
 import '../../services/auth_service.dart';
+import '../modals/add_fieldworker_modal.dart';
 
 class Worker {
   final int workerId;
@@ -532,40 +533,82 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
                           child: Wrap(
                             spacing: 8,
                             runSpacing: 8,
-                            children: _roles.map((role) {
-                              final isSelected = _selectedRole == role;
-                              return FilterChip(
-                                label: Text(role),
-                                selected: isSelected,
-                                onSelected: (selected) {
-                                  setState(() {
-                                    _selectedRole = role;
-                                    _filterWorkers();
-                                  });
-                                },
-                                backgroundColor: Colors.white,
-                                selectedColor: const Color(0xFFFFF2E8),
-                                checkmarkColor: const Color(0xFFFF7A18),
-                                labelStyle: TextStyle(
-                                  fontSize: 12,
-                                  color: isSelected
-                                      ? const Color(0xFFFF7A18)
-                                      : const Color(0xFF6B7280),
-                                  fontWeight: isSelected
-                                      ? FontWeight.w600
-                                      : FontWeight.w500,
+                            children: [
+                              ..._roles.map((role) {
+                                final isSelected = _selectedRole == role;
+                                return FilterChip(
+                                  label: Text(role),
+                                  selected: isSelected,
+                                  onSelected: (selected) {
+                                    setState(() {
+                                      _selectedRole = role;
+                                      _filterWorkers();
+                                    });
+                                  },
+                                  backgroundColor: Colors.white,
+                                  selectedColor: const Color(0xFFFFF2E8),
+                                  checkmarkColor: const Color(0xFFFF7A18),
+                                  labelStyle: TextStyle(
+                                    fontSize: 12,
+                                    color: isSelected
+                                        ? const Color(0xFFFF7A18)
+                                        : const Color(0xFF6B7280),
+                                    fontWeight: isSelected
+                                        ? FontWeight.w600
+                                        : FontWeight.w500,
+                                  ),
+                                  side: BorderSide(
+                                    color: isSelected
+                                        ? const Color(0xFFFF7A18)
+                                        : const Color(0xFFE5E7EB),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                );
+                              }),
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 0),
+                                child: ActionChip(
+                                  onPressed: () async {
+                                    final result = await showDialog(
+                                      context: context,
+                                      builder: (context) =>
+                                          AddFieldWorkerModal(
+                                            workerType: 'Field Worker',
+                                            projectId: widget.phase.projectId,
+                                          ),
+                                    );
+                                    if (result == true) {
+                                      _fetchFieldWorkers();
+                                    }
+                                  },
+                                  avatar: const Icon(
+                                    Icons.add,
+                                    size: 14,
+                                    color: Colors.white,
+                                  ),
+                                  label: const Text(
+                                    'Create Worker',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  backgroundColor: const Color(0xFFFF7A18),
+                                  side: BorderSide.none,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
                                 ),
-                                side: BorderSide(
-                                  color: isSelected
-                                      ? const Color(0xFFFF7A18)
-                                      : const Color(0xFFE5E7EB),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                              );
-                            }).toList(),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -703,7 +746,7 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
                   ),
                   const SizedBox(width: 12),
                   ElevatedButton(
-                    onPressed: _selectedWorkerIds.isNotEmpty && _hasValidShift
+                    onPressed: _selectedWorkerIds.isNotEmpty
                         ? _saveAssignments
                         : null,
                     style: ElevatedButton.styleFrom(
