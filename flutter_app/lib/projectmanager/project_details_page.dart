@@ -19,6 +19,7 @@ class Phase {
   final List<Subtask> subtasks;
   final DateTime? startDate;
   final DateTime? endDate;
+  final DateTime? createdAt;
 
   Phase({
     required this.phaseId,
@@ -30,6 +31,7 @@ class Phase {
     required this.subtasks,
     this.startDate,
     this.endDate,
+    this.createdAt,
   });
 
   factory Phase.fromJson(Map<String, dynamic> json) {
@@ -50,6 +52,9 @@ class Phase {
           : null,
       endDate: json['end_date'] != null
           ? DateTime.parse(json['end_date'])
+          : null,
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'])
           : null,
     );
   }
@@ -231,6 +236,14 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
         final List<dynamic> data = jsonDecode(response.body);
         setState(() {
           _phases = data.map((json) => Phase.fromJson(json)).toList();
+          // Sort phases by createdAt (oldest first)
+          _phases.sort((a, b) {
+            if (a.createdAt != null && b.createdAt != null) {
+              int cmp = a.createdAt!.compareTo(b.createdAt!);
+              if (cmp != 0) return cmp;
+            }
+            return a.phaseId.compareTo(b.phaseId);
+          });
         });
       } else {
         setState(() {
