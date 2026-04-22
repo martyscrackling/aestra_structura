@@ -127,11 +127,21 @@ class _ProjectsPageState extends State<ProjectsPage> {
             final assignedWorkers = subtaskMap['assigned_workers'];
             if (assignedWorkers is List) {
               for (final worker in assignedWorkers) {
-                if (worker is! Map<String, dynamic>) continue;
-                final workerId =
-                    _parseInt(worker['fieldworker_id']) ??
-                    _parseInt(worker['field_worker']) ??
-                    _parseInt(worker['id']);
+                int? workerId;
+                if (worker is Map) {
+                  final map = Map<String, dynamic>.from(worker);
+                  final nestedFieldWorker = map['field_worker'];
+                  workerId =
+                      _parseInt(map['fieldworker_id']) ??
+                      _parseInt(map['field_worker_id']) ??
+                      (nestedFieldWorker is Map
+                          ? _parseInt(nestedFieldWorker['fieldworker_id']) ??
+                                _parseInt(nestedFieldWorker['id'])
+                          : _parseInt(nestedFieldWorker)) ??
+                      _parseInt(map['id']);
+                } else {
+                  workerId = _parseInt(worker);
+                }
                 if (workerId != null && workerId > 0) {
                   assignedWorkerIds.add(workerId);
                 }
@@ -158,38 +168,6 @@ class _ProjectsPageState extends State<ProjectsPage> {
     if (value is int) return value;
     if (value is double) return value.toInt();
     return int.tryParse(value.toString());
-  }
-
-  Future<int> _fetchProjectWorkforceCount({
-    required int projectId,
-    required dynamic userId,
-  }) async {
-    try {
-      final response = await http.get(
-        AppConfig.apiUri('field-workers/?project_id=$projectId&user_id=$userId'),
-      );
-
-      if (response.statusCode != 200) return 0;
-
-      final decoded = jsonDecode(response.body);
-      if (decoded is List) {
-        return decoded.length;
-      }
-      if (decoded is Map<String, dynamic>) {
-        final results = decoded['results'];
-        if (results is List) {
-          return results.length;
-        }
-        final data = decoded['data'];
-        if (data is List) {
-          return data.length;
-        }
-      }
-      return 0;
-    } catch (e) {
-      print('⚠️ Error fetching workforce count for project $projectId: $e');
-      return 0;
-    }
   }
 
   Future<void> _fetchProjects() async {
@@ -251,20 +229,10 @@ class _ProjectsPageState extends State<ProjectsPage> {
             final String computedStatus = metrics.progress >= 1.0
               ? 'Completed'
               : status;
-            final int projectWorkforceCount = await _fetchProjectWorkforceCount(
-              projectId: projectId,
-              userId: userId,
-            );
-            final int workforceCount =
-                projectWorkforceCount > 0
-                ? projectWorkforceCount
-                : _parseInt(project['workforce']) ??
-                      _parseInt(project['workforce_count']) ??
-                      _parseInt(project['crew_count']) ??
-                      _parseInt(project['assigned_workers_count']) ??
-                      (metrics.assignedCrewCount > 0
-                          ? metrics.assignedCrewCount
-                          : 0);
+            // Crew count = unique field workers assigned to ANY subtask
+            // within the project's phases. `_calculateProjectMetrics` already
+            // walks every phase + subtask and deduplicates by fieldworker id.
+            final int workforceCount = metrics.assignedCrewCount;
 
             print('✅ Project ID: $projectId, Name: $projectName');
 
