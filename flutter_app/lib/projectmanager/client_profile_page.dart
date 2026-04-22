@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'widgets/responsive_page_layout.dart';
 import 'clients_page.dart';
 import 'modals/view_edit_client_modal.dart';
+import '../services/app_config.dart';
+import '../services/auth_service.dart';
 
 class ClientProject {
   final String projectName;
@@ -21,56 +25,235 @@ class ClientProject {
   });
 }
 
-class ClientProfilePage extends StatelessWidget {
+class _ClientProjectsData {
+  const _ClientProjectsData({
+    required this.activeProjects,
+    required this.finishedProjects,
+  });
+
+  final List<ClientProject> activeProjects;
+  final List<ClientProject> finishedProjects;
+}
+
+class ClientProfilePage extends StatefulWidget {
   final ClientInfo client;
 
   const ClientProfilePage({super.key, required this.client});
 
-  static final List<ClientProject> _activeProjects = [
-    ClientProject(
-      projectName: 'Super Highway',
-      location: 'Divisoria, Zamboanga City',
-      startDate: '08/20/2025',
-      endDate: '08/20/2026',
-      progress: 0.55,
-      status: 'In Progress',
-    ),
-    ClientProject(
-      projectName: "Richmond's House",
-      location: 'Sta. Maria, Zamboanga City',
-      startDate: '02/03/2025',
-      endDate: '09/20/2025',
-      progress: 0.30,
-      status: 'In Progress',
-    ),
-    ClientProject(
-      projectName: 'Diversion Road',
-      location: 'Luyahan, Zamboanga City',
-      startDate: '05/12/2025',
-      endDate: '02/20/2026',
-      progress: 0.89,
-      status: 'In Progress',
-    ),
-  ];
+  @override
+  State<ClientProfilePage> createState() => _ClientProfilePageState();
+}
 
-  static final List<ClientProject> _finishedProjects = [
-    ClientProject(
-      projectName: 'Bulacan Flood Control',
-      location: 'Bulacan, Philippines',
-      startDate: '01/15/2024',
-      endDate: '08/20/2024',
-      progress: 1.0,
-      status: 'Completed',
-    ),
-    ClientProject(
-      projectName: 'City Hall Renovation',
-      location: 'Zamboanga City',
-      startDate: '05/10/2023',
-      endDate: '12/15/2023',
-      progress: 1.0,
-      status: 'Completed',
-    ),
-  ];
+class _ClientProfilePageState extends State<ClientProfilePage> {
+  late Future<_ClientProjectsData> _projectsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _projectsFuture = _fetchClientProjects();
+  }
+
+  int? _parseInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    return int.tryParse(value.toString());
+  }
+
+  String _formatDate(String rawDate) {
+    if (rawDate.trim().isEmpty) return 'N/A';
+    try {
+      final date = DateTime.parse(rawDate);
+      final month = date.month.toString().padLeft(2, '0');
+      final day = date.day.toString().padLeft(2, '0');
+      final year = date.year.toString();
+      return '$month/$day/$year';
+    } catch (_) {
+      return rawDate;
+    }
+  }
+
+  int? _extractClientId(Map<String, dynamic> project) {
+    final directClientId = _parseInt(project['client_id']);
+    if (directClientId != null) return directClientId;
+
+    final clientField = project['client'];
+    if (clientField is Map<String, dynamic>) {
+      return _parseInt(clientField['client_id']) ?? _parseInt(clientField['id']);
+    }
+
+    return _parseInt(clientField);
+  }
+
+  String _extractClientName(Map<String, dynamic> project) {
+    final directName = (project['client_name']?.toString() ?? '').trim();
+    if (directName.isNotEmpty) return directName;
+
+    final clientField = project['client'];
+    if (clientField is Map<String, dynamic>) {
+      final firstName = (clientField['first_name']?.toString() ?? '').trim();
+      final lastName = (clientField['last_name']?.toString() ?? '').trim();
+      final fullName = '$firstName $lastName'.trim();
+      if (fullName.isNotEmpty) return fullName;
+      return (clientField['name']?.toString() ?? '').trim();
+    }
+
+    return '';
+  }
+
+  bool _isProjectForSelectedClient(Map<String, dynamic> project) {
+    final selectedClientId = widget.client.id;
+    final projectClientId = _extractClientId(project);
+
+    if (selectedClientId != null && projectClientId != null) {
+      return selectedClientId == projectClientId;
+    }
+
+    final selectedName = widget.client.name.trim().toLowerCase();
+    final projectClientName = _extractClientName(project).toLowerCase();
+
+    if (selectedName.isEmpty || projectClientName.isEmpty) {
+      return false;
+    }
+
+    return projectClientName == selectedName ||
+        projectClientName.contains(selectedName) ||
+        selectedName.contains(projectClientName);
+  }
+
+  String _buildLocation(Map<String, dynamic> project) {
+    String? asText(dynamic value) {
+      if (value == null) return null;
+      final text = value.toString().trim();
+      if (text.isEmpty || text == 'null') return null;
+      return text;
+    }
+
+    final parts = <String?>[
+      asText(project['street']),
+      asText(project['barangay_name']) ?? asText(project['barangay']),
+      asText(project['city_name']) ?? asText(project['city']),
+      asText(project['province_name']) ?? asText(project['province']),
+      asText(project['region_name']) ?? asText(project['region']),
+    ].whereType<String>().toList();
+
+    if (parts.isNotEmpty) {
+      return parts.join(', ');
+    }
+
+    return 'No location provided';
+  }
+
+  Future<double> _calculateProgressFromPhases(int projectId) async {
+    try {
+      final response = await http.get(
+        AppConfig.apiUri('phases/?project_id=$projectId'),
+      );
+
+      if (response.statusCode != 200) return 0.0;
+
+      final List<dynamic> phases = jsonDecode(response.body);
+      int totalSubtasks = 0;
+      int completedSubtasks = 0;
+
+      for (final phase in phases) {
+        if (phase is! Map<String, dynamic>) continue;
+        final subtasks = phase['subtasks'];
+        if (subtasks is! List) continue;
+
+        totalSubtasks += subtasks.length;
+        for (final subtask in subtasks) {
+          if (subtask is! Map<String, dynamic>) continue;
+          final status = (subtask['status']?.toString() ?? '').toLowerCase();
+          if (status == 'completed') {
+            completedSubtasks++;
+          }
+        }
+      }
+
+      if (totalSubtasks == 0) return 0.0;
+      return completedSubtasks / totalSubtasks;
+    } catch (_) {
+      return 0.0;
+    }
+  }
+
+  double _progressFromProjectField(Map<String, dynamic> project) {
+    final candidates = [
+      project['progress'],
+      project['completion'],
+      project['completion_rate'],
+      project['completion_percentage'],
+    ];
+
+    for (final value in candidates) {
+      if (value == null) continue;
+      final parsed = double.tryParse(value.toString());
+      if (parsed == null) continue;
+
+      final normalized = parsed > 1 ? (parsed / 100) : parsed;
+      return normalized.clamp(0.0, 1.0);
+    }
+
+    return 0.0;
+  }
+
+  Future<_ClientProjectsData> _fetchClientProjects() async {
+    final userId = AuthService().currentUser?['user_id'];
+    if (userId == null) {
+      return const _ClientProjectsData(activeProjects: [], finishedProjects: []);
+    }
+
+    final response = await http.get(AppConfig.apiUri('projects/?user_id=$userId'));
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load projects: ${response.statusCode}');
+    }
+
+    final data = jsonDecode(response.body);
+    if (data is! List) {
+      return const _ClientProjectsData(activeProjects: [], finishedProjects: []);
+    }
+
+    final activeProjects = <ClientProject>[];
+    final finishedProjects = <ClientProject>[];
+
+    for (final rawProject in data) {
+      if (rawProject is! Map<String, dynamic>) continue;
+      if (!_isProjectForSelectedClient(rawProject)) continue;
+
+      final projectId = _parseInt(rawProject['project_id']) ?? 0;
+      var progress = _progressFromProjectField(rawProject);
+      if (progress == 0.0 && projectId > 0) {
+        progress = await _calculateProgressFromPhases(projectId);
+      }
+
+      final statusRaw = (rawProject['status']?.toString() ?? 'In Progress').trim();
+      final isCompleted = statusRaw.toLowerCase() == 'completed' || progress >= 1.0;
+      final normalizedStatus = isCompleted
+          ? 'Completed'
+          : (statusRaw.isEmpty ? 'In Progress' : statusRaw);
+
+      final project = ClientProject(
+        projectName: (rawProject['project_name']?.toString() ?? 'Unnamed Project').trim(),
+        location: _buildLocation(rawProject),
+        startDate: _formatDate(rawProject['start_date']?.toString() ?? ''),
+        endDate: _formatDate(rawProject['end_date']?.toString() ?? ''),
+        progress: progress,
+        status: normalizedStatus,
+      );
+
+      if (isCompleted) {
+        finishedProjects.add(project);
+      } else {
+        activeProjects.add(project);
+      }
+    }
+
+    return _ClientProjectsData(
+      activeProjects: activeProjects,
+      finishedProjects: finishedProjects,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -126,7 +309,13 @@ class ClientProfilePage extends StatelessWidget {
                         // Profile Image
                         CircleAvatar(
                           radius: 50,
-                          backgroundImage: NetworkImage(client.avatarUrl),
+                          backgroundImage: widget.client.avatarUrl.trim().isNotEmpty
+                              ? NetworkImage(widget.client.avatarUrl)
+                              : null,
+                          backgroundColor: Colors.grey[200],
+                          child: widget.client.avatarUrl.trim().isNotEmpty
+                              ? null
+                              : const Icon(Icons.person_outline, color: Color(0xFF6B7280)),
                         ),
                         const SizedBox(height: 16),
                         // Profile Info
@@ -134,7 +323,7 @@ class ClientProfilePage extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             Text(
-                              client.name,
+                              widget.client.name,
                               style: const TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.w700,
@@ -144,7 +333,7 @@ class ClientProfilePage extends StatelessWidget {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              client.company,
+                              widget.client.company,
                               style: const TextStyle(
                                 fontSize: 15,
                                 color: Color(0xFF6B7280),
@@ -154,19 +343,19 @@ class ClientProfilePage extends StatelessWidget {
                             const SizedBox(height: 12),
                             _buildInfoRow(
                               Icons.location_on_outlined,
-                              client.location,
+                              widget.client.location,
                               center: true,
                             ),
                             const SizedBox(height: 6),
                             _buildInfoRow(
                               Icons.email_outlined,
-                              client.email,
+                              widget.client.email,
                               center: true,
                             ),
                             const SizedBox(height: 6),
                             _buildInfoRow(
                               Icons.phone_outlined,
-                              client.phone,
+                              widget.client.phone,
                               center: true,
                             ),
                           ],
@@ -180,7 +369,7 @@ class ClientProfilePage extends StatelessWidget {
                               showDialog(
                                 context: context,
                                 builder: (context) =>
-                                    ViewEditClientModal(client: client),
+                                    ViewEditClientModal(client: widget.client),
                               );
                             },
                             style: ElevatedButton.styleFrom(
@@ -215,7 +404,13 @@ class ClientProfilePage extends StatelessWidget {
                         // Profile Image
                         CircleAvatar(
                           radius: 50,
-                          backgroundImage: NetworkImage(client.avatarUrl),
+                          backgroundImage: widget.client.avatarUrl.trim().isNotEmpty
+                              ? NetworkImage(widget.client.avatarUrl)
+                              : null,
+                          backgroundColor: Colors.grey[200],
+                          child: widget.client.avatarUrl.trim().isNotEmpty
+                              ? null
+                              : const Icon(Icons.person_outline, color: Color(0xFF6B7280)),
                         ),
                         const SizedBox(width: 24),
                         // Profile Info
@@ -224,7 +419,7 @@ class ClientProfilePage extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                client.name,
+                                widget.client.name,
                                 style: const TextStyle(
                                   fontSize: 22,
                                   fontWeight: FontWeight.w700,
@@ -233,7 +428,7 @@ class ClientProfilePage extends StatelessWidget {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                client.company,
+                                widget.client.company,
                                 style: const TextStyle(
                                   fontSize: 15,
                                   color: Color(0xFF6B7280),
@@ -242,12 +437,12 @@ class ClientProfilePage extends StatelessWidget {
                               const SizedBox(height: 12),
                               _buildInfoRow(
                                 Icons.location_on_outlined,
-                                client.location,
+                                widget.client.location,
                               ),
                               const SizedBox(height: 6),
-                              _buildInfoRow(Icons.email_outlined, client.email),
+                              _buildInfoRow(Icons.email_outlined, widget.client.email),
                               const SizedBox(height: 6),
-                              _buildInfoRow(Icons.phone_outlined, client.phone),
+                              _buildInfoRow(Icons.phone_outlined, widget.client.phone),
                             ],
                           ),
                         ),
@@ -257,7 +452,7 @@ class ClientProfilePage extends StatelessWidget {
                             showDialog(
                               context: context,
                               builder: (context) =>
-                                  ViewEditClientModal(client: client),
+                                  ViewEditClientModal(client: widget.client),
                             );
                           },
                           style: ElevatedButton.styleFrom(
@@ -288,22 +483,44 @@ class ClientProfilePage extends StatelessWidget {
                     ),
             ),
             SizedBox(height: isMobile ? 24 : 32),
+            FutureBuilder<_ClientProjectsData>(
+              future: _projectsFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-            // Active Projects Section
-            _ProjectSection(
-              title: 'Active Projects',
-              count: _activeProjects.length,
-              projects: _activeProjects,
-              isMobile: isMobile,
-            ),
-            SizedBox(height: isMobile ? 24 : 32),
+                if (snapshot.hasError) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Text(
+                      'Unable to load client projects. ${snapshot.error}',
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  );
+                }
 
-            // Finished Projects Section
-            _ProjectSection(
-              title: 'Finished Projects',
-              count: _finishedProjects.length,
-              projects: _finishedProjects,
-              isMobile: isMobile,
+                final data = snapshot.data ??
+                    const _ClientProjectsData(activeProjects: [], finishedProjects: []);
+
+                return Column(
+                  children: [
+                    _ProjectSection(
+                      title: 'Active Projects',
+                      count: data.activeProjects.length,
+                      projects: data.activeProjects,
+                      isMobile: isMobile,
+                    ),
+                    SizedBox(height: isMobile ? 24 : 32),
+                    _ProjectSection(
+                      title: 'Finished Projects',
+                      count: data.finishedProjects.length,
+                      projects: data.finishedProjects,
+                      isMobile: isMobile,
+                    ),
+                  ],
+                );
+              },
             ),
             SizedBox(height: isMobile ? 80 : 0), // Space for bottom navbar
           ],
@@ -359,6 +576,14 @@ class _ProjectSection extends StatelessWidget {
           ),
         ),
         SizedBox(height: isMobile ? 12 : 16),
+        if (projects.isEmpty)
+          Text(
+            'No projects found for this client.',
+            style: TextStyle(
+              fontSize: isMobile ? 13 : 14,
+              color: const Color(0xFF6B7280),
+            ),
+          ),
         ...projects.map(
           (project) => Padding(
             padding: EdgeInsets.only(bottom: isMobile ? 12 : 16),
