@@ -18,6 +18,120 @@ class SubtaskManagePage extends StatefulWidget {
 }
 
 class _SubtaskManagePageState extends State<SubtaskManagePage> {
+  late Phase _phase;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _phase = widget.phase;
+  }
+
+  Future<void> _refreshPhase() async {
+    setState(() => _isLoading = true);
+    try {
+      final response = await http.get(
+        AppConfig.apiUri('phases/${_phase.phaseId}/'),
+      );
+      if (response.statusCode == 200) {
+        setState(() {
+          _phase = Phase.fromJson(jsonDecode(response.body));
+        });
+      }
+    } catch (e) {
+      debugPrint('Error refreshing phase: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _editSubtask(Subtask subtask) async {
+    final controller = TextEditingController(text: subtask.title);
+    final newTitle = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Subtask Name'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: 'Enter subtask name',
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF7A18)),
+            child: const Text('Save', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (newTitle != null && newTitle.isNotEmpty && newTitle != subtask.title) {
+      try {
+        final response = await http.patch(
+          AppConfig.apiUri('subtasks/${subtask.subtaskId}/'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'title': newTitle}),
+        );
+        if (response.statusCode == 200) {
+          _refreshPhase();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Subtask updated')),
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint('Error editing subtask: $e');
+      }
+    }
+  }
+
+  Future<void> _removeSubtask(Subtask subtask) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove Subtask'),
+        content: Text('Are you sure you want to remove "${subtask.title}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Remove', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final response = await http.delete(
+          AppConfig.apiUri('subtasks/${subtask.subtaskId}/'),
+        );
+        if (response.statusCode == 204) {
+          _refreshPhase();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Subtask removed')),
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint('Error removing subtask: $e');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -49,17 +163,17 @@ class _SubtaskManagePageState extends State<SubtaskManagePage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    widget.phase.phaseName,
+                                    _phase.phaseName,
                                     style: const TextStyle(
                                       fontSize: 28,
                                       fontWeight: FontWeight.bold,
                                       color: Color(0xFF0C1935),
                                     ),
                                   ),
-                                  if (widget.phase.description != null &&
-                                      widget.phase.description!.isNotEmpty)
+                                  if (_phase.description != null &&
+                                      _phase.description!.isNotEmpty)
                                     Text(
-                                      widget.phase.description!,
+                                      _phase.description!,
                                       style: const TextStyle(
                                         fontSize: 14,
                                         color: Color(0xFF6B7280),
@@ -95,7 +209,7 @@ class _SubtaskManagePageState extends State<SubtaskManagePage> {
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                'Duration: ${widget.phase.daysDuration != null ? '${widget.phase.daysDuration} days' : 'Not set'}',
+                                'Duration: ${_phase.daysDuration != null ? '${_phase.daysDuration} days' : 'Not set'}',
                                 style: TextStyle(
                                   fontSize: 14,
                                   color: Colors.grey[600],
@@ -108,17 +222,17 @@ class _SubtaskManagePageState extends State<SubtaskManagePage> {
                                   vertical: 4,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: _getStatusBgColor(widget.phase.status),
+                                  color: _getStatusBgColor(_phase.status),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
-                                  widget.phase.status
+                                  _phase.status
                                       .replaceAll('_', ' ')
                                       .toUpperCase(),
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
-                                    color: _getStatusColor(widget.phase.status),
+                                    color: _getStatusColor(_phase.status),
                                   ),
                                 ),
                               ),
@@ -129,7 +243,7 @@ class _SubtaskManagePageState extends State<SubtaskManagePage> {
 
                         // Subtasks section
                         Text(
-                          'Subtasks / ${widget.phase.subtasks.length}',
+                          'Subtasks / ${_phase.subtasks.length}',
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
@@ -138,7 +252,7 @@ class _SubtaskManagePageState extends State<SubtaskManagePage> {
                         ),
                         const SizedBox(height: 12),
 
-                        if (widget.phase.subtasks.isEmpty)
+                        if (_phase.subtasks.isEmpty)
                           Container(
                             padding: const EdgeInsets.all(24),
                             decoration: BoxDecoration(
@@ -186,7 +300,7 @@ class _SubtaskManagePageState extends State<SubtaskManagePage> {
                               ],
                             ),
                             child: Column(
-                              children: widget.phase.subtasks
+                              children: _phase.subtasks
                                   .asMap()
                                   .entries
                                   .map((entry) {
@@ -194,12 +308,14 @@ class _SubtaskManagePageState extends State<SubtaskManagePage> {
                                     final subtask = entry.value;
                                     final isLast =
                                         index ==
-                                        widget.phase.subtasks.length - 1;
+                                        _phase.subtasks.length - 1;
                                     return Column(
                                       children: [
                                         _SubtaskTile(
                                           subtask: subtask,
-                                          phase: widget.phase,
+                                          phase: _phase,
+                                          onEdit: () => _editSubtask(subtask),
+                                          onRemove: () => _removeSubtask(subtask),
                                         ),
                                         if (!isLast)
                                           const Divider(
@@ -252,8 +368,15 @@ class _SubtaskManagePageState extends State<SubtaskManagePage> {
 class _SubtaskTile extends StatelessWidget {
   final Subtask subtask;
   final Phase phase;
+  final VoidCallback onEdit;
+  final VoidCallback onRemove;
 
-  const _SubtaskTile({required this.subtask, required this.phase});
+  const _SubtaskTile({
+    required this.subtask,
+    required this.phase,
+    required this.onEdit,
+    required this.onRemove,
+  });
 
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
@@ -285,31 +408,6 @@ class _SubtaskTile extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       child: Row(
         children: [
-          Checkbox(
-            value: subtask.status.toLowerCase() == 'completed',
-            onChanged: (value) {},
-            activeColor: const Color(0xFF10B981),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  subtask.title,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: const Color(0xFF0C1935),
-                    decoration: subtask.status.toLowerCase() == 'completed'
-                        ? TextDecoration.lineThrough
-                        : null,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
@@ -326,6 +424,22 @@ class _SubtaskTile extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  subtask.title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF0C1935),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
           IconButton(
             onPressed: () {
               showDialog(
@@ -333,7 +447,7 @@ class _SubtaskTile extends StatelessWidget {
                 builder: (context) => ViewWorkForceModal(subtask: subtask),
               );
             },
-              icon: const Icon(Icons.groups_outlined),
+            icon: const Icon(Icons.groups_outlined),
             tooltip: 'View Work Force',
             color: const Color(0xFF0C1935),
           ),
@@ -349,6 +463,40 @@ class _SubtaskTile extends StatelessWidget {
             icon: const Icon(Icons.person_add_outlined),
             tooltip: 'Manage workers',
             color: const Color(0xFFFF7A18),
+          ),
+          const SizedBox(width: 4),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Color(0xFF6B7280)),
+            tooltip: 'Options',
+            onSelected: (value) {
+              if (value == 'edit') {
+                onEdit();
+              } else if (value == 'remove') {
+                onRemove();
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'edit',
+                child: Row(
+                  children: [
+                    Icon(Icons.edit_outlined, size: 20, color: Color(0xFF0C1935)),
+                    SizedBox(width: 12),
+                    Text('Edit'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'remove',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                    SizedBox(width: 12),
+                    Text('Remove', style: TextStyle(color: Colors.red)),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),

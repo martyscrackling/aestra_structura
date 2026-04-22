@@ -391,17 +391,15 @@ class _PhaseModalState extends State<PhaseModal> {
                           ),
                         ),
                         items: [
-                          ..._phases.map((phase) {
-                            final isDisabled = _existingPhases.contains(phase);
+                          ..._phases
+                              .where((phase) => !_existingPhases.contains(phase))
+                              .map((phase) {
                             return DropdownMenuItem<String>(
                               value: phase,
-                              enabled: !isDisabled,
                               child: Text(
                                 phase,
                                 style: TextStyle(
-                                  color: isDisabled
-                                      ? Colors.grey.shade400
-                                      : Colors.black,
+                                  color: Colors.black,
                                   fontSize: isMobile ? 13 : 14,
                                 ),
                                 overflow: TextOverflow.ellipsis,
