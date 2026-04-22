@@ -1742,7 +1742,7 @@ class PhaseViewSet(viewsets.ModelViewSet):
     serializer_class = PhaseSerializer
 
     def get_queryset(self):
-        queryset = models.Phase.objects.all().order_by('created_at', 'phase_id')
+        queryset = models.Phase.objects.all().order_by('-created_at', '-phase_id')
         project_id = self.request.query_params.get('project_id')
         if project_id:
             queryset = queryset.filter(project_id=project_id)

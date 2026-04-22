@@ -285,7 +285,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
       final phasesResponse = await http.get(AppConfig.apiUri(phasesUrl));
       if (phasesResponse.statusCode == 200) {
         final phases = jsonDecode(phasesResponse.body) as List<dynamic>;
-        phases.sort(_comparePhasesOldestFirst);
+        phases.sort(_comparePhasesNewestFirst);
         return phases;
       }
     } catch (_) {
@@ -305,7 +305,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     return 0;
   }
 
-  int _comparePhasesOldestFirst(dynamic a, dynamic b) {
+  int _comparePhasesNewestFirst(dynamic a, dynamic b) {
     final aMap = a is Map
         ? a.cast<String, dynamic>()
         : const <String, dynamic>{};
@@ -314,13 +314,13 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         : const <String, dynamic>{};
 
     final createdCompare = _phaseSortScore(
-      aMap['created_at'],
-    ).compareTo(_phaseSortScore(bMap['created_at']));
+      bMap['created_at'],
+    ).compareTo(_phaseSortScore(aMap['created_at']));
     if (createdCompare != 0) return createdCompare;
 
     return _phaseSortScore(
-      aMap['phase_id'],
-    ).compareTo(_phaseSortScore(bMap['phase_id']));
+      bMap['phase_id'],
+    ).compareTo(_phaseSortScore(aMap['phase_id']));
   }
 
   Future<void> _refreshProjectPlanPreview() async {
@@ -938,7 +938,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           if (_phases != null && _phases!.isNotEmpty)
             Column(
               children: [
-                ..._phases!.map((phase) {
+                ..._phases!.take(3).map((phase) {
                   final phaseMap = phase as Map<String, dynamic>;
                   final subtasks = phaseMap['subtasks'] as List<dynamic>? ?? [];
                   final completedCount = subtasks
@@ -1030,7 +1030,17 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                     ),
                   );
                 }),
-
+                if (_phases!.length > 3)
+                  Center(
+                    child: Text(
+                      '+${_phases!.length - 3} more phases',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade600,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
               ],
             )
           else

@@ -183,8 +183,6 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
         if (!mounted) return;
         setState(() {
           _projectInfo = projectInfo;
-          // Sort phases by ID (as proxy for creation order)
-          phases.sort((a, b) => int.parse(a.id).compareTo(int.parse(b.id)));
           _phases = phases;
           _projectProgressPoints = projectProgressPoints;
           _isLoadingPhases = false;
