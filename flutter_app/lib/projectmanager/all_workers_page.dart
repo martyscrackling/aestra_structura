@@ -317,7 +317,27 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
             final rawId = worker['fieldworker_id'] ?? worker['id'];
             final workerId = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
             if (workerId == null) continue;
-            workersMap[workerId] = Map<String, dynamic>.from(worker);
+
+            final existing = workersMap[workerId];
+            if (existing != null) {
+              final currentPhases = (existing['phase_name']?.toString() ?? '').split(', ');
+              final currentSubtasks = (existing['subtask_title']?.toString() ?? '').split(', ');
+              
+              final newPhase = phase['phase_name']?.toString() ?? 'N/A';
+              final newSubtask = subtask['title']?.toString() ?? 'N/A';
+              
+              if (!currentPhases.contains(newPhase)) {
+                existing['phase_name'] = '${existing['phase_name']}, $newPhase';
+              }
+              if (!currentSubtasks.contains(newSubtask)) {
+                existing['subtask_title'] = '${existing['subtask_title']}, $newSubtask';
+              }
+            } else {
+              final workerData = Map<String, dynamic>.from(worker);
+              workerData['phase_name'] = phase['phase_name'];
+              workerData['subtask_title'] = subtask['title'];
+              workersMap[workerId] = workerData;
+            }
           }
         }
       }
@@ -388,6 +408,8 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
       role: worker['role'] ?? 'Field Worker',
       avatarUrl: photoUrl ?? 'https://randomuser.me/api/portraits/men/1.jpg',
       type: 'Field Worker',
+      phaseName: worker['phase_name'],
+      subtaskTitle: worker['subtask_title'],
     );
   }
 
@@ -1182,6 +1204,27 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
                     ),
                   ],
                 ),
+                if (worker['phase_name'] != null || worker['subtask_title'] != null) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(Icons.assignment_ind_outlined, size: 14, color: Color(0xFFFF7A18)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '${worker['phase_name'] ?? 'N/A'} > ${worker['subtask_title'] ?? 'N/A'}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: Color(0xFFFF7A18),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

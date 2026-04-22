@@ -968,6 +968,7 @@ class SubtaskSerializer(serializers.ModelSerializer):
                 'id': worker_id,
                 'first_name': worker.first_name,
                 'last_name': worker.last_name,
+                'phone_number': worker.phone_number,
                 'role': worker.role,
                 'photo': worker.photo.url if worker.photo else None,
             })
