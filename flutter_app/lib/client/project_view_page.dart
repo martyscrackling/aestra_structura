@@ -52,11 +52,29 @@ class _ProjectViewPageState extends State<ProjectViewPage> {
     if (decoded is! List) throw Exception('Unexpected phases response');
 
     final phases = decoded.whereType<Map<String, dynamic>>().toList();
+    
+    Map<String, dynamic>? latestPhase;
+    DateTime? maxDate;
+    for (final p in phases) {
+      final d = DateTime.tryParse((p['updated_at'] as String?) ?? '');
+      if (d != null) {
+        if (maxDate == null || d.isAfter(maxDate)) {
+          maxDate = d;
+          latestPhase = p;
+        }
+      }
+    }
+    if (latestPhase == null && phases.isNotEmpty) {
+      latestPhase = phases.last;
+    }
+
     final sections = <_PhaseSection>[];
 
     for (final p in phases) {
       final title = (p['phase_name'] as String?) ?? 'Phase';
       final updatedAt = DateTime.tryParse((p['updated_at'] as String?) ?? '');
+      final isLatestPhase = (p == latestPhase);
+
       final tasksRaw = (p['subtasks'] is List)
           ? (p['subtasks'] as List)
           : const [];
@@ -65,7 +83,19 @@ class _ProjectViewPageState extends State<ProjectViewPage> {
           .map((t) {
             final taskTitle = (t['title'] as String?) ?? 'Untitled task';
             final status = (t['status'] as String?) ?? 'pending';
-            return _TaskItem(title: taskTitle, status: status);
+            final progressNotes = t['progress_notes'] as String?;
+            final updatePhotosRaw = (t['update_photos'] is List) ? (t['update_photos'] as List) : const [];
+            final updatePhotos = updatePhotosRaw.whereType<Map<String, dynamic>>().toList(growable: false);
+            final updatedAtStr = t['updated_at'] as String?;
+            final updatedAtDt = updatedAtStr != null ? DateTime.tryParse(updatedAtStr) : null;
+
+            return _TaskItem(
+              title: taskTitle, 
+              status: status,
+              progressNotes: progressNotes,
+              updatePhotos: updatePhotos,
+              updatedAt: updatedAtDt,
+            );
           })
           .toList(growable: false);
 
@@ -74,11 +104,18 @@ class _ProjectViewPageState extends State<ProjectViewPage> {
           title: title,
           date: _formatDateLabel(updatedAt),
           tasks: tasks,
+          isLatestUpdatedPhase: isLatestPhase,
         ),
       );
     }
 
     return sections;
+  }
+
+  String _getImageUrl(String path) {
+    if (path.startsWith('http')) return path;
+    final baseUri = Uri.parse(AppConfig.apiBaseUrl);
+    return '${baseUri.scheme}://${baseUri.host}${baseUri.hasPort ? ':${baseUri.port}' : ''}$path';
   }
 
   String _formatDateLabel(DateTime? dt) {
@@ -201,10 +238,7 @@ class _ProjectViewPageState extends State<ProjectViewPage> {
 
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(detail),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(detail), backgroundColor: Colors.red),
         );
       }
     } catch (_) {
@@ -275,7 +309,7 @@ class _ProjectViewPageState extends State<ProjectViewPage> {
                 Expanded(
                   child: ListView.separated(
                     itemCount: week.tasks.length,
-                    separatorBuilder: (_, __) => const Divider(),
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
                       final t = week.tasks[index];
                       final dotColor = switch (t.status.toLowerCase()) {
@@ -283,27 +317,152 @@ class _ProjectViewPageState extends State<ProjectViewPage> {
                         'in_progress' || 'in progress' => Colors.blue,
                         _ => Colors.orange,
                       };
-                      return ListTile(
-                        leading: Container(
-                          width: 10,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            color: dotColor,
-                            shape: BoxShape.circle,
-                          ),
+                      List<Map<String, dynamic>> latestUpdatePhotos = [];
+                      if (t.updatePhotos.isNotEmpty && t.updatedAt != null) {
+                        final firstPhotoRaw = t.updatePhotos.first['created_at'] as String?;
+                        final firstPhotoDt = firstPhotoRaw != null ? DateTime.tryParse(firstPhotoRaw) : null;
+                        
+                        if (firstPhotoDt != null) {
+                          final diff = t.updatedAt!.difference(firstPhotoDt).inMinutes.abs();
+                          if (diff < 2) {
+                            String? getGroupKey(DateTime? dt) {
+                              if (dt == null) return null;
+                              final localDt = dt.toLocal();
+                              final dateStr = '${localDt.day}/${localDt.month}/${localDt.year}';
+                              String hour = localDt.hour > 12 ? '${localDt.hour - 12}' : '${localDt.hour}';
+                              if (hour == '0') hour = '12';
+                              final minute = localDt.minute.toString().padLeft(2, '0');
+                              final ampm = localDt.hour >= 12 ? 'PM' : 'AM';
+                              return '$dateStr at $hour:$minute $ampm';
+                            }
+                            
+                            final firstKey = getGroupKey(firstPhotoDt);
+                            latestUpdatePhotos = t.updatePhotos.where((p) {
+                              final pRaw = p['created_at'] as String?;
+                              final pDt = pRaw != null ? DateTime.tryParse(pRaw) : null;
+                              return getGroupKey(pDt) == firstKey;
+                            }).toList();
+                          }
+                        }
+                      }
+
+                      return Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey[200]!),
                         ),
-                        title: Text(t.title),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            PopupMenuButton<int>(
-                              itemBuilder: (_) => [
-                                const PopupMenuItem(
-                                  value: 1,
-                                  child: Text('...'),
+                            Row(
+                              children: [
+                                Container(
+                                  width: 10,
+                                  height: 10,
+                                  decoration: BoxDecoration(
+                                    color: dotColor,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    t.title,
+                                    style: const TextStyle(fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: dotColor.withAlpha(20),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    t.status.toUpperCase(),
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: dotColor,
+                                    ),
+                                  ),
                                 ),
                               ],
-                              icon: const Icon(Icons.more_horiz),
+                            ),
+                            if (t.updatedAt != null) Builder(builder: (context) {
+                              final localDt = t.updatedAt!.toLocal();
+                              final dateStr = '${localDt.day}/${localDt.month}/${localDt.year}';
+                              String hour = localDt.hour > 12 ? '${localDt.hour - 12}' : '${localDt.hour}';
+                              if (hour == '0') hour = '12';
+                              final minute = localDt.minute.toString().padLeft(2, '0');
+                              final ampm = localDt.hour >= 12 ? 'PM' : 'AM';
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Text(
+                                  'Last Updated: $dateStr at $hour:$minute $ampm',
+                                  style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600),
+                                ),
+                              );
+                            }),
+                            if (t.progressNotes != null && t.progressNotes!.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              const Text('Notes:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                              Text(t.progressNotes!, style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                            ],
+                            if (latestUpdatePhotos.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: latestUpdatePhotos.map((photoItem) {
+                                  final photoPath = photoItem['photo'] as String?;
+                                  if (photoPath == null) return const SizedBox.shrink();
+                                  final photoUrl = _getImageUrl(photoPath);
+                                  
+                                  return GestureDetector(
+                                    onTap: () => _showFullImage(context, photoUrl),
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        border: Border.all(color: Colors.grey[300]!),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(7),
+                                        child: Image.network(
+                                          photoUrl,
+                                          height: 100,
+                                          width: 100,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) => Container(
+                                            height: 100,
+                                            width: 100,
+                                            color: Colors.grey[200],
+                                            child: const Icon(Icons.broken_image, color: Colors.grey),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ],
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton.icon(
+                                onPressed: () => _showHistoryModal(context, t),
+                                icon: const Icon(Icons.history, size: 16, color: Color(0xFFFF7A18)),
+                                label: const Text(
+                                  'History',
+                                  style: TextStyle(color: Color(0xFFFF7A18), fontSize: 13),
+                                ),
+                                style: TextButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -316,6 +475,207 @@ class _ProjectViewPageState extends State<ProjectViewPage> {
           ),
         ),
       ),
+    );
+  }
+
+  void _showHistoryModal(BuildContext context, _TaskItem t) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Update History',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  const Divider(),
+                  Expanded(
+                    child: Builder(builder: (context) {
+                      final Map<String, List<Map<String, dynamic>>> groupedUpdates = {};
+                      for (final photoItem in t.updatePhotos) {
+                        final rawDate = photoItem['created_at'] as String?;
+                        DateTime? dt;
+                        if (rawDate != null) dt = DateTime.tryParse(rawDate);
+
+                        String dateStr = '';
+                        String timeStr = '';
+                        if (dt != null) {
+                          final localDt = dt.toLocal();
+                          dateStr = '${localDt.day}/${localDt.month}/${localDt.year}';
+                          String hour = localDt.hour > 12 ? '${localDt.hour - 12}' : '${localDt.hour}';
+                          if (hour == '0') hour = '12';
+                          final minute = localDt.minute.toString().padLeft(2, '0');
+                          final ampm = localDt.hour >= 12 ? 'PM' : 'AM';
+                          timeStr = '$hour:$minute $ampm';
+                        }
+                        
+                        final key = dateStr.isNotEmpty ? '$dateStr at $timeStr' : 'Unknown Date';
+                        groupedUpdates.putIfAbsent(key, () => []).add(photoItem);
+                      }
+                      
+                      if (t.updatedAt != null) {
+                        final localDt = t.updatedAt!.toLocal();
+                        final dateStr = '${localDt.day}/${localDt.month}/${localDt.year}';
+                        String hour = localDt.hour > 12 ? '${localDt.hour - 12}' : '${localDt.hour}';
+                        if (hour == '0') hour = '12';
+                        final minute = localDt.minute.toString().padLeft(2, '0');
+                        final ampm = localDt.hour >= 12 ? 'PM' : 'AM';
+                        final timeStr = '$hour:$minute $ampm';
+                        final key = '$dateStr at $timeStr';
+                        
+                        if (!groupedUpdates.containsKey(key)) {
+                          final newMap = <String, List<Map<String, dynamic>>>{};
+                          newMap[key] = [];
+                          newMap.addAll(groupedUpdates);
+                          groupedUpdates.clear();
+                          groupedUpdates.addAll(newMap);
+                        }
+                      }
+
+                      if (groupedUpdates.isEmpty) {
+                        return const Center(
+                          child: Text('No history available.', style: TextStyle(color: Colors.grey)),
+                        );
+                      }
+
+                      return ListView.separated(
+                        itemCount: groupedUpdates.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 16),
+                        itemBuilder: (context, index) {
+                          final key = groupedUpdates.keys.elementAt(index);
+                          final photos = groupedUpdates[key]!;
+                          
+                          String? notes;
+                          for (final p in photos) {
+                            if (p['progress_notes'] != null && p['progress_notes'].toString().isNotEmpty) {
+                              notes = p['progress_notes'].toString();
+                              break;
+                            }
+                          }
+                          if (notes == null && index == 0 && t.progressNotes != null && t.progressNotes!.isNotEmpty) {
+                            notes = t.progressNotes;
+                          }
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                key, 
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black)
+                              ),
+                              if (notes != null) ...[
+                                const SizedBox(height: 4),
+                                Text('Notes: $notes', style: const TextStyle(fontSize: 13, color: Colors.black87)),
+                              ],
+                              if (photos.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: photos.map((photoItem) {
+                                    final photoPath = photoItem['photo'] as String?;
+                                    if (photoPath == null) return const SizedBox.shrink();
+                                    final photoUrl = _getImageUrl(photoPath);
+                                    
+                                    return GestureDetector(
+                                      onTap: () => _showFullImage(context, photoUrl),
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          border: Border.all(color: Colors.grey[300]!),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(7),
+                                          child: Image.network(
+                                            photoUrl,
+                                            height: 80,
+                                            width: 80,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) => Container(
+                                              height: 80,
+                                              width: 80,
+                                              color: Colors.grey[200],
+                                              child: const Icon(Icons.broken_image, color: Colors.grey),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ],
+                            ],
+                          );
+                        },
+                      );
+                    }),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showFullImage(BuildContext context, String imageUrl) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(16),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                constraints: const BoxConstraints(maxWidth: 800, maxHeight: 800),
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: InteractiveViewer(
+                    child: Image.network(
+                      imageUrl,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const Center(
+                        child: Icon(Icons.broken_image, color: Colors.white, size: 50),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -673,16 +1033,31 @@ class _ProjectViewPageState extends State<ProjectViewPage> {
 }
 
 class _PhaseSection {
-  _PhaseSection({required this.title, required this.date, required this.tasks});
+  _PhaseSection({
+    required this.title,
+    required this.date,
+    required this.tasks,
+    required this.isLatestUpdatedPhase,
+  });
   final String title;
   final String date;
   final List<_TaskItem> tasks;
+  final bool isLatestUpdatedPhase;
 }
 
 class _TaskItem {
-  _TaskItem({required this.title, required this.status});
+  _TaskItem({
+    required this.title,
+    required this.status,
+    this.progressNotes,
+    this.updatePhotos = const [],
+    this.updatedAt,
+  });
   final String title;
   final String status;
+  final String? progressNotes;
+  final List<Map<String, dynamic>> updatePhotos;
+  final DateTime? updatedAt;
 }
 
 class _BackJobReviewItem {
