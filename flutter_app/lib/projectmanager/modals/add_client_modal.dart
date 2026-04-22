@@ -717,14 +717,6 @@ class _AddClientModalState extends State<AddClientModal> {
                                 ),
                                 const SizedBox(height: 12),
 
-                                // Generated Password
-                                _buildTextField(
-                                  controller: _passwordController,
-                                  hintText: 'Password (Default)',
-                                  readOnly: true,
-                                ),
-                                const SizedBox(height: 12),
-
                                 // Phone Number
                                 _buildTextField(
                                   controller: _phoneNumberController,
@@ -1063,14 +1055,6 @@ class _AddClientModalState extends State<AddClientModal> {
                                       }
                                       return null;
                                     },
-                                  ),
-                                  const SizedBox(height: 16),
-
-                                  // Generated Password
-                                  _buildTextField(
-                                    controller: _passwordController,
-                                    hintText: 'Password (Default)',
-                                    readOnly: true,
                                   ),
                                   const SizedBox(height: 16),
 

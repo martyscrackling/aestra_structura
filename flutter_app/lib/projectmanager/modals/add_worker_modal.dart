@@ -894,14 +894,6 @@ class _AddWorkerModalState extends State<AddWorkerModal> {
       ),
       SizedBox(height: spacing),
 
-      // Generated Password
-      _buildTextField(
-        controller: _passwordController,
-        hintText: 'Password (Default)',
-        readOnly: true,
-      ),
-      SizedBox(height: spacing),
-
       // Phone Number
       _buildTextField(
         controller: _phoneNumberController,
