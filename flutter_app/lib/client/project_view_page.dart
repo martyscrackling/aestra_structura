@@ -53,17 +53,6 @@ class _ProjectViewPageState extends State<ProjectViewPage> {
 
     final phases = decoded.whereType<Map<String, dynamic>>().toList();
     
-    // Sort phases by createdAt (oldest first)
-    phases.sort((a, b) {
-      final aCreated = DateTime.tryParse(a['created_at'] ?? '') ?? DateTime(0);
-      final bCreated = DateTime.tryParse(b['created_at'] ?? '') ?? DateTime(0);
-      int cmp = aCreated.compareTo(bCreated);
-      if (cmp == 0) {
-        return (a['phase_id'] ?? 0).compareTo(b['phase_id'] ?? 0);
-      }
-      return cmp;
-    });
-    
     Map<String, dynamic>? latestPhase;
     DateTime? maxDate;
     for (final p in phases) {
