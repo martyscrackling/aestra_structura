@@ -34,6 +34,7 @@ class _PhaseModalState extends State<PhaseModal> {
   String? _durationWarning;
   bool _showSubtaskError = false;
   bool _useCustomPhase = false;
+  bool _isLoadingExistingPhases = true;
 
   final List<String> _phases = [
     'PHASE 1 - Pre-Construction Phase',
@@ -93,12 +94,16 @@ class _PhaseModalState extends State<PhaseModal> {
               .map((phase) => phase['phase_name'] as String)
               .toList();
           _existingPhasesDurationDays = usedDays;
+          _isLoadingExistingPhases = false;
         });
 
         _recomputeDurationWarning();
       }
     } catch (e) {
       // Silently fail - user can still add phases
+      setState(() {
+        _isLoadingExistingPhases = false;
+      });
       // ignore: avoid_print
       print('Error fetching existing phases: $e');
     }
@@ -362,82 +367,112 @@ class _PhaseModalState extends State<PhaseModal> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Phase dropdown
-                      DropdownButtonFormField<String>(
-                        key: ValueKey(_selectedPhase),
-                        initialValue: _selectedPhase,
-                        isExpanded: true,
-                        decoration: InputDecoration(
-                          hintText: 'Select Phase',
-                          filled: true,
-                          fillColor: const Color(0xFFF9FAFB),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(
-                              color: Color(0xFFE5E7EB),
-                            ),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(
-                              color: Color(0xFFE5E7EB),
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(
-                              color: Color(0xFF0C1935),
-                              width: 2,
-                            ),
-                          ),
-                        ),
-                        items: [
-                          ..._phases
-                              .where((phase) => !_existingPhases.contains(phase))
-                              .map((phase) {
-                            return DropdownMenuItem<String>(
-                              value: phase,
-                              child: Text(
-                                phase,
-                                style: TextStyle(
-                                  color: Colors.black,
-                                  fontSize: isMobile ? 13 : 14,
+                      _isLoadingExistingPhases
+                          ? Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF9FAFB),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: const Color(0xFFE5E7EB)),
+                              ),
+                              child: Row(
+                                children: [
+                                  const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Color(0xFFFF7A18),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    'Loading available phases...',
+                                    style: TextStyle(
+                                      fontSize: isMobile ? 13 : 14,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : DropdownButtonFormField<String>(
+                              key: ValueKey(_selectedPhase),
+                              initialValue: _selectedPhase,
+                              isExpanded: true,
+                              decoration: InputDecoration(
+                                hintText: 'Select Phase',
+                                filled: true,
+                                fillColor: const Color(0xFFF9FAFB),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFFE5E7EB),
+                                  ),
                                 ),
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFFE5E7EB),
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFF0C1935),
+                                    width: 2,
+                                  ),
+                                ),
                               ),
-                            );
-                          }).toList(),
-                          DropdownMenuItem<String>(
-                            value: 'CUSTOM_PHASE',
-                            child: Text(
-                              'Custom Phase',
-                              style: TextStyle(
-                                color: Colors.orange,
-                                fontSize: isMobile ? 13 : 14,
-                                fontWeight: FontWeight.w600,
-                              ),
+                              items: [
+                                ..._phases
+                                    .where((phase) => !_existingPhases.contains(phase))
+                                    .map((phase) {
+                                  return DropdownMenuItem<String>(
+                                    value: phase,
+                                    child: Text(
+                                      phase,
+                                      style: TextStyle(
+                                        color: Colors.black,
+                                        fontSize: isMobile ? 13 : 14,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
+                                  );
+                                }).toList(),
+                                DropdownMenuItem<String>(
+                                  value: 'CUSTOM_PHASE',
+                                  child: Text(
+                                    'Custom Phase',
+                                    style: TextStyle(
+                                      color: Colors.orange,
+                                      fontSize: isMobile ? 13 : 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              onChanged: (value) {
+                                setState(() {
+                                  if (value == 'CUSTOM_PHASE') {
+                                    _useCustomPhase = true;
+                                    _selectedPhase = null;
+                                  } else {
+                                    _useCustomPhase = false;
+                                    _selectedPhase = value;
+                                    _customPhaseController.clear();
+                                  }
+                                });
+                              },
+                              validator: (value) {
+                                if (!_useCustomPhase && (value == null || value.isEmpty)) {
+                                  return 'Please select a phase';
+                                }
+                                return null;
+                              },
                             ),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          setState(() {
-                            if (value == 'CUSTOM_PHASE') {
-                              _useCustomPhase = true;
-                              _selectedPhase = null;
-                            } else {
-                              _useCustomPhase = false;
-                              _selectedPhase = value;
-                              _customPhaseController.clear();
-                            }
-                          });
-                        },
-                        validator: (value) {
-                          if (!_useCustomPhase && (value == null || value.isEmpty)) {
-                            return 'Please select a phase';
-                          }
-                          return null;
-                        },
-                      ),
 
                       if (_useCustomPhase) ...[
                         const SizedBox(height: 12),

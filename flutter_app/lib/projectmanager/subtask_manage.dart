@@ -216,26 +216,27 @@ class _SubtaskManagePageState extends State<SubtaskManagePage> {
                                 ),
                               ),
                               const SizedBox(width: 16),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: _getStatusBgColor(_phase.status),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  _phase.status
-                                      .replaceAll('_', ' ')
-                                      .toUpperCase(),
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: _getStatusColor(_phase.status),
+                              if (_phase.status != 'not_started')
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _getStatusBgColor(_phase.status),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    _phase.status
+                                        .replaceAll('_', ' ')
+                                        .toUpperCase(),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: _getStatusColor(_phase.status),
+                                    ),
                                   ),
                                 ),
-                              ),
                             ],
                           ),
                         ),

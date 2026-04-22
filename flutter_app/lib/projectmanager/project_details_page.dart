@@ -322,6 +322,95 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
     }
   }
 
+  Future<void> _editPhase(Phase phase) async {
+    final controller = TextEditingController(text: phase.phaseName);
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Phase Name'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: 'Enter phase name',
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF7A18),
+            ),
+            child: const Text('Save', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (newName != null && newName.isNotEmpty && newName != phase.phaseName) {
+      try {
+        final response = await http.patch(
+          AppConfig.apiUri('phases/${phase.phaseId}/'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'phase_name': newName}),
+        );
+        if (response.statusCode == 200) {
+          _fetchPhases();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Phase updated')),
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint('Error editing phase: $e');
+      }
+    }
+  }
+
+  Future<void> _removePhase(Phase phase) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove Phase'),
+        content: const Text('Are you sure you want to remove this phase?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Remove', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final response = await http.delete(
+          AppConfig.apiUri('phases/${phase.phaseId}/'),
+        );
+        if (response.statusCode == 204) {
+          _fetchPhases();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Phase removed')),
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint('Error removing phase: $e');
+      }
+    }
+  }
+
   String _formatReviewDate(DateTime? dt) {
     if (dt == null) return '';
     return '${dt.month}/${dt.day}/${dt.year}';
@@ -1231,23 +1320,24 @@ class _PhaseCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 16),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _getStatusBgColor(phase.status),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  phase.status.replaceAll('_', ' ').toUpperCase(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: _getStatusColor(phase.status),
+              if (phase.status != 'not_started')
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _getStatusBgColor(phase.status),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    phase.status.replaceAll('_', ' ').toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: _getStatusColor(phase.status),
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -1356,6 +1446,45 @@ class _PhaseCard extends StatelessWidget {
                     style: const TextStyle(fontSize: 13),
                   ),
                 ),
+                if (isLocked) ...[
+                  const SizedBox(width: 8),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert, size: 20, color: Color(0xFF6B7280)),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onSelected: (value) {
+                      final state = context.findAncestorStateOfType<_ProjectTaskDetailsPageState>();
+                      if (state == null) return;
+                      if (value == 'edit') {
+                        state._editPhase(phase);
+                      } else if (value == 'remove') {
+                        state._removePhase(phase);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'edit',
+                        child: Row(
+                          children: [
+                            Icon(Icons.edit_outlined, size: 18),
+                            SizedBox(width: 8),
+                            Text('Edit Phase'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'remove',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                            SizedBox(width: 8),
+                            Text('Remove Phase', style: TextStyle(color: Colors.red)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ],

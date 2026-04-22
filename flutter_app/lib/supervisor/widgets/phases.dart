@@ -42,7 +42,7 @@ class _PhasesWidgetState extends State<PhasesWidget> {
       case 'in_progress':
         return const Color.fromARGB(255, 255, 152, 0);
       default:
-        return Colors.grey;
+        return Colors.transparent;
     }
   }
 
@@ -119,7 +119,7 @@ class _PhasesWidgetState extends State<PhasesWidget> {
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                       subtitle: Text(
-                        'Status: ${status.replaceAll('_', ' ')} • Days: $daysLeft',
+                        '${status == 'not_started' ? '' : 'Status: ${status.replaceAll('_', ' ')} • '}Days: $daysLeft',
                       ),
                       trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                       onTap: () {
