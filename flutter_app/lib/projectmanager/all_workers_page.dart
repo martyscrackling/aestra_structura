@@ -8,6 +8,7 @@ import 'worker_profile_page.dart';
 import 'workforce_page.dart';
 import '../services/app_config.dart';
 import '../services/auth_service.dart';
+import 'modals/add_worker_modal.dart';
 
 class AllWorkersPage extends StatefulWidget {
   final int projectId;
@@ -317,7 +318,27 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
             final rawId = worker['fieldworker_id'] ?? worker['id'];
             final workerId = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
             if (workerId == null) continue;
-            workersMap[workerId] = Map<String, dynamic>.from(worker);
+
+            final existing = workersMap[workerId];
+            if (existing != null) {
+              final currentPhases = (existing['phase_name']?.toString() ?? '').split(', ');
+              final currentSubtasks = (existing['subtask_title']?.toString() ?? '').split(', ');
+              
+              final newPhase = phase['phase_name']?.toString() ?? 'N/A';
+              final newSubtask = subtask['title']?.toString() ?? 'N/A';
+              
+              if (!currentPhases.contains(newPhase)) {
+                existing['phase_name'] = '${existing['phase_name']}, $newPhase';
+              }
+              if (!currentSubtasks.contains(newSubtask)) {
+                existing['subtask_title'] = '${existing['subtask_title']}, $newSubtask';
+              }
+            } else {
+              final workerData = Map<String, dynamic>.from(worker);
+              workerData['phase_name'] = phase['phase_name'];
+              workerData['subtask_title'] = subtask['title'];
+              workersMap[workerId] = workerData;
+            }
           }
         }
       }
@@ -388,6 +409,8 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
       role: worker['role'] ?? 'Field Worker',
       avatarUrl: photoUrl ?? 'https://randomuser.me/api/portraits/men/1.jpg',
       type: 'Field Worker',
+      phaseName: worker['phase_name'],
+      subtaskTitle: worker['subtask_title'],
     );
   }
 
@@ -413,177 +436,226 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  'Select Supervisor',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Choose a supervisor to add to this project',
-                  style: TextStyle(fontSize: 14, color: Colors.grey),
-                ),
-                const SizedBox(height: 20),
-                Expanded(
-                  child: FutureBuilder<List<Map<String, dynamic>>>(
-                    future: _fetchAllSupervisors(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-
-                      if (snapshot.hasError) {
-                        return Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(
-                                Icons.error_outline,
-                                size: 48,
-                                color: Colors.red,
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                'Error: ${snapshot.error}',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  color: Colors.red,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }
-
-                      final allSupervisors = snapshot.data ?? [];
-
-                      // Filter out already assigned supervisors
-                      final assignedSupervisorIds = _supervisors
-                          .map((sup) => sup['id'] ?? sup['supervisor_id'])
-                          .toSet();
-                      final supervisors = allSupervisors
-                          .where(
-                            (sup) => !assignedSupervisorIds.contains(
-                              sup['id'] ?? sup['supervisor_id'],
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Select Supervisor',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Choose a supervisor to add to this project',
+                      style: TextStyle(fontSize: 14, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: ActionChip(
+                        onPressed: () async {
+                          final result = await showDialog(
+                            context: context,
+                            builder: (context) => const AddWorkerModal(
+                              workerType: 'Supervisor',
                             ),
-                          )
-                          .toList();
-
-                      if (supervisors.isEmpty) {
-                        return Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.people_outline,
-                                size: 48,
-                                color: Colors.grey.shade400,
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                'No other supervisors available',
-                                style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }
-
-                      return ListView.builder(
-                        itemCount: supervisors.length,
-                        itemBuilder: (context, index) {
-                          final supervisor = supervisors[index];
-                          final firstName =
-                              supervisor['first_name'] ?? 'Unknown';
-                          final lastName = supervisor['last_name'] ?? '';
-                          final fullName = '$firstName $lastName'.trim();
-                          final phone = supervisor['phone_number'] ?? 'N/A';
-                          final photoUrl = _resolveMediaUrl(
-                            supervisor['photo'],
                           );
+                          if (result == true) {
+                            setDialogState(() {});
+                            _fetchProjectWorkers();
+                          }
+                        },
+                        avatar: const Icon(
+                          Icons.add,
+                          size: 14,
+                          color: Colors.white,
+                        ),
+                        label: const Text(
+                          'Create Supervisor',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        backgroundColor: const Color(0xFFFF7A18),
+                        side: BorderSide.none,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: FutureBuilder<List<Map<String, dynamic>>>(
+                        future: _fetchAllSupervisors(),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
+                          }
 
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey.shade200),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: ListTile(
-                              leading: _buildProfileAvatar(
-                                radius: 20,
-                                photoUrl: photoUrl,
-                              ),
-                              title: Text(
-                                fullName,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                              subtitle: Text(phone),
-                              trailing: ElevatedButton(
-                                onPressed: () {
-                                  Navigator.of(context).pop();
-                                  _assignSupervisorToProject(supervisor);
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF2196F3),
-                                  foregroundColor: Colors.white,
-                                  elevation: 0,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 8,
+                          if (snapshot.hasError) {
+                            return Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(
+                                    Icons.error_outline,
+                                    size: 48,
+                                    color: Colors.red,
                                   ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(6),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'Error: ${snapshot.error}',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      color: Colors.red,
+                                      fontSize: 14,
+                                    ),
                                   ),
-                                ),
-                                child: const Text(
-                                  'Add',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
+                                ],
                               ),
-                            ),
+                            );
+                          }
+
+                          final allSupervisors = snapshot.data ?? [];
+
+                          // Filter out already assigned supervisors
+                          final assignedSupervisorIds = _supervisors
+                              .map((sup) => sup['id'] ?? sup['supervisor_id'])
+                              .toSet();
+                          final supervisors = allSupervisors
+                              .where(
+                                (sup) => !assignedSupervisorIds.contains(
+                                  sup['id'] ?? sup['supervisor_id'],
+                                ),
+                              )
+                              .toList();
+
+                          if (supervisors.isEmpty) {
+                            return Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.people_outline,
+                                    size: 48,
+                                    color: Colors.grey.shade400,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'No other supervisors available',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+
+                          return ListView.builder(
+                            itemCount: supervisors.length,
+                            itemBuilder: (context, index) {
+                              final supervisor = supervisors[index];
+                              final firstName =
+                                  supervisor['first_name'] ?? 'Unknown';
+                              final lastName = supervisor['last_name'] ?? '';
+                              final fullName = '$firstName $lastName'.trim();
+                              final phone = supervisor['phone_number'] ?? 'N/A';
+                              final photoUrl = _resolveMediaUrl(
+                                supervisor['photo'],
+                              );
+
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: Colors.grey.shade200,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: ListTile(
+                                  leading: _buildProfileAvatar(
+                                    radius: 20,
+                                    photoUrl: photoUrl,
+                                  ),
+                                  title: Text(
+                                    fullName,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                  subtitle: Text(phone),
+                                  trailing: ElevatedButton(
+                                    onPressed: () {
+                                      Navigator.of(context).pop();
+                                      _assignSupervisorToProject(supervisor);
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF2196F3),
+                                      foregroundColor: Colors.white,
+                                      elevation: 0,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 8,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                    ),
+                                    child: const Text(
+                                      'Add',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
                           );
                         },
-                      );
-                    },
-                  ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                      },
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(fontSize: 14, color: Colors.grey),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(fontSize: 14, color: Colors.grey),
-                  ),
-                ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );
@@ -1182,6 +1254,27 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
                     ),
                   ],
                 ),
+                if (worker['phase_name'] != null || worker['subtask_title'] != null) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(Icons.assignment_ind_outlined, size: 14, color: Color(0xFFFF7A18)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '${worker['phase_name'] ?? 'N/A'} > ${worker['subtask_title'] ?? 'N/A'}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: Color(0xFFFF7A18),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

@@ -10,17 +10,23 @@ from django.db.models import Count, Q, Prefetch
 from django.db import transaction
 from django.db.models.functions import TruncDate
 from django.utils import timezone
+from django.core.cache import cache
 import json
 import os
 import re
 import secrets
+import threading
+import time
 from datetime import timedelta
 import logging
 
 logger = logging.getLogger(__name__)
 
 from app.image_verification import verify_image_has_human_face
-from .email_utils import send_signup_otp_email
+from .email_utils import (
+    send_signup_otp_email,
+    send_phase_update_summary_email,
+)
 
 
 def _get_request_pm_user_id(request):
@@ -49,6 +55,65 @@ def _get_pm_user_or_none(pm_user_id):
         user_id=pm_user_id,
         role__in=['ProjectManager', 'SuperAdmin'],
     ).first()
+
+
+_PHASE_UPDATE_QUEUE_WINDOW_SECONDS = 5
+_PHASE_UPDATE_QUEUE_TTL_SECONDS = 90
+
+
+def _queue_phase_update_notification(*, queue_key: str, summary_payload: dict) -> None:
+    pending_updates = cache.get(queue_key) or []
+    pending_updates.append(summary_payload)
+    cache.set(queue_key, pending_updates, timeout=_PHASE_UPDATE_QUEUE_TTL_SECONDS)
+
+    flush_lock_key = f"{queue_key}:flush_lock"
+    should_schedule_flush = cache.add(
+        flush_lock_key,
+        True,
+        timeout=_PHASE_UPDATE_QUEUE_WINDOW_SECONDS + 5,
+    )
+
+    if not should_schedule_flush:
+        return
+
+    def _flush_queue() -> None:
+        try:
+            time.sleep(_PHASE_UPDATE_QUEUE_WINDOW_SECONDS)
+            batched_updates = cache.get(queue_key) or []
+            if not batched_updates:
+                return
+
+            latest = batched_updates[-1]
+            subtask_lines = []
+            for item in batched_updates:
+                title = (item.get('subtask_title') or '').strip() or 'Untitled subtask'
+                status = (item.get('subtask_status') or '').strip() or 'Updated'
+                action = (item.get('update_action') or '').strip()
+                has_photo = bool(item.get('has_photo'))
+                action_label = action if action else status
+                subtask_lines.append(
+                    f"{title} - {action_label} [{status}] ({'Photo' if has_photo else 'No photo'})"
+                )
+
+            # Preserve order while removing duplicates from repeated PATCH calls.
+            deduped_subtask_lines = list(dict.fromkeys(subtask_lines))
+
+            send_phase_update_summary_email(
+                to_email=latest.get('to_email', ''),
+                client_first_name=latest.get('client_first_name'),
+                project_name=latest.get('project_name'),
+                phase_name=latest.get('phase_name'),
+                supervisor_name=latest.get('supervisor_name'),
+                progress_notes=latest.get('progress_notes'),
+                subtask_lines=deduped_subtask_lines,
+            )
+        except Exception:
+            logger.exception("Failed to flush queued phase update emails (key=%s)", queue_key)
+        finally:
+            cache.delete(queue_key)
+            cache.delete(flush_lock_key)
+
+    threading.Thread(target=_flush_queue, daemon=True).start()
 
 # Health check endpoint for debugging
 @api_view(['GET'])
@@ -1699,6 +1764,106 @@ class SubtaskViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(phase__project_id=project_id)
         return queryset
 
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+
+        previous_status = instance.status
+        previous_notes = (instance.progress_notes or '').strip()
+
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        updated_subtask = serializer.instance
+
+        uploaded_photos = []
+        if hasattr(request, 'FILES') and request.FILES:
+            uploaded_photos.extend(request.FILES.getlist('images'))
+            uploaded_photos.extend(request.FILES.getlist('photos'))
+            single_image = request.FILES.get('image')
+            single_photo = request.FILES.get('photo')
+            if single_image is not None:
+                uploaded_photos.append(single_image)
+            if single_photo is not None:
+                uploaded_photos.append(single_photo)
+
+        if uploaded_photos:
+            existing_count = updated_subtask.update_photos.count()
+            available_slots = max(0, 5 - existing_count)
+            for uploaded in uploaded_photos[:available_slots]:
+                models.SubtaskPhoto.objects.create(
+                    subtask=updated_subtask,
+                    photo=uploaded,
+                )
+
+        new_status = updated_subtask.status
+        new_notes = (updated_subtask.progress_notes or '').strip()
+
+        status_changed = previous_status != new_status
+        notes_changed = previous_notes != new_notes
+        has_photo_submission = bool(request.FILES) or any(
+            key in request.data for key in ('photo', 'photos', 'image', 'images')
+        )
+
+        if status_changed or notes_changed or has_photo_submission:
+            phase = getattr(updated_subtask, 'phase', None)
+            project = getattr(phase, 'project', None) if phase is not None else None
+            client = None
+            if project is not None:
+                if getattr(project, 'client', None) is not None:
+                    client = project.client
+                if client is None:
+                    client = models.Client.objects.filter(project_id=project).first()
+
+            if client is not None and (client.email or '').strip():
+                supervisor_name = "Supervisor"
+                supervisor_id_raw = (
+                    request.query_params.get('supervisor_id')
+                    or request.data.get('supervisor_id')
+                    or request.headers.get('X-Supervisor-Id')
+                )
+                if supervisor_id_raw not in (None, ''):
+                    try:
+                        supervisor = models.Supervisors.objects.filter(
+                            supervisor_id=int(supervisor_id_raw)
+                        ).first()
+                        if supervisor is not None:
+                            full_name = f"{(supervisor.first_name or '').strip()} {(supervisor.last_name or '').strip()}".strip()
+                            if full_name:
+                                supervisor_name = full_name
+                    except (TypeError, ValueError):
+                        pass
+
+                queue_key = (
+                    "phase_update_email_queue:"
+                    f"{getattr(client, 'client_id', 'unknown')}:"
+                    f"{getattr(phase, 'phase_id', 'unknown')}"
+                )
+                _queue_phase_update_notification(
+                    queue_key=queue_key,
+                    summary_payload={
+                        'to_email': client.email,
+                        'client_first_name': getattr(client, 'first_name', None),
+                        'project_name': getattr(project, 'project_name', None),
+                        'phase_name': getattr(phase, 'phase_name', None),
+                        'subtask_title': getattr(updated_subtask, 'title', None),
+                        'subtask_status': (new_status or '').replace('_', ' ').title(),
+                        'update_action': (
+                            'Unsubmitted'
+                            if previous_status == 'completed' and new_status == 'pending'
+                            else 'Submitted'
+                            if previous_status != 'completed' and new_status == 'completed'
+                            else 'Updated'
+                        ),
+                        'progress_notes': updated_subtask.progress_notes,
+                        'supervisor_name': supervisor_name,
+                        'has_photo': has_photo_submission,
+                    },
+                )
+
+        return Response(serializer.data)
+
 
 # SubtaskFieldWorker ViewSet
 class SubtaskFieldWorkerViewSet(viewsets.ModelViewSet):
@@ -1806,6 +1971,21 @@ class AttendanceViewSet(viewsets.ModelViewSet):
 
         attendance_qs = attendance_qs.select_related('field_worker', 'project').order_by('-attendance_date')
 
+        shift_assignments = models.SubtaskFieldWorker.objects.filter(
+            field_worker__in=workers_qs,
+            subtask__phase__project_id=project_id,
+            shift_start__isnull=False,
+            shift_end__isnull=False
+        ).order_by('field_worker_id', 'shift_start', 'assignment_id')
+        
+        worker_shifts = {}
+        for sa in shift_assignments:
+            if sa.field_worker_id not in worker_shifts:
+                worker_shifts[sa.field_worker_id] = {
+                    'shift_start': sa.shift_start.strftime('%H:%M:%S'),
+                    'shift_end': sa.shift_end.strftime('%H:%M:%S')
+                }
+
         field_workers_payload = [
             {
                 'fieldworker_id': worker.fieldworker_id,
@@ -1814,6 +1994,10 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 'last_name': worker.last_name,
                 'role': worker.role,
                 'photo': worker.photo.url if getattr(worker, 'photo', None) else None,
+                'shift_start': worker_shifts.get(worker.fieldworker_id, {}).get('shift_start'),
+                'shift_end': worker_shifts.get(worker.fieldworker_id, {}).get('shift_end'),
+                'current_project_shift_start': worker_shifts.get(worker.fieldworker_id, {}).get('shift_start'),
+                'current_project_shift_end': worker_shifts.get(worker.fieldworker_id, {}).get('shift_end'),
             }
             for worker in workers_qs.order_by('first_name', 'last_name', 'fieldworker_id')
         ]

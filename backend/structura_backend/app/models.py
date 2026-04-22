@@ -396,6 +396,13 @@ class FieldWorker(models.Model):
     cash_advance_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     deduction_per_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
+    # Damages tracking
+    damages_category = models.CharField(max_length=50, null=True, blank=True)
+    damages_item = models.CharField(max_length=255, null=True, blank=True)
+    damages_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    damages_schedule = models.CharField(max_length=50, null=True, blank=True)
+    damages_deduction_per_salary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
     # Weekly salary and deduction snapshot values.
     weekly_salary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
@@ -556,6 +563,23 @@ class Subtask(models.Model):
         return f"{self.title} - {self.phase.phase_name}"
 
 
+class SubtaskPhoto(models.Model):
+    photo_id = models.AutoField(primary_key=True)
+    subtask = models.ForeignKey(
+        Subtask,
+        on_delete=models.CASCADE,
+        related_name='update_photos',
+    )
+    photo = models.FileField(upload_to='subtask_update_photos/')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"SubtaskPhoto #{self.photo_id} - Subtask {self.subtask_id}"
+
+
 # SubtaskFieldWorker Assignment Model
 class SubtaskFieldWorker(models.Model):
     """Tracks which field workers are assigned to which subtasks"""
@@ -622,6 +646,7 @@ class InventoryItem(models.Model):
     quantity = models.PositiveIntegerField(default=1)
     location = models.CharField(max_length=200, null=True, blank=True)
     notes = models.TextField(null=True, blank=True)
+    price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     photo = models.FileField(upload_to='inventory_images/', null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Available')
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='inventory_items')

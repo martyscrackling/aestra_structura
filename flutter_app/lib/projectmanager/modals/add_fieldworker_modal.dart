@@ -188,12 +188,82 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
     });
 
     if (!result.accepted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(result.message)));
+      _showOverlayMessage(result.message, backgroundColor: Colors.red);
     }
 
     return result.accepted;
+  }
+
+  void _showOverlayMessage(
+    String message, {
+    Color backgroundColor = const Color(0xFF1F2937),
+    Duration duration = const Duration(seconds: 4),
+  }) {
+    if (!mounted) return;
+
+    final overlay = Overlay.of(context, rootOverlay: true);
+    if (overlay == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: backgroundColor),
+      );
+      return;
+    }
+
+    late final OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (overlayContext) {
+        return Positioned.fill(
+          child: IgnorePointer(
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+                child: Align(
+                  alignment: Alignment.bottomLeft,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 420),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                        decoration: BoxDecoration(
+                          color: backgroundColor,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x33000000),
+                              blurRadius: 14,
+                              offset: Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          message,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    overlay.insert(entry);
+    Future.delayed(duration, () {
+      if (entry.mounted) {
+        entry.remove();
+      }
+    });
   }
 
   Future<void> _uploadFieldWorkerPhoto({
@@ -562,9 +632,7 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
                 final msg = e.toString();
                 final isFaceReject = msg.contains('No human face detected');
 
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text(msg)));
+                _showOverlayMessage(msg, backgroundColor: Colors.red);
 
                 if (isFaceReject) {
                   photoRejected = true;
@@ -599,8 +667,9 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
           }
 
           if (mounted && !photoRejected) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Field worker added successfully!')),
+            _showOverlayMessage(
+              'Field worker added successfully!',
+              backgroundColor: Colors.green,
             );
             Navigator.of(context).pop(true);
           }
@@ -613,25 +682,23 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
                 errorData.toString() ??
                 'Failed to add field worker';
             if (mounted) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('Error: $errorMessage')));
+              _showOverlayMessage(
+                'Error: $errorMessage',
+                backgroundColor: Colors.red,
+              );
             }
           } catch (e) {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Error: Failed to add field worker'),
-                ),
+              _showOverlayMessage(
+                'Error: Failed to add field worker',
+                backgroundColor: Colors.red,
               );
             }
           }
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Error: $e')));
+          _showOverlayMessage('Error: $e', backgroundColor: Colors.red);
         }
       } finally {
         setState(() {

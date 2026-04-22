@@ -108,12 +108,14 @@ class SubscriptionMiddleware:
         if request.method in ['POST', 'PUT', 'PATCH']:
             try:
                 import json
-                if hasattr(request, 'body'):
+                content_type = (request.content_type or '').lower()
+                # Only parse JSON bodies. Multipart/form-data may include binary bytes.
+                if hasattr(request, 'body') and 'application/json' in content_type:
                     body = json.loads(request.body)
                     user_id = body.get('user_id') or body.get('created_by') or body.get('created_by_id')
                     if user_id:
                         return user_id
-            except (json.JSONDecodeError, AttributeError):
+            except (json.JSONDecodeError, UnicodeDecodeError, AttributeError, TypeError, ValueError):
                 pass
         
         return None
