@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:http/http.dart' as http;
+import '../../services/auth_service.dart';
+import '../../services/app_config.dart';
 
 class UpgradePlanModal {
   static const List<_PlanOption> _planOptions = [
@@ -433,7 +437,7 @@ class UpgradePlanModal {
                                     setState(() {
                                       errorMessage = null;
                                     });
-                                    
+
                                     // Validation
                                     if (paymentMethod == 'card') {
                                       if (cardNameController.text.trim().isEmpty ||
@@ -449,23 +453,54 @@ class UpgradePlanModal {
                                         return;
                                       }
                                     }
-                                    
+
                                     setState(() => isProcessing = true);
-                                    
-                                    // MOCK PAYMENT PROCESSING
-                                    await Future.delayed(const Duration(seconds: 2));
-                                    
-                                    setState(() => isProcessing = false);
-                                    
-                                    if (dialogContext.mounted) {
-                                      Navigator.of(dialogContext).pop();
-                                      messenger.showSnackBar(
-                                        SnackBar(
-                                          content: Text('Processing ${plan.years} year payment via ${paymentMethod.toUpperCase()}! (Simulation complete)'),
-                                          backgroundColor: Colors.green,
-                                          duration: const Duration(seconds: 4),
-                                        )
+
+                                    // --- ACTUAL SUBSCRIPTION ACTIVATION ---
+                                    try {
+                                      final authService = Provider.of<AuthService>(context, listen: false);
+                                      final user = authService.currentUser;
+                                      if (user == null || user['user_id'] == null) {
+                                        setState(() {
+                                          errorMessage = 'User not found. Please log in again.';
+                                          isProcessing = false;
+                                        });
+                                        return;
+                                      }
+                                      final userId = user['user_id'];
+                                      final amount = plan.years == 1
+                                          ? 5000
+                                          : plan.years == 3
+                                              ? 13000
+                                              : 22000;
+                                      final response = await http.post(
+                                        AppConfig.apiUri('subscription/activate/'),
+                                        headers: {"Content-Type": "application/json"},
+                                        body: '{"user_id": $userId, "subscription_years": ${plan.years}, "amount": $amount}',
                                       );
+                                      if (response.statusCode == 200) {
+                                        // Success
+                                        if (dialogContext.mounted) {
+                                          Navigator.of(dialogContext).pop();
+                                          messenger.showSnackBar(
+                                            SnackBar(
+                                              content: Text('Subscription activated!'),
+                                              backgroundColor: Colors.green,
+                                              duration: const Duration(seconds: 4),
+                                            ),
+                                          );
+                                        }
+                                      } else {
+                                        setState(() {
+                                          errorMessage = 'Activation failed: ' + response.body;
+                                        });
+                                      }
+                                    } catch (e) {
+                                      setState(() {
+                                        errorMessage = 'Network error: ' + e.toString();
+                                      });
+                                    } finally {
+                                      setState(() => isProcessing = false);
                                     }
                                   },
                             style: ElevatedButton.styleFrom(
