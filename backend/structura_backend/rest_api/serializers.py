@@ -529,6 +529,11 @@ class FieldWorkerSerializer(serializers.ModelSerializer):
             'shift_schedule',
             'current_project_shift_start',
             'current_project_shift_end',
+            'damages_category',
+            'damages_item',
+            'damages_price',
+            'damages_schedule',
+            'damages_deduction_per_salary',
             'created_at',
         ]
         extra_kwargs = {
@@ -555,6 +560,11 @@ class FieldWorkerSerializer(serializers.ModelSerializer):
             'philhealth_weekly_topup': {'required': False, 'allow_null': True},
             'pagibig_weekly_topup': {'required': False, 'allow_null': True},
             'photo': {'required': False, 'allow_null': True},
+            'damages_category': {'required': False, 'allow_null': True},
+            'damages_item': {'required': False, 'allow_null': True},
+            'damages_price': {'required': False, 'allow_null': True},
+            'damages_schedule': {'required': False, 'allow_null': True},
+            'damages_deduction_per_salary': {'required': False, 'allow_null': True},
         }
 
     def get_assignment_status(self, obj):
@@ -1352,6 +1362,7 @@ class InventoryItemSerializer(serializers.ModelSerializer):
             'category',
             'serial_number',
             'quantity',
+            'price',
             'location',
             'notes',
             'photo',
