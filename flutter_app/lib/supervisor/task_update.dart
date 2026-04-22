@@ -309,7 +309,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
   // compute phase progress as percent of subtasks completed
   int _phaseProgress(int pIndex) {
     final subs = _phases[pIndex].subtasks;
-    if (subs.isEmpty) return 0;
+    if (subs.isEmpty) return 100;
     final completed = subs.where((s) => s.status == 'Completed').length;
     return ((completed / subs.length) * 100).round();
   }
@@ -1135,17 +1135,17 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                       ],
                       // Phase level Update button
                       ElevatedButton.icon(
-                        icon: const Icon(Icons.update, size: 16),
-                        label: const Text(
-                          'Update Phase',
-                          style: TextStyle(fontSize: 13),
+                        icon: Icon((pIndex > 0 && _phaseProgress(pIndex - 1) < 100) ? Icons.lock_outline : Icons.update, size: 16),
+                        label: Text(
+                          (pIndex > 0 && _phaseProgress(pIndex - 1) < 100) ? 'Complete Previous Phase to Unlock' : 'Update Phase',
+                          style: const TextStyle(fontSize: 13),
                         ),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: primary,
+                          backgroundColor: (pIndex > 0 && _phaseProgress(pIndex - 1) < 100) ? Colors.grey : primary,
                           foregroundColor: Colors.white,
                           minimumSize: const Size(double.infinity, 40),
                         ),
-                        onPressed: () => _openPhaseUpdateDialog(pIndex),
+                        onPressed: (pIndex > 0 && _phaseProgress(pIndex - 1) < 100) ? null : () => _openPhaseUpdateDialog(pIndex),
                       ),
                     ],
                   ),

@@ -61,7 +61,7 @@ class Phase {
 
   // Calculate progress for this phase based on subtasks (matching task_progress.dart)
   double calculateProgress() {
-    if (subtasks.isEmpty) return 0.0;
+    if (subtasks.isEmpty) return 1.0;
     final completed = subtasks.where((s) => s.status == 'completed').length;
     return completed / subtasks.length;
   }
@@ -1142,7 +1142,17 @@ class _PhaseSection extends StatelessWidget {
           else if (isGanttView)
             _GanttChartView(phases: phases, projectStartDate: projectStartDate)
           else
-            ...phases.map((phase) => _PhaseCard(phase: phase)),
+            ...phases.asMap().entries.map((entry) {
+              final phase = entry.value;
+              // To accurately check if the PREVIOUS phase in the project is done,
+              // we find this phase's position in the master _phases list.
+              // This ensures we aren't fooled by the 'To Do' vs 'Finished' filtering.
+              final masterPhases = (context.findAncestorStateOfType<_ProjectTaskDetailsPageState>()?._phases) ?? phases;
+              final masterIndex = masterPhases.indexOf(phase);
+              final bool isLocked = masterIndex > 0 && masterPhases[masterIndex - 1].calculateProgress() < 1.0;
+              
+              return _PhaseCard(phase: phase, isLocked: isLocked);
+            }),
         ],
       ),
     );
@@ -1151,8 +1161,9 @@ class _PhaseSection extends StatelessWidget {
 
 class _PhaseCard extends StatelessWidget {
   final Phase phase;
+  final bool isLocked;
 
-  const _PhaseCard({required this.phase});
+  const _PhaseCard({required this.phase, this.isLocked = false});
 
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
@@ -1321,7 +1332,7 @@ class _PhaseCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton(
-                  onPressed: () {
+                  onPressed: isLocked ? null : () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -1330,7 +1341,7 @@ class _PhaseCard extends StatelessWidget {
                     );
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFF7A18),
+                    backgroundColor: isLocked ? Colors.grey : const Color(0xFFFF7A18),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -1340,9 +1351,9 @@ class _PhaseCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(6),
                     ),
                   ),
-                  child: const Text(
-                    'Manage Subtask',
-                    style: TextStyle(fontSize: 13),
+                  child: Text(
+                    isLocked ? 'Complete Previous Phase to Unlock' : 'Manage Subtask',
+                    style: const TextStyle(fontSize: 13),
                   ),
                 ),
               ],
