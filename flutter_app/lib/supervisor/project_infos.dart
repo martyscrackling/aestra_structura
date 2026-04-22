@@ -652,6 +652,279 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
     return 'Workers: ${names.join(', ')}';
   }
 
+  void _showFullImage(BuildContext context, String imageUrl) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(16),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                constraints: const BoxConstraints(maxWidth: 800, maxHeight: 800),
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: InteractiveViewer(
+                    child: Image.network(
+                      imageUrl,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const Center(
+                        child:
+                            Icon(Icons.broken_image, color: Colors.white, size: 50),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showHistoryModal(BuildContext context, Map<String, dynamic> subtaskMap) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Update History',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  const Divider(),
+                  Expanded(
+                    child: Builder(
+                      builder: (context) {
+                        final updatePhotos =
+                            (subtaskMap['update_photos'] as List<dynamic>? ??
+                                []);
+                        final Map<String, List<Map<String, dynamic>>>
+                        groupedUpdates = {};
+
+                        for (final photoItemRaw in updatePhotos) {
+                          final photoItem = photoItemRaw as Map<String, dynamic>;
+                          final rawDate = photoItem['created_at'] as String?;
+                          DateTime? dt;
+                          if (rawDate != null) dt = DateTime.tryParse(rawDate);
+
+                          String dateStr = '';
+                          String timeStr = '';
+                          if (dt != null) {
+                            final localDt = dt.toLocal();
+                            dateStr =
+                                '${localDt.day}/${localDt.month}/${localDt.year}';
+                            String hour = localDt.hour > 12
+                                ? '${localDt.hour - 12}'
+                                : '${localDt.hour}';
+                            if (hour == '0') hour = '12';
+                            final minute =
+                                localDt.minute.toString().padLeft(2, '0');
+                            final ampm = localDt.hour >= 12 ? 'PM' : 'AM';
+                            timeStr = '$hour:$minute $ampm';
+                          }
+
+                          final key = dateStr.isNotEmpty
+                              ? '$dateStr at $timeStr'
+                              : 'Unknown Date';
+                          groupedUpdates
+                              .putIfAbsent(key, () => [])
+                              .add(photoItem);
+                        }
+
+                        final updatedAtStr =
+                            subtaskMap['updated_at'] as String?;
+                        final updatedAt = updatedAtStr != null
+                            ? DateTime.tryParse(updatedAtStr)
+                            : null;
+
+                        if (updatedAt != null) {
+                          final localDt = updatedAt.toLocal();
+                          final dateStr =
+                              '${localDt.day}/${localDt.month}/${localDt.year}';
+                          String hour = localDt.hour > 12
+                              ? '${localDt.hour - 12}'
+                              : '${localDt.hour}';
+                          if (hour == '0') hour = '12';
+                          final minute =
+                              localDt.minute.toString().padLeft(2, '0');
+                          final ampm = localDt.hour >= 12 ? 'PM' : 'AM';
+                          final timeStr = '$hour:$minute $ampm';
+                          final key = '$dateStr at $timeStr';
+
+                          if (!groupedUpdates.containsKey(key)) {
+                            final newMap = <String,
+                                List<Map<String, dynamic>>>{};
+                            newMap[key] = [];
+                            newMap.addAll(groupedUpdates);
+                            groupedUpdates.clear();
+                            groupedUpdates.addAll(newMap);
+                          }
+                        }
+
+                        if (groupedUpdates.isEmpty) {
+                          return const Center(
+                            child: Text(
+                              'No history available.',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          );
+                        }
+
+                        // Convert to list to sort by key (newest first)
+                        final sortedKeys = groupedUpdates.keys.toList();
+                        // Assuming keys are like "D/M/Y at H:M AM/PM", simple string sort might not work.
+                        // But usually the backend returns them in a decent order or we can parse them.
+                        // For now, let's keep the order they were added.
+
+                        return ListView.separated(
+                          itemCount: sortedKeys.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 16),
+                          itemBuilder: (context, index) {
+                            final key = sortedKeys[index];
+                            final photos = groupedUpdates[key]!;
+
+                            String? notes;
+                            for (final p in photos) {
+                              if (p['progress_notes'] != null &&
+                                  p['progress_notes'].toString().isNotEmpty) {
+                                notes = p['progress_notes'].toString();
+                                break;
+                              }
+                            }
+
+                            // Fallback for the very latest update notes if not in photo metadata
+                            if (notes == null &&
+                                index == 0 &&
+                                (subtaskMap['progress_notes'] ?? '')
+                                    .toString()
+                                    .isNotEmpty) {
+                              notes = subtaskMap['progress_notes'].toString();
+                            }
+
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  key,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: Colors.black,
+                                  ),
+                                ),
+                                if (notes != null) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Notes: $notes',
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                ],
+                                if (photos.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: photos.map((photoItem) {
+                                      final photoPath =
+                                          photoItem['photo'] as String?;
+                                      if (photoPath == null)
+                                        return const SizedBox.shrink();
+                                      final photoUrl =
+                                          _resolveMediaUrl(photoPath) ?? '';
+
+                                      return GestureDetector(
+                                        onTap: () =>
+                                            _showFullImage(context, photoUrl),
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            border: Border.all(
+                                              color: Colors.grey[300]!,
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                          child: ClipRRect(
+                                            borderRadius:
+                                                BorderRadius.circular(7),
+                                            child: Image.network(
+                                              photoUrl,
+                                              height: 80,
+                                              width: 80,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, __, ___) =>
+                                                  Container(
+                                                height: 80,
+                                                width: 80,
+                                                color: Colors.grey[200],
+                                                child: const Icon(
+                                                  Icons.broken_image,
+                                                  color: Colors.grey,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ],
+                              ],
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildTasksToDoSection() {
     if (_phases == null || _phases!.isEmpty) {
       return Container(
@@ -851,6 +1124,164 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
                                           ),
                                         ),
                                       ],
+                                      Builder(
+                                        builder: (context) {
+                                          final updatePhotos = (subtaskMap['update_photos']
+                                                  as List<dynamic>? ??
+                                              []);
+                                          final updatedAtStr =
+                                              subtaskMap['updated_at'] as String?;
+                                          final updatedAt = updatedAtStr != null
+                                              ? DateTime.tryParse(updatedAtStr)
+                                              : null;
+
+                                          List<Map<String, dynamic>>
+                                          latestUpdatePhotos = [];
+                                          if (updatePhotos.isNotEmpty &&
+                                              updatedAt != null) {
+                                            final firstPhotoRaw =
+                                                updatePhotos.first['created_at']
+                                                    as String?;
+                                            final firstPhotoDt = firstPhotoRaw !=
+                                                    null
+                                                ? DateTime.tryParse(firstPhotoRaw)
+                                                : null;
+
+                                            if (firstPhotoDt != null) {
+                                              final diff = updatedAt
+                                                  .difference(firstPhotoDt)
+                                                  .inMinutes
+                                                  .abs();
+                                              // Increased threshold slightly for batch updates
+                                              if (diff < 5) {
+                                                String? getGroupKey(DateTime? dt) {
+                                                  if (dt == null) return null;
+                                                  final localDt = dt.toLocal();
+                                                  final dateStr =
+                                                      '${localDt.day}/${localDt.month}/${localDt.year}';
+                                                  String hour = localDt.hour > 12
+                                                      ? '${localDt.hour - 12}'
+                                                      : '${localDt.hour}';
+                                                  if (hour == '0') hour = '12';
+                                                  final minute = localDt.minute
+                                                      .toString()
+                                                      .padLeft(2, '0');
+                                                  final ampm = localDt.hour >= 12
+                                                      ? 'PM'
+                                                      : 'AM';
+                                                  return '$dateStr at $hour:$minute $ampm';
+                                                }
+
+                                                final firstKey =
+                                                    getGroupKey(firstPhotoDt);
+                                                latestUpdatePhotos = updatePhotos
+                                                    .where((p) {
+                                                  final pRaw =
+                                                      p['created_at'] as String?;
+                                                  final pDt = pRaw != null
+                                                      ? DateTime.tryParse(pRaw)
+                                                      : null;
+                                                  return getGroupKey(pDt) ==
+                                                      firstKey;
+                                                })
+                                                    .map((e) => Map<String, dynamic>.from(e))
+                                                    .toList();
+                                              }
+                                            }
+                                          }
+
+                                          return Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              if (latestUpdatePhotos.isNotEmpty) ...[
+                                                const SizedBox(height: 12),
+                                                Wrap(
+                                                  spacing: 8,
+                                                  runSpacing: 8,
+                                                  children: latestUpdatePhotos
+                                                      .map((photoItem) {
+                                                    final photoPath =
+                                                        photoItem['photo']
+                                                            as String?;
+                                                    if (photoPath == null)
+                                                      return const SizedBox
+                                                          .shrink();
+                                                    final photoUrl =
+                                                        _resolveMediaUrl(
+                                                                photoPath) ??
+                                                            '';
+
+                                                    return GestureDetector(
+                                                      onTap: () => _showFullImage(
+                                                          context, photoUrl),
+                                                      child: Container(
+                                                        decoration: BoxDecoration(
+                                                          border: Border.all(
+                                                              color: Colors
+                                                                  .grey[300]!),
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                  8),
+                                                        ),
+                                                        child: ClipRRect(
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                  7),
+                                                          child: Image.network(
+                                                            photoUrl,
+                                                            height: 100,
+                                                            width: 100,
+                                                            fit: BoxFit.cover,
+                                                            errorBuilder:
+                                                                (_, __, ___) =>
+                                                                    Container(
+                                                              height: 100,
+                                                              width: 100,
+                                                              color:
+                                                                  Colors.grey[200],
+                                                              child: const Icon(
+                                                                  Icons
+                                                                      .broken_image,
+                                                                  color: Colors
+                                                                      .grey),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }).toList(),
+                                                ),
+                                              ],
+                                              const SizedBox(height: 8),
+                                              Align(
+                                                alignment: Alignment.centerRight,
+                                                child: TextButton.icon(
+                                                  onPressed: () =>
+                                                      _showHistoryModal(
+                                                          context, subtaskMap),
+                                                  icon: const Icon(Icons.history,
+                                                      size: 16,
+                                                      color: Color(0xFFFF7A18)),
+                                                  label: const Text(
+                                                    'History',
+                                                    style: TextStyle(
+                                                        color: Color(0xFFFF7A18),
+                                                        fontSize: 13),
+                                                  ),
+                                                  style: TextButton.styleFrom(
+                                                    padding: EdgeInsets.zero,
+                                                    minimumSize: Size.zero,
+                                                    tapTargetSize:
+                                                        MaterialTapTargetSize
+                                                            .shrinkWrap,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          );
+                                        },
+                                      ),
                                     ],
                                   ),
                                 ),

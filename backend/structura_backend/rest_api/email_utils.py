@@ -393,8 +393,6 @@ def send_phase_update_notification_email(
 
     if progress_notes:
         lines.extend(["", "Progress notes:", progress_notes])
-    else:
-        lines.extend(["", "Progress notes: (none provided)"])
 
     if frontend_url:
         lines.extend(["", f"View project updates: {frontend_url}"])

@@ -89,11 +89,16 @@ def _queue_phase_update_notification(*, queue_key: str, summary_payload: dict) -
                 title = (item.get('subtask_title') or '').strip() or 'Untitled subtask'
                 status = (item.get('subtask_status') or '').strip() or 'Updated'
                 action = (item.get('update_action') or '').strip()
+                notes = (item.get('progress_notes') or '').strip()
                 has_photo = bool(item.get('has_photo'))
+                
                 action_label = action if action else status
-                subtask_lines.append(
-                    f"{title} - {action_label} [{status}] ({'Photo' if has_photo else 'No photo'})"
-                )
+                line = f"{title} - {action_label} [{status}]"
+                if notes:
+                    line += f" | Note: {notes}"
+                if has_photo:
+                    line += " (Photo attached)"
+                subtask_lines.append(line)
 
             # Preserve order while removing duplicates from repeated PATCH calls.
             deduped_subtask_lines = list(dict.fromkeys(subtask_lines))
@@ -104,7 +109,7 @@ def _queue_phase_update_notification(*, queue_key: str, summary_payload: dict) -
                 project_name=latest.get('project_name'),
                 phase_name=latest.get('phase_name'),
                 supervisor_name=latest.get('supervisor_name'),
-                progress_notes=latest.get('progress_notes'),
+                progress_notes=None,  # Notes are now embedded in individual subtask lines
                 subtask_lines=deduped_subtask_lines,
             )
         except Exception:
