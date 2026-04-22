@@ -13,6 +13,7 @@ import 'projectmanager/clients_page.dart';
 import 'projectmanager/reports_page.dart';
 import 'projectmanager/inventory_page.dart';
 import 'projectmanager/settings_page.dart';
+import 'projectmanager/notification_page.dart';
 import 'projectmanager/test_time_page.dart';
 import 'supervisor/dashboard_page.dart' as supervisor;
 import 'supervisor/all_projects.dart' as supervisor;
@@ -176,6 +177,11 @@ class StructuraApp extends StatelessWidget {
           path: '/settings',
           builder: (context, state) => SettingsPage(),
           name: 'settings',
+        ),
+        GoRoute(
+          path: '/notifications',
+          builder: (context, state) => const NotificationPage(),
+          name: 'notifications',
         ),
         GoRoute(
           path: '/test-time',
@@ -848,7 +854,10 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
           },
           child: Dialog(
             backgroundColor: Colors.transparent,
-            insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 24,
+            ),
             child: Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
@@ -905,7 +914,9 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
                               ),
                               borderRadius: BorderRadius.circular(16),
                               color: plan.isPopular
-                                  ? const Color(0xFFFF6F00).withValues(alpha: 0.05)
+                                  ? const Color(
+                                      0xFFFF6F00,
+                                    ).withValues(alpha: 0.05)
                                   : Colors.white,
                             ),
                             padding: const EdgeInsets.all(16),
@@ -927,7 +938,8 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
                                 const SizedBox(width: 16),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Row(
                                         children: [
@@ -942,13 +954,15 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
                                           if (plan.isPopular) ...[
                                             const SizedBox(width: 8),
                                             Container(
-                                              padding: const EdgeInsets.symmetric(
-                                                horizontal: 8,
-                                                vertical: 4,
-                                              ),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 4,
+                                                  ),
                                               decoration: BoxDecoration(
                                                 color: const Color(0xFFFF6F00),
-                                                borderRadius: BorderRadius.circular(8),
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
                                               ),
                                               child: const Text(
                                                 'POPULAR',
@@ -1046,7 +1060,10 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
           builder: (context, setModalState) {
             return Dialog(
               backgroundColor: Colors.transparent,
-              insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 24,
+              ),
               child: Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -1078,7 +1095,10 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
                       const SizedBox(height: 6),
                       const Text(
                         'Use your account before proceeding to payment.',
-                        style: TextStyle(fontSize: 13.5, color: Color(0xFF6B7280)),
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          color: Color(0xFF6B7280),
+                        ),
                       ),
                       const SizedBox(height: 14),
                       Wrap(
@@ -1120,13 +1140,17 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
                                   TextField(
                                     controller: loginEmailController,
                                     keyboardType: TextInputType.emailAddress,
-                                    decoration: _modalInputDecoration('Email Address'),
+                                    decoration: _modalInputDecoration(
+                                      'Email Address',
+                                    ),
                                   ),
                                   const SizedBox(height: 12),
                                   TextField(
                                     controller: loginPasswordController,
                                     obscureText: true,
-                                    decoration: _modalInputDecoration('Password'),
+                                    decoration: _modalInputDecoration(
+                                      'Password',
+                                    ),
                                   ),
                                 ],
                               )
@@ -1136,19 +1160,25 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
                                   TextField(
                                     controller: signupEmailController,
                                     keyboardType: TextInputType.emailAddress,
-                                    decoration: _modalInputDecoration('Email Address'),
+                                    decoration: _modalInputDecoration(
+                                      'Email Address',
+                                    ),
                                   ),
                                   const SizedBox(height: 12),
                                   TextField(
                                     controller: signupPasswordController,
                                     obscureText: true,
-                                    decoration: _modalInputDecoration('Create Password'),
+                                    decoration: _modalInputDecoration(
+                                      'Create Password',
+                                    ),
                                   ),
                                   const SizedBox(height: 12),
                                   TextField(
                                     controller: signupConfirmController,
                                     obscureText: true,
-                                    decoration: _modalInputDecoration('Confirm Password'),
+                                    decoration: _modalInputDecoration(
+                                      'Confirm Password',
+                                    ),
                                   ),
                                 ],
                               ),
@@ -1186,21 +1216,29 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
                                     });
 
                                     if (isSignInMode) {
-                                      final email = loginEmailController.text.trim();
-                                      final password = loginPasswordController.text.trim();
+                                      final email = loginEmailController.text
+                                          .trim();
+                                      final password = loginPasswordController
+                                          .text
+                                          .trim();
                                       if (email.isEmpty || password.isEmpty) {
                                         setModalState(() {
-                                          errorMessage = 'Please enter email and password.';
+                                          errorMessage =
+                                              'Please enter email and password.';
                                           isSubmitting = false;
                                         });
                                         return;
                                       }
 
-                                      final success = await authService.login(email, password);
+                                      final success = await authService.login(
+                                        email,
+                                        password,
+                                      );
                                       if (!context.mounted) return;
                                       if (!success) {
                                         setModalState(() {
-                                          errorMessage = 'Invalid credentials. Please try again.';
+                                          errorMessage =
+                                              'Invalid credentials. Please try again.';
                                           isSubmitting = false;
                                         });
                                         return;
@@ -1209,19 +1247,28 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
                                       Navigator.of(dialogContext).pop(true);
                                       messenger.showSnackBar(
                                         const SnackBar(
-                                          content: Text('Signed in successfully. Continue to payment.'),
+                                          content: Text(
+                                            'Signed in successfully. Continue to payment.',
+                                          ),
                                         ),
                                       );
                                       return;
                                     }
 
-                                    final email = signupEmailController.text.trim();
-                                    final password = signupPasswordController.text.trim();
-                                    final confirm = signupConfirmController.text.trim();
+                                    final email = signupEmailController.text
+                                        .trim();
+                                    final password = signupPasswordController
+                                        .text
+                                        .trim();
+                                    final confirm = signupConfirmController.text
+                                        .trim();
 
-                                    if (email.isEmpty || password.isEmpty || confirm.isEmpty) {
+                                    if (email.isEmpty ||
+                                        password.isEmpty ||
+                                        confirm.isEmpty) {
                                       setModalState(() {
-                                        errorMessage = 'Please complete all fields.';
+                                        errorMessage =
+                                            'Please complete all fields.';
                                         isSubmitting = false;
                                       });
                                       return;
@@ -1229,7 +1276,8 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
 
                                     if (password.length < 6) {
                                       setModalState(() {
-                                        errorMessage = 'Password must be at least 6 characters.';
+                                        errorMessage =
+                                            'Password must be at least 6 characters.';
                                         isSubmitting = false;
                                       });
                                       return;
@@ -1237,7 +1285,8 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
 
                                     if (password != confirm) {
                                       setModalState(() {
-                                        errorMessage = 'Passwords do not match.';
+                                        errorMessage =
+                                            'Passwords do not match.';
                                         isSubmitting = false;
                                       });
                                       return;
@@ -1263,7 +1312,9 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
                                     Navigator.of(dialogContext).pop(true);
                                     messenger.showSnackBar(
                                       const SnackBar(
-                                        content: Text('Account created. Continue to payment.'),
+                                        content: Text(
+                                          'Account created. Continue to payment.',
+                                        ),
                                       ),
                                     );
                                   },
@@ -1273,7 +1324,9 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
                                     height: 16,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
                                     ),
                                   )
                                 : Icon(
@@ -1282,12 +1335,17 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
                                         : Icons.person_add_alt_1_rounded,
                                     size: 18,
                                   ),
-                            label: Text(isSignInMode ? 'Sign In' : 'Create Account'),
+                            label: Text(
+                              isSignInMode ? 'Sign In' : 'Create Account',
+                            ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFFFF8C00),
                               foregroundColor: Colors.white,
                               elevation: 0,
-                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                                vertical: 12,
+                              ),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
@@ -1342,7 +1400,10 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
               },
               child: Dialog(
                 backgroundColor: Colors.transparent,
-                insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                insetPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 24,
+                ),
                 child: Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -1374,7 +1435,9 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
-                              border: Border.all(color: const Color(0xFFFFE5CA)),
+                              border: Border.all(
+                                color: const Color(0xFFFFE5CA),
+                              ),
                             ),
                             child: Row(
                               children: [
@@ -1385,12 +1448,16 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
                                     color: const Color(0xFFFF8C00),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
-                                  child: const Icon(Icons.payments_rounded, color: Colors.white),
+                                  child: const Icon(
+                                    Icons.payments_rounded,
+                                    color: Colors.white,
+                                  ),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       const Text(
                                         'Complete Payment',
@@ -1419,21 +1486,31 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
                             spacing: 10,
                             children: [
                               ChoiceChip(
-                                avatar: const Icon(Icons.credit_card_rounded, size: 17),
+                                avatar: const Icon(
+                                  Icons.credit_card_rounded,
+                                  size: 17,
+                                ),
                                 label: const Text('Card'),
                                 selected: paymentMethod == 'card',
                                 selectedColor: const Color(0xFFFFEED9),
-                                side: const BorderSide(color: Color(0xFFD4DEE8)),
+                                side: const BorderSide(
+                                  color: Color(0xFFD4DEE8),
+                                ),
                                 onSelected: (_) {
                                   setModalState(() => paymentMethod = 'card');
                                 },
                               ),
                               ChoiceChip(
-                                avatar: const Icon(Icons.account_balance_wallet_rounded, size: 17),
+                                avatar: const Icon(
+                                  Icons.account_balance_wallet_rounded,
+                                  size: 17,
+                                ),
                                 label: const Text('GCash'),
                                 selected: paymentMethod == 'gcash',
                                 selectedColor: const Color(0xFFE8F3FF),
-                                side: const BorderSide(color: Color(0xFFD4DEE8)),
+                                side: const BorderSide(
+                                  color: Color(0xFFD4DEE8),
+                                ),
                                 onSelected: (_) {
                                   setModalState(() => paymentMethod = 'gcash');
                                 },
@@ -1452,12 +1529,17 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
                                       TextField(
                                         controller: cardNumberController,
                                         keyboardType: TextInputType.number,
-                                        decoration: _modalInputDecoration('Card Number', hint: '1234 5678 9012 3456'),
+                                        decoration: _modalInputDecoration(
+                                          'Card Number',
+                                          hint: '1234 5678 9012 3456',
+                                        ),
                                       ),
                                       const SizedBox(height: 12),
                                       TextField(
                                         controller: cardNameController,
-                                        decoration: _modalInputDecoration('Cardholder Name'),
+                                        decoration: _modalInputDecoration(
+                                          'Cardholder Name',
+                                        ),
                                       ),
                                       const SizedBox(height: 12),
                                       Row(
@@ -1465,16 +1547,21 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
                                           Expanded(
                                             child: TextField(
                                               controller: cardExpiryController,
-                                              decoration: _modalInputDecoration('Expiry (MM/YY)'),
+                                              decoration: _modalInputDecoration(
+                                                'Expiry (MM/YY)',
+                                              ),
                                             ),
                                           ),
                                           const SizedBox(width: 12),
                                           Expanded(
                                             child: TextField(
                                               controller: cardCvvController,
-                                              keyboardType: TextInputType.number,
+                                              keyboardType:
+                                                  TextInputType.number,
                                               obscureText: true,
-                                              decoration: _modalInputDecoration('CVV'),
+                                              decoration: _modalInputDecoration(
+                                                'CVV',
+                                              ),
                                             ),
                                           ),
                                         ],
@@ -1483,7 +1570,8 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
                                   )
                                 : Column(
                                     key: const ValueKey('gcash-form'),
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Center(
                                         child: Column(
@@ -1494,25 +1582,36 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
                                               padding: const EdgeInsets.all(12),
                                               decoration: BoxDecoration(
                                                 color: Colors.white,
-                                                borderRadius: BorderRadius.circular(16),
-                                                border: Border.all(color: Colors.blue.shade200, width: 2),
+                                                borderRadius:
+                                                    BorderRadius.circular(16),
+                                                border: Border.all(
+                                                  color: Colors.blue.shade200,
+                                                  width: 2,
+                                                ),
                                                 boxShadow: [
                                                   BoxShadow(
-                                                    color: Colors.blue.withValues(alpha: 0.1),
+                                                    color: Colors.blue
+                                                        .withValues(alpha: 0.1),
                                                     blurRadius: 10,
                                                     spreadRadius: 2,
                                                   ),
                                                 ],
                                               ),
                                               child: Column(
-                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
                                                 children: const [
-                                                  Icon(Icons.qr_code_2, size: 100, color: Color(0xFF005CEE)), // GCash Blue
+                                                  Icon(
+                                                    Icons.qr_code_2,
+                                                    size: 100,
+                                                    color: Color(0xFF005CEE),
+                                                  ), // GCash Blue
                                                   SizedBox(height: 8),
                                                   Text(
                                                     'AESTRA STRUCTURA',
                                                     style: TextStyle(
-                                                      fontWeight: FontWeight.bold,
+                                                      fontWeight:
+                                                          FontWeight.bold,
                                                       fontSize: 12,
                                                       color: Color(0xFF005CEE),
                                                     ),
@@ -1525,7 +1624,10 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
                                             const Text(
                                               'Scan this QR code using your GCash app to pay. Once completed, enter the reference number below.',
                                               textAlign: TextAlign.center,
-                                              style: TextStyle(color: Colors.black54, fontSize: 13),
+                                              style: TextStyle(
+                                                color: Colors.black54,
+                                                fontSize: 13,
+                                              ),
                                             ),
                                           ],
                                         ),
@@ -1547,8 +1649,12 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
                               TextButton.icon(
-                                onPressed: () => Navigator.of(dialogContext).pop(),
-                                icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                                onPressed: () =>
+                                    Navigator.of(dialogContext).pop(),
+                                icon: const Icon(
+                                  Icons.arrow_back_rounded,
+                                  size: 18,
+                                ),
                                 label: const Text('Back'),
                               ),
                               const SizedBox(width: 8),
@@ -1556,10 +1662,18 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
                                 onPressed: () {
                                   final cardInvalid =
                                       paymentMethod == 'card' &&
-                                      (cardNumberController.text.trim().isEmpty ||
-                                          cardNameController.text.trim().isEmpty ||
-                                          cardExpiryController.text.trim().isEmpty ||
-                                          cardCvvController.text.trim().isEmpty);
+                                      (cardNumberController.text
+                                              .trim()
+                                              .isEmpty ||
+                                          cardNameController.text
+                                              .trim()
+                                              .isEmpty ||
+                                          cardExpiryController.text
+                                              .trim()
+                                              .isEmpty ||
+                                          cardCvvController.text
+                                              .trim()
+                                              .isEmpty);
 
                                   final gcashInvalid =
                                       paymentMethod == 'gcash' &&
@@ -1591,7 +1705,10 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
                                   backgroundColor: const Color(0xFFFF8C00),
                                   foregroundColor: Colors.white,
                                   elevation: 0,
-                                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 18,
+                                    vertical: 12,
+                                  ),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
@@ -1637,7 +1754,10 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
         borderSide: const BorderSide(color: Color(0xFFFF8C00), width: 1.4),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      labelStyle: const TextStyle(color: Color(0xFF526171), fontWeight: FontWeight.w600),
+      labelStyle: const TextStyle(
+        color: Color(0xFF526171),
+        fontWeight: FontWeight.w600,
+      ),
       hintStyle: const TextStyle(color: Color(0xFF97A3B2), fontSize: 13),
     );
   }

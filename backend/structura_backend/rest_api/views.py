@@ -350,7 +350,10 @@ def login_user(request):
                             'project_id': client.project_id.project_id if (client and client.project_id) else None,
                             'email': user.email,
                             'first_name': user.first_name,
+                            'middle_name': user.middle_name,
                             'last_name': user.last_name,
+                            'phone': user.phone,
+                            'phone_number': user.phone,
                             'role': 'Client',
                             'type': 'Client',
                             'force_password_change': password == 'PASSWORD',
@@ -364,7 +367,10 @@ def login_user(request):
                         'user_id': user.user_id,
                         'email': user.email,
                         'first_name': user.first_name,
+                        'middle_name': user.middle_name,
                         'last_name': user.last_name,
+                        'phone': user.phone,
+                        'phone_number': user.phone,
                         'role': user.role,
                         'type': 'user',  # Indicate this is a regular user/project manager
                     }
@@ -405,7 +411,10 @@ def login_user(request):
                         'project_id': project_obj.project_id if project_obj else None,
                         'email': supervisor.email,
                         'first_name': supervisor.first_name,
+                        'middle_name': supervisor.middle_name,
                         'last_name': supervisor.last_name,
+                        'phone': supervisor.phone,
+                        'phone_number': supervisor.phone,
                         'role': 'Supervisor',
                         'type': 'Supervisor',  # Indicate this is a supervisor
                         'force_password_change': password == 'PASSWORD',
@@ -433,7 +442,10 @@ def login_user(request):
                         'project_id': client.project_id.project_id if client.project_id else None,
                         'email': client.email,
                         'first_name': client.first_name,
+                        'middle_name': client.middle_name,
                         'last_name': client.last_name,
+                        'phone': client.phone_number,
+                        'phone_number': client.phone_number,
                         'role': 'Client',
                         'type': 'Client',  # Indicate this is a client
                         'force_password_change': password == 'PASSWORD',
@@ -460,7 +472,7 @@ def login_user(request):
 @csrf_exempt
 @api_view(['POST'])
 def change_password(request):
-    """Change password for Supervisor/Client accounts.
+    """Change password for Supervisor, Client, and User accounts.
 
     Body:
       {
@@ -517,8 +529,8 @@ def change_password(request):
             client.save(update_fields=['password_hash'])
             return Response({'success': True, 'message': 'Password updated'}, status=status.HTTP_200_OK)
 
-        # Client users may also exist in the User table with role=Client
-        user = models.User.objects.filter(email=email, role='Client').first()
+        # Regular User accounts (ProjectManager, Client, etc.)
+        user = models.User.objects.filter(email=email).first()
         if user is not None:
             if not check_password(current_password, user.password_hash):
                 return Response(
