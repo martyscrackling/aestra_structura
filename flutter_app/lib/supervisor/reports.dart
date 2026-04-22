@@ -13,12 +13,9 @@ import '../services/app_time_service.dart';
 import '../services/app_theme_tokens.dart';
 import 'widgets/mobile_bottom_nav.dart';
 import 'widgets/dashboard_header.dart';
-import '../services/date_utils.dart';
 
 const double _dailyRegularHoursCap = 8.0;
 const double _overtimeRateMultiplier = 1.5;
-const double _regularHolidayMultiplier = 2.0; // 200% pay for worked hours
-const double _specialHolidayMultiplier = 1.3; // 130% pay for worked hours
 
 class AttendanceReport {
   AttendanceReport({
@@ -38,19 +35,13 @@ class AttendanceReport {
     required this.sssDeduction,
     required this.philhealthDeduction,
     required this.pagibigDeduction,
-    this.regularHolidayHours = 0,
-    this.regularHolidayOtHours = 0,
-    this.specialHolidayHours = 0,
-    this.specialHolidayOtHours = 0,
   });
 
   final int fieldWorkerId;
   final String name;
   final String role;
   final int totalDaysPresent;
-  // Normal (non-holiday) regular hours.
   final double totalHours;
-  // Normal (non-holiday) overtime hours.
   final double overtimeHours;
   final double cashAdvance;
   final double deduction;
@@ -63,71 +54,11 @@ class AttendanceReport {
   final double philhealthDeduction;
   final double pagibigDeduction;
 
-  // Hours worked on a Regular Holiday (200% multiplier).
-  final double regularHolidayHours;
-  final double regularHolidayOtHours;
-  // Hours worked on a Special Non-Working Day (130% multiplier).
-  final double specialHolidayHours;
-  final double specialHolidayOtHours;
-
   double get regularHours => totalHours;
 
-  // Combined hours across ALL buckets (non-holiday + regular holiday + special
-  // holiday). Used for display in the main "Hours" column so workers who
-  // happen to work on a holiday still see their real worked hours.
-  double get totalAllHours =>
-      totalHours + regularHolidayHours + specialHolidayHours;
-
-  double get totalAllOvertimeHours =>
-      overtimeHours + regularHolidayOtHours + specialHolidayOtHours;
-
-  // Base (non-holiday) earnings.
-  double get basePay =>
+  double get grossPay =>
       regularHours * hourlyRate +
       overtimeHours * hourlyRate * _overtimeRateMultiplier;
-
-  // Holiday-only earnings (already includes the holiday premium).
-  double get regularHolidayPay =>
-      regularHolidayHours * hourlyRate * _regularHolidayMultiplier +
-      regularHolidayOtHours *
-          hourlyRate *
-          _regularHolidayMultiplier *
-          _overtimeRateMultiplier;
-
-  double get specialHolidayPay =>
-      specialHolidayHours * hourlyRate * _specialHolidayMultiplier +
-      specialHolidayOtHours *
-          hourlyRate *
-          _specialHolidayMultiplier *
-          _overtimeRateMultiplier;
-
-  double get holidayPay => regularHolidayPay + specialHolidayPay;
-
-  // Bonus portion only (over and above what the same hours would have paid
-  // at the normal rate).
-  double get regularHolidayBonus =>
-      regularHolidayHours * hourlyRate * (_regularHolidayMultiplier - 1.0) +
-      regularHolidayOtHours *
-          hourlyRate *
-          _overtimeRateMultiplier *
-          (_regularHolidayMultiplier - 1.0);
-
-  double get specialHolidayBonus =>
-      specialHolidayHours * hourlyRate * (_specialHolidayMultiplier - 1.0) +
-      specialHolidayOtHours *
-          hourlyRate *
-          _overtimeRateMultiplier *
-          (_specialHolidayMultiplier - 1.0);
-
-  double get holidayBonusPay => regularHolidayBonus + specialHolidayBonus;
-
-  bool get hasHolidayPay =>
-      regularHolidayHours > 0 ||
-      regularHolidayOtHours > 0 ||
-      specialHolidayHours > 0 ||
-      specialHolidayOtHours > 0;
-
-  double get grossPay => basePay + holidayPay;
 
   double get totalGovernmentDeductions =>
       sssDeduction + philhealthDeduction + pagibigDeduction;
@@ -153,12 +84,8 @@ class ReportHistoryEntry {
 
 class _WorkerTotals {
   int totalDaysPresent = 0;
-  double totalHours = 0; // non-holiday regular hours
-  double overtimeHours = 0; // non-holiday OT hours
-  double regularHolidayHours = 0;
-  double regularHolidayOtHours = 0;
-  double specialHolidayHours = 0;
-  double specialHolidayOtHours = 0;
+  double totalHours = 0;
+  double overtimeHours = 0;
 }
 
 class _SupervisorProjectOption {
@@ -480,8 +407,8 @@ class _ReportsPageState extends State<ReportsPage> {
               'name': r.name,
               'role': r.role,
               'day': r.totalDaysPresent,
-              'hours': r.totalAllHours,
-              'ot_hours': r.totalAllOvertimeHours,
+              'hours': r.totalHours,
+              'ot_hours': r.overtimeHours,
               'hourly_rate': r.hourlyRate,
               'cash_advance': r.cashAdvance,
               'deduction': r.deduction,
@@ -555,10 +482,6 @@ class _ReportsPageState extends State<ReportsPage> {
               sssDeduction: row.sssDeduction,
               philhealthDeduction: row.philhealthDeduction,
               pagibigDeduction: row.pagibigDeduction,
-              regularHolidayHours: row.regularHolidayHours,
-              regularHolidayOtHours: row.regularHolidayOtHours,
-              specialHolidayHours: row.specialHolidayHours,
-              specialHolidayOtHours: row.specialHolidayOtHours,
             );
           })
           .toList(growable: false);
@@ -1103,19 +1026,8 @@ class _ReportsPageState extends State<ReportsPage> {
           countedPresencePerDay.add(dayKey);
         }
 
-        final regHrs = _dailyRegularHours(workedHours);
-        final otHrs = _dailyOvertimeHours(workedHours);
-        final holidayInfo = PhilippineDateUtils.getHolidayInfo(date);
-        if (holidayInfo == null) {
-          totals.totalHours += regHrs;
-          totals.overtimeHours += otHrs;
-        } else if (holidayInfo.isRegular) {
-          totals.regularHolidayHours += regHrs;
-          totals.regularHolidayOtHours += otHrs;
-        } else {
-          totals.specialHolidayHours += regHrs;
-          totals.specialHolidayOtHours += otHrs;
-        }
+        totals.totalHours += _dailyRegularHours(workedHours);
+        totals.overtimeHours += _dailyOvertimeHours(workedHours);
       }
     }
 
@@ -1124,14 +1036,7 @@ class _ReportsPageState extends State<ReportsPage> {
       final workerId = workerEntry.key;
       final worker = workerEntry.value;
       final totals = totalsByWorker[workerId] ?? _WorkerTotals();
-      final hasAnyHours =
-          totals.totalHours > 0 ||
-          totals.overtimeHours > 0 ||
-          totals.regularHolidayHours > 0 ||
-          totals.regularHolidayOtHours > 0 ||
-          totals.specialHolidayHours > 0 ||
-          totals.specialHolidayOtHours > 0;
-      if (!hasAnyHours) {
+      if (totals.totalHours <= 0) {
         continue;
       }
 
@@ -1162,25 +1067,11 @@ class _ReportsPageState extends State<ReportsPage> {
       );
 
       // Fallback for older worker records that don't have computed deduction fields yet.
-      // totalHours is regular-only (non-holiday); OT is stored in overtimeHours.
+      // totalHours is regular-only; OT is stored in overtimeHours.
       final regularHours = totals.totalHours < 0 ? 0.0 : totals.totalHours;
-      final regHolPay =
-          totals.regularHolidayHours * hourlyRate * _regularHolidayMultiplier +
-          totals.regularHolidayOtHours *
-              hourlyRate *
-              _regularHolidayMultiplier *
-              _overtimeRateMultiplier;
-      final spcHolPay =
-          totals.specialHolidayHours * hourlyRate * _specialHolidayMultiplier +
-          totals.specialHolidayOtHours *
-              hourlyRate *
-              _specialHolidayMultiplier *
-              _overtimeRateMultiplier;
       final grossPayEstimate =
           regularHours * hourlyRate +
-          totals.overtimeHours * hourlyRate * _overtimeRateMultiplier +
-          regHolPay +
-          spcHolPay;
+          totals.overtimeHours * hourlyRate * _overtimeRateMultiplier;
       final sssDeduction = sssWeekly > 0
           ? sssWeekly * periodFactor
           : grossPayEstimate * 0.0323;
@@ -1224,10 +1115,6 @@ class _ReportsPageState extends State<ReportsPage> {
           sssDeduction: sssDeduction,
           philhealthDeduction: philhealthDeduction,
           pagibigDeduction: pagibigDeduction,
-          regularHolidayHours: totals.regularHolidayHours,
-          regularHolidayOtHours: totals.regularHolidayOtHours,
-          specialHolidayHours: totals.specialHolidayHours,
-          specialHolidayOtHours: totals.specialHolidayOtHours,
         ),
       );
     }
@@ -1354,7 +1241,7 @@ class _ReportsPageState extends State<ReportsPage> {
             start: window.start,
             end: window.end,
             totalAmount: totalAmount,
-            workersCount: rows.where((r) => r.totalAllHours > 0).length,
+            workersCount: rows.where((r) => r.totalHours > 0).length,
           );
         }),
       );
@@ -1554,35 +1441,16 @@ class _ReportsPageState extends State<ReportsPage> {
     );
   }
 
-  double _effectiveDeduction(AttendanceReport r) =>
-      _isSalaryDayMode ? r.deduction : 0.0;
-  double _effectiveDamages(AttendanceReport r) =>
-      _isSalaryDayMode ? r.damagesDeduction : 0.0;
-  double _effectiveTotalDeductions(AttendanceReport r) =>
-      r.totalGovernmentDeductions +
-      _effectiveDeduction(r) +
-      _effectiveDamages(r);
-  double _effectiveNetSalary(AttendanceReport r) =>
-      r.grossPay - _effectiveTotalDeductions(r);
-
   double get _totalDeductions =>
-      _rows.fold(0.0, (t, r) => t + _effectiveTotalDeductions(r));
+      _rows.fold(0.0, (t, r) => t + r.totalDeductions);
   double get _totalComputedSalary =>
-      _rows.fold(0.0, (t, r) => t + _effectiveNetSalary(r));
-  double get _totalOvertime =>
-      _rows.fold(0.0, (t, r) => t + r.totalAllOvertimeHours);
-  double get _totalHours =>
-      _rows.fold(0.0, (t, r) => t + r.totalAllHours);
+      _rows.fold(0.0, (t, r) => t + r.computedSalary);
+  double get _totalOvertime => _rows.fold(0.0, (t, r) => t + r.overtimeHours);
+  double get _totalHours => _rows.fold(0.0, (t, r) => t + r.totalHours);
   double get _totalSSS => _rows.fold(0.0, (t, r) => t + r.sssDeduction);
   double get _totalPhilhealth =>
       _rows.fold(0.0, (t, r) => t + r.philhealthDeduction);
   double get _totalPagibig => _rows.fold(0.0, (t, r) => t + r.pagibigDeduction);
-  double get _totalDamages =>
-      _rows.fold(0.0, (t, r) => t + _effectiveDamages(r));
-  double get _totalHolidayPay =>
-      _rows.fold(0.0, (t, r) => t + r.holidayPay);
-  double get _totalHolidayBonus =>
-      _rows.fold(0.0, (t, r) => t + r.holidayBonusPay);
 
   Future<void> _pickReportDate() async {
     final d = await showDatePicker(
@@ -1810,15 +1678,13 @@ class _ReportsPageState extends State<ReportsPage> {
                       ),
                       const SizedBox(width: 12),
                       Text(
-                        '${r.totalAllHours.toStringAsFixed(1)} hrs',
+                        '${r.totalHours.toStringAsFixed(1)} hrs',
                         style: TextStyle(color: Colors.grey[700]),
                       ),
                       const SizedBox(width: 12),
-                      if (r.totalAllOvertimeHours > 0)
+                      if (r.overtimeHours > 0)
                         Chip(
-                          label: Text(
-                            '+${r.totalAllOvertimeHours.toStringAsFixed(1)} OT',
-                          ),
+                          label: Text('+${r.overtimeHours} OT'),
                           backgroundColor: const Color(
                             0xFFFF8F00,
                           ).withOpacity(0.12),
@@ -2241,81 +2107,6 @@ class _ReportsPageState extends State<ReportsPage> {
                                                   ),
                                                   child: Column(
                                                     children: [
-                                                      if (_totalHolidayPay >
-                                                          0) ...[
-                                                        Row(
-                                                          mainAxisAlignment:
-                                                              MainAxisAlignment
-                                                                  .spaceBetween,
-                                                          children: [
-                                                            Text(
-                                                              'Holiday Pay',
-                                                              style: TextStyle(
-                                                                color: Colors
-                                                                    .grey[700],
-                                                                fontSize: 12,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w600,
-                                                              ),
-                                                            ),
-                                                            Text(
-                                                              _money.format(
-                                                                _totalHolidayPay,
-                                                              ),
-                                                              style: const TextStyle(
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w700,
-                                                                fontSize: 13,
-                                                                color: Color(
-                                                                  0xFF9D174D,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                        const SizedBox(
-                                                          height: 6,
-                                                        ),
-                                                      ],
-                                                      if (_totalDamages > 0) ...[
-                                                        Row(
-                                                          mainAxisAlignment:
-                                                              MainAxisAlignment
-                                                                  .spaceBetween,
-                                                          children: [
-                                                            Text(
-                                                              'Damages',
-                                                              style: TextStyle(
-                                                                color: Colors
-                                                                    .grey[700],
-                                                                fontSize: 12,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w600,
-                                                              ),
-                                                            ),
-                                                            Text(
-                                                              _money.format(
-                                                                _totalDamages,
-                                                              ),
-                                                              style: const TextStyle(
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w700,
-                                                                fontSize: 13,
-                                                                color: Color(
-                                                                  0xFFFF7A18,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                        const SizedBox(
-                                                          height: 6,
-                                                        ),
-                                                      ],
                                                       Row(
                                                         mainAxisAlignment:
                                                             MainAxisAlignment
@@ -2511,7 +2302,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                                                     ),
                                                                   ),
                                                                   Text(
-                                                                    '${r.totalAllHours.toStringAsFixed(1)} hrs',
+                                                                    '${r.totalHours.toStringAsFixed(1)} hrs',
                                                                     style: TextStyle(
                                                                       fontSize:
                                                                           10,
@@ -2519,22 +2310,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                                                           .textMuted,
                                                                     ),
                                                                   ),
-                                                                  if (r.hasHolidayPay)
-                                                                    _holidayPill(
-                                                                      r,
-                                                                      fontSize:
-                                                                          9,
-                                                                    ),
-                                                                  if (r.damagesDeduction >
-                                                                          0 ||
-                                                                      r.damagesPrice >
-                                                                          0)
-                                                                    _damagePill(
-                                                                      r,
-                                                                      fontSize:
-                                                                          9,
-                                                                    ),
-                                                                  if (r.totalAllOvertimeHours >
+                                                                  if (r.overtimeHours >
                                                                       0)
                                                                     Container(
                                                                       padding: const EdgeInsets.symmetric(
@@ -2555,7 +2331,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                                                             ),
                                                                       ),
                                                                       child: Text(
-                                                                        '+${r.totalAllOvertimeHours.toStringAsFixed(1)} OT',
+                                                                        '+${r.overtimeHours.toStringAsFixed(0)} OT',
                                                                         style: const TextStyle(
                                                                           fontSize:
                                                                               9,
@@ -2579,9 +2355,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                                           children: [
                                                             Text(
                                                               _money.format(
-                                                                _effectiveNetSalary(
-                                                                  r,
-                                                                ),
+                                                                r.computedSalary,
                                                               ),
                                                               style: const TextStyle(
                                                                 fontWeight:
@@ -2889,56 +2663,17 @@ class _ReportsPageState extends State<ReportsPage> {
                                                               width: 10,
                                                             ),
                                                             Expanded(
-                                                              child: Column(
-                                                                crossAxisAlignment:
-                                                                    CrossAxisAlignment
-                                                                        .start,
-                                                                mainAxisSize:
-                                                                    MainAxisSize
-                                                                        .min,
-                                                                children: [
-                                                                  Text(
-                                                                    r.name,
-                                                                    style: const TextStyle(
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .w600,
-                                                                      fontSize:
-                                                                          13,
-                                                                    ),
-                                                                    overflow:
-                                                                        TextOverflow
-                                                                            .ellipsis,
-                                                                  ),
-                                                                  if (r.hasHolidayPay ||
-                                                                      r.damagesDeduction >
-                                                                          0 ||
-                                                                      r.damagesPrice >
-                                                                          0) ...[
-                                                                    const SizedBox(
-                                                                      height: 4,
-                                                                    ),
-                                                                    Wrap(
-                                                                      spacing:
-                                                                          4,
-                                                                      runSpacing:
-                                                                          3,
-                                                                      children: [
-                                                                        if (r.hasHolidayPay)
-                                                                          _holidayPill(
-                                                                            r,
-                                                                          ),
-                                                                        if (r.damagesDeduction >
-                                                                                0 ||
-                                                                            r.damagesPrice >
-                                                                                0)
-                                                                          _damagePill(
-                                                                            r,
-                                                                          ),
-                                                                      ],
-                                                                    ),
-                                                                  ],
-                                                                ],
+                                                              child: Text(
+                                                                r.name,
+                                                                style: const TextStyle(
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w600,
+                                                                  fontSize: 13,
+                                                                ),
+                                                                overflow:
+                                                                    TextOverflow
+                                                                        .ellipsis,
                                                               ),
                                                             ),
                                                           ],
@@ -2988,10 +2723,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                                               MainAxisSize.min,
                                                           children: [
                                                             Text(
-                                                              r.totalAllHours
-                                                                  .toStringAsFixed(
-                                                                    1,
-                                                                  ),
+                                                              '${r.totalHours.toStringAsFixed(1)}',
                                                               style: TextStyle(
                                                                 color: Colors
                                                                     .grey[700],
@@ -3004,10 +2736,10 @@ class _ReportsPageState extends State<ReportsPage> {
                                                                   TextAlign
                                                                       .center,
                                                             ),
-                                                            if (r.totalAllOvertimeHours >
+                                                            if (r.overtimeHours >
                                                                 0)
                                                               Text(
-                                                                '+${r.totalAllOvertimeHours.toStringAsFixed(1)} OT',
+                                                                '+${r.overtimeHours.toStringAsFixed(1)} OT',
                                                                 style: const TextStyle(
                                                                   color: Color(
                                                                     0xFFFF6F00,
@@ -3134,9 +2866,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                                         flex: 3,
                                                         child: Text(
                                                           _money.format(
-                                                            _effectiveNetSalary(
-                                                              r,
-                                                            ),
+                                                            r.computedSalary,
                                                           ),
                                                           style:
                                                               const TextStyle(
@@ -3273,52 +3003,6 @@ class _ReportsPageState extends State<ReportsPage> {
                                                   fontWeight: FontWeight.w700,
                                                   fontSize: 13,
                                                   color: Colors.lightBlue,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(width: 20),
-                                          Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.end,
-                                            children: [
-                                              Text(
-                                                'Holiday Pay',
-                                                style: TextStyle(
-                                                  color: Colors.grey[700],
-                                                  fontSize: 11,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                _money.format(_totalHolidayPay),
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.w700,
-                                                  fontSize: 13,
-                                                  color: Color(0xFF9D174D),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(width: 20),
-                                          Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.end,
-                                            children: [
-                                              Text(
-                                                'Damages',
-                                                style: TextStyle(
-                                                  color: Colors.grey[700],
-                                                  fontSize: 11,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                _money.format(_totalDamages),
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.w700,
-                                                  fontSize: 13,
-                                                  color: Color(0xFFFF7A18),
                                                 ),
                                               ),
                                             ],
@@ -3524,16 +3208,9 @@ class _ReportsPageState extends State<ReportsPage> {
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) {
           final effectiveDeduction = isSalaryDay ? editableDeduction : 0.0;
-          final effectiveDamages = isSalaryDay ? r.damagesDeduction : 0.0;
-          final hasDamage = r.damagesDeduction > 0 || r.damagesPrice > 0;
           final liveTotalDeductions =
-              r.totalGovernmentDeductions +
-              effectiveDeduction +
-              effectiveDamages;
+              r.totalGovernmentDeductions + effectiveDeduction;
           final liveNetSalary = r.grossPay - liveTotalDeductions;
-          final damageRepaymentPeriods = r.damagesDeduction > 0
-              ? (r.damagesPrice / r.damagesDeduction).ceil()
-              : 0;
 
           return Container(
             decoration: const BoxDecoration(
@@ -3643,12 +3320,12 @@ class _ReportsPageState extends State<ReportsPage> {
                           ),
                           _detailItem(
                             'Hours',
-                            r.totalAllHours.toStringAsFixed(1),
+                            '${r.totalHours.toStringAsFixed(1)}',
                             Icons.access_time,
                           ),
                           _detailItem(
                             'OT',
-                            r.totalAllOvertimeHours.toStringAsFixed(1),
+                            '${r.overtimeHours.toStringAsFixed(1)}',
                             Icons.add_circle_outline,
                           ),
                           _detailItem(
@@ -3888,285 +3565,6 @@ class _ReportsPageState extends State<ReportsPage> {
                     ),
                     const SizedBox(height: 20),
 
-                    if (r.hasHolidayPay) ...[
-                      const Text(
-                        'Holiday Pay',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [Color(0xFFFDF2F8), Color(0xFFEFF6FF)],
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFFBCFE8)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF9D174D),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Icon(
-                                    Icons.celebration,
-                                    color: Colors.white,
-                                    size: 18,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                const Expanded(
-                                  child: Text(
-                                    'Holiday premiums this period',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 14,
-                                      color: Color(0xFF9D174D),
-                                    ),
-                                  ),
-                                ),
-                                Text(
-                                  '+${_money.format(r.holidayBonusPay)}',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 15,
-                                    color: Color(0xFF059669),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            if (r.regularHolidayHours > 0 ||
-                                r.regularHolidayOtHours > 0)
-                              _holidayBreakdownRow(
-                                'Regular Holiday',
-                                '200% pay',
-                                r.regularHolidayHours,
-                                r.regularHolidayOtHours,
-                                r.regularHolidayPay,
-                                const Color(0xFF9D174D),
-                              ),
-                            if ((r.regularHolidayHours > 0 ||
-                                    r.regularHolidayOtHours > 0) &&
-                                (r.specialHolidayHours > 0 ||
-                                    r.specialHolidayOtHours > 0))
-                              const SizedBox(height: 6),
-                            if (r.specialHolidayHours > 0 ||
-                                r.specialHolidayOtHours > 0)
-                              _holidayBreakdownRow(
-                                'Special Non-Working',
-                                '130% pay',
-                                r.specialHolidayHours,
-                                r.specialHolidayOtHours,
-                                r.specialHolidayPay,
-                                const Color(0xFF075985),
-                              ),
-                            const SizedBox(height: 10),
-                            Divider(height: 1, color: Colors.pink[100]),
-                            const SizedBox(height: 8),
-                            Row(
-                              mainAxisAlignment:
-                                  MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text(
-                                  'Total Holiday Pay',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                Text(
-                                  _money.format(r.holidayPay),
-                                  style: const TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w800,
-                                    color: Color(0xFF9D174D),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                    ],
-
-                    if (hasDamage) ...[
-                      const Text(
-                        'Damage on Record',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFF4EC),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFFFD1B0)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFF7A18),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Icon(
-                                    Icons.report_gmailerrorred,
-                                    color: Colors.white,
-                                    size: 18,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        (r.damagesItem ?? '').isNotEmpty
-                                            ? r.damagesItem!
-                                            : 'Reported Damage',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 14,
-                                          color: Color(0xFF7A3B00),
-                                        ),
-                                      ),
-                                      if ((r.damagesCategory ?? '').isNotEmpty)
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                            top: 2,
-                                          ),
-                                          child: Text(
-                                            r.damagesCategory!.toUpperCase(),
-                                            style: const TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w600,
-                                              color: Color(0xFFB45309),
-                                              letterSpacing: 0.6,
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _damageStat(
-                                    'Total Damage',
-                                    _money.format(r.damagesPrice),
-                                    const Color(0xFFB45309),
-                                  ),
-                                ),
-                                Container(
-                                  width: 1,
-                                  height: 34,
-                                  color: const Color(0xFFFFD1B0),
-                                ),
-                                Expanded(
-                                  child: _damageStat(
-                                    'Per Salary',
-                                    '- ${_money.format(r.damagesDeduction)}',
-                                    const Color(0xFFDC2626),
-                                  ),
-                                ),
-                                if (damageRepaymentPeriods > 0) ...[
-                                  Container(
-                                    width: 1,
-                                    height: 34,
-                                    color: const Color(0xFFFFD1B0),
-                                  ),
-                                  Expanded(
-                                    child: _damageStat(
-                                      'Est. Periods',
-                                      '$damageRepaymentPeriods',
-                                      const Color(0xFF7A3B00),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                            if (damageRepaymentPeriods > 0) ...[
-                              const SizedBox(height: 10),
-                              Text(
-                                'Approx. $damageRepaymentPeriods salary period${damageRepaymentPeriods == 1 ? '' : 's'} to fully repay at current rate.',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Color(0xFF7A3B00),
-                                ),
-                              ),
-                            ],
-                            const SizedBox(height: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isSalaryDay
-                                    ? const Color(0xFFFFE4D0)
-                                    : const Color(0xFFF3F4F6),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    isSalaryDay
-                                        ? Icons.check_circle
-                                        : Icons.schedule,
-                                    size: 12,
-                                    color: isSalaryDay
-                                        ? const Color(0xFFB45309)
-                                        : Colors.grey[600],
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    isSalaryDay
-                                        ? 'Deducting this salary day'
-                                        : 'Not deducted today · only on salary day',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: isSalaryDay
-                                          ? const Color(0xFFB45309)
-                                          : Colors.grey[700],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                    ],
-
                     // Salary breakdown
                     const Text(
                       'Salary Breakdown',
@@ -4183,24 +3581,6 @@ class _ReportsPageState extends State<ReportsPage> {
                       Colors.black,
                       isBold: true,
                     ),
-                    if (r.hasHolidayPay) ...[
-                      Padding(
-                        padding: const EdgeInsets.only(left: 12),
-                        child: _salaryRow(
-                          'Base Pay',
-                          _money.format(r.basePay),
-                          Colors.grey[700] ?? Colors.grey,
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 12),
-                        child: _salaryRow(
-                          'Holiday Pay',
-                          '+ ${_money.format(r.holidayPay)}',
-                          const Color(0xFF9D174D),
-                        ),
-                      ),
-                    ],
                     const SizedBox(height: 8),
                     Divider(height: 1, color: Colors.grey[300]),
                     const SizedBox(height: 8),
@@ -4239,14 +3619,6 @@ class _ReportsPageState extends State<ReportsPage> {
                       '- ${_money.format(effectiveDeduction)}',
                       Colors.redAccent,
                     ),
-                    if (r.damagesDeduction > 0)
-                      _salaryRow(
-                        (r.damagesItem ?? '').isNotEmpty
-                            ? 'Damage (${r.damagesItem})'
-                            : 'Damage',
-                        '- ${_money.format(effectiveDamages)}',
-                        const Color(0xFFFF7A18),
-                      ),
 
                     const SizedBox(height: 12),
                     Divider(height: 1, thickness: 2, color: Colors.grey[400]),
@@ -4312,228 +3684,6 @@ class _ReportsPageState extends State<ReportsPage> {
         const SizedBox(height: 2),
         Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
       ],
-    );
-  }
-
-  Widget _holidayBreakdownRow(
-    String title,
-    String rateLabel,
-    double hours,
-    double otHours,
-    double pay,
-    Color color,
-  ) {
-    final hoursText = hours > 0 ? '${hours.toStringAsFixed(1)}h' : '';
-    final otText = otHours > 0 ? '+${otHours.toStringAsFixed(1)}h OT' : '';
-    final hoursDisplay = [
-      hoursText,
-      otText,
-    ].where((s) => s.isNotEmpty).join(' · ');
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Text(
-            rateLabel,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              color: color,
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: color,
-                ),
-              ),
-              if (hoursDisplay.isNotEmpty)
-                Text(
-                  hoursDisplay,
-                  style: TextStyle(fontSize: 11, color: Colors.grey[700]),
-                ),
-            ],
-          ),
-        ),
-        Text(
-          _money.format(pay),
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
-            color: color,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _damageStat(String label, String value, Color color) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF7A3B00),
-            letterSpacing: 0.3,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w800,
-            color: color,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _holidayPill(AttendanceReport r, {double fontSize = 10}) {
-    if (!r.hasHolidayPay) return const SizedBox.shrink();
-    final hasRegular =
-        r.regularHolidayHours > 0 || r.regularHolidayOtHours > 0;
-    final hasSpecial =
-        r.specialHolidayHours > 0 || r.specialHolidayOtHours > 0;
-    final label = hasRegular && hasSpecial
-        ? 'HOL'
-        : hasRegular
-        ? 'HOL 200%'
-        : 'HOL 130%';
-    final bg = hasRegular
-        ? const Color(0xFFFCE7F3) // soft pink for regular holiday (higher rate)
-        : const Color(0xFFE0F2FE); // soft sky for special
-    final border = hasRegular
-        ? const Color(0xFFFBCFE8)
-        : const Color(0xFFBAE6FD);
-    final fg = hasRegular
-        ? const Color(0xFF9D174D)
-        : const Color(0xFF075985);
-    final bonus = r.holidayBonusPay;
-    return InkWell(
-      onTap: () => _showWorkerDetails(r),
-      borderRadius: BorderRadius.circular(6),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: border),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.celebration, size: 11, color: fg),
-            const SizedBox(width: 3),
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                softWrap: false,
-                style: TextStyle(
-                  fontSize: fontSize,
-                  fontWeight: FontWeight.w700,
-                  color: fg,
-                  letterSpacing: 0.3,
-                ),
-              ),
-            ),
-            if (bonus > 0) ...[
-              const SizedBox(width: 4),
-              Flexible(
-                child: Text(
-                  '+${_money.format(bonus)}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  softWrap: false,
-                  style: TextStyle(
-                    fontSize: fontSize,
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFF059669),
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _damagePill(AttendanceReport r, {double fontSize = 10}) {
-    final item = r.damagesItem ?? '';
-    final label = item.isNotEmpty ? item.toUpperCase() : 'DAMAGE';
-    final effective = _effectiveDamages(r);
-    final priceLabel = effective > 0 ? '-${_money.format(effective)}' : '';
-    return InkWell(
-      onTap: () => _showWorkerDetails(r),
-      borderRadius: BorderRadius.circular(6),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFFEFE0),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: const Color(0xFFFFD1B0)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.report_gmailerrorred,
-              size: 11,
-              color: Color(0xFFB45309),
-            ),
-            const SizedBox(width: 3),
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                softWrap: false,
-                style: TextStyle(
-                  fontSize: fontSize,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFF7A3B00),
-                  letterSpacing: 0.3,
-                ),
-              ),
-            ),
-            if (priceLabel.isNotEmpty) ...[
-              const SizedBox(width: 4),
-              Flexible(
-                child: Text(
-                  priceLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  softWrap: false,
-                  style: TextStyle(
-                    fontSize: fontSize,
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFFDC2626),
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
     );
   }
 

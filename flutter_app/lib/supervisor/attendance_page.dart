@@ -13,7 +13,6 @@ import '../services/subscription_helper.dart';
 import 'widgets/sidebar.dart';
 import 'widgets/mobile_bottom_nav.dart';
 import 'widgets/dashboard_header.dart';
-import '../services/date_utils.dart';
 
 class AttendancePage extends StatefulWidget {
   final bool initialSidebarVisible;
@@ -642,120 +641,24 @@ class _AttendancePageState extends State<AttendancePage> {
     if (!mounted) return false;
     final approved = await showDialog<bool>(
       context: context,
-      barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: Colors.white,
-        title: Row(
-          children: [
-            const Icon(Icons.access_time, color: Color(0xFFFF7A18), size: 22),
-            const SizedBox(width: 8),
-            const Text('Overtime Authorization'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '$workerLabel is checking out $overtimeMinutes minute${overtimeMinutes == 1 ? '' : 's'} after shift end.',
-              style: const TextStyle(fontSize: 13),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF9FAFB),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFE5E7EB)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Text(
-                        'Scheduled shift end: ',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF6B7280),
-                        ),
-                      ),
-                      Text(
-                        _formatTime(shiftEnd),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Text(
-                        'Current time: ',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF6B7280),
-                        ),
-                      ),
-                      Text(
-                        _formatTime(computedTimeOut),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFF7ED),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFFFD7A8)),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(
-                    Icons.info_outline,
-                    size: 16,
-                    color: Color(0xFFB45309),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'If denied, the worker is automatically clocked out at '
-                      '${_formatTime(shiftEnd)} (shift end) — the ${overtimeMinutes} '
-                      'extra minute${overtimeMinutes == 1 ? '' : 's'} will not be paid.',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF7A3B00),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+        title: const Text('Overtime Authorization'),
+        content: Text(
+          '$workerLabel is checking out $overtimeMinutes minute${overtimeMinutes == 1 ? '' : 's'} after shift end.\n\n'
+          'Scheduled shift end: ${_formatTime(shiftEnd)}\n'
+          'Current time: ${_formatTime(computedTimeOut)}\n\n'
+          'Authorize this overtime? If not authorized, time out will be recorded as the scheduled shift end.',
         ),
         actions: [
-          TextButton.icon(
+          TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            icon: const Icon(Icons.block, size: 16),
-            label: Text('Deny · Clock out at ${_formatTime(shiftEnd)}'),
-            style: TextButton.styleFrom(foregroundColor: const Color(0xFFB91C1C)),
+            child: const Text('Use Shift End'),
           ),
-          ElevatedButton.icon(
+          ElevatedButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            icon: const Icon(Icons.check, size: 16),
-            label: const Text('Authorize Overtime'),
             style: ElevatedButton.styleFrom(backgroundColor: primary),
+            child: const Text('Authorize Overtime'),
           ),
         ],
       ),
@@ -868,8 +771,6 @@ class _AttendancePageState extends State<AttendancePage> {
     final nowTime = _dateTimeToTimeString(scanNow);
     Map<String, dynamic>? existingForAction;
     var actionTime = nowTime;
-    var overtimeDenied = false;
-    var overtimeDeniedMinutes = 0;
 
     if (action == 'Time In') {
       if (shiftStartRaw.isEmpty) {
@@ -915,15 +816,10 @@ class _AttendancePageState extends State<AttendancePage> {
       final shiftEndMinutes = _timeStringToMinutes(shiftEndRaw);
       final nowMinutes = _timeStringToMinutes(nowTime);
 
-      if (shiftEndMinutes != null &&
-          nowMinutes != null &&
-          nowMinutes > shiftEndMinutes) {
-        // Worker is timing out after shift end → overtime requires authorization.
+      if (shiftEndMinutes != null && nowMinutes != null && nowMinutes > shiftEndMinutes) {
         final overtimeMinutes = nowMinutes - shiftEndMinutes;
         final approved = await _authorizeOvertime(
-          workerLabel: workerName.isEmpty
-              ? 'Worker #$fieldWorkerId'
-              : workerName,
+          workerLabel: workerName.isEmpty ? 'Worker #$fieldWorkerId' : workerName,
           shiftEnd: shiftEndRaw,
           computedTimeOut: nowTime,
           overtimeMinutes: overtimeMinutes,
@@ -931,17 +827,10 @@ class _AttendancePageState extends State<AttendancePage> {
         if (approved) {
           actionTime = nowTime;
         } else {
-          // Overtime not authorized → auto-clock out at the designated shift
-          // end. The unauthorized extra minutes are not paid.
           actionTime = shiftEndRaw;
-          overtimeDenied = true;
-          overtimeDeniedMinutes = overtimeMinutes;
         }
       } else {
-        // Early or on-time time-out → record the actual accumulated time. The
-        // shift schedule only gates late-in / late-out (overtime) authorization;
-        // it must not inflate the worked hours when the worker leaves early.
-        actionTime = nowTime;
+        actionTime = shiftEndRaw;
       }
     }
 
@@ -1012,37 +901,14 @@ class _AttendancePageState extends State<AttendancePage> {
       );
       if (!mounted || !saved) return;
 
-      if (overtimeDenied) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: const Color(0xFFB45309),
-            duration: const Duration(seconds: 5),
-            content: Row(
-              children: [
-                const Icon(Icons.block, color: Colors.white, size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Overtime denied — auto clocked out at ${_formatTime(actionTime)} '
-                    '(shift end). $overtimeDeniedMinutes unauthorized minute'
-                    '${overtimeDeniedMinutes == 1 ? '' : 's'} not paid.',
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                ),
-              ],
-            ),
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '✓ $action recorded for worker #$fieldWorkerId at ${_formatTime(actionTime)}',
           ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '✓ $action recorded for worker #$fieldWorkerId at ${_formatTime(actionTime)}',
-            ),
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
+          duration: const Duration(seconds: 3),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       final errorMessage = e.toString().replaceFirst('Exception: ', '').trim();
@@ -1179,138 +1045,6 @@ class _AttendancePageState extends State<AttendancePage> {
     }
   }
 
-  Widget _buildHolidayBanner(DateTime date, {required bool isMobile}) {
-    final info = PhilippineDateUtils.getHolidayInfo(date);
-    final upcoming = PhilippineDateUtils.upcomingHolidays(date, days: 30);
-    final nextUpcoming = upcoming
-        .where((e) => !_isSameDay(e.key, date))
-        .toList();
-
-    if (info == null && nextUpcoming.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    Color bg;
-    Color border;
-    Color fg;
-    IconData icon;
-    String title;
-    String subtitle;
-
-    if (info != null) {
-      if (info.isRegular) {
-        bg = const Color(0xFFFDF2F8);
-        border = const Color(0xFFFBCFE8);
-        fg = const Color(0xFF9D174D);
-      } else {
-        bg = const Color(0xFFEFF6FF);
-        border = const Color(0xFFBAE6FD);
-        fg = const Color(0xFF075985);
-      }
-      icon = Icons.celebration;
-      title = '${info.name} · ${info.typeLabel}';
-      subtitle =
-          'Attendance today counts as ${info.payLabel}${info.isRegular ? ' (double pay)' : ' (+30%)'}.';
-    } else {
-      final first = nextUpcoming.first;
-      final daysAway = first.key.difference(date).inDays;
-      bg = const Color(0xFFF8FAFC);
-      border = const Color(0xFFE2E8F0);
-      fg = const Color(0xFF334155);
-      icon = Icons.event_available;
-      title = 'Upcoming: ${first.value.name}';
-      subtitle =
-          '${first.value.typeLabel} on ${_fmtBannerDate(first.key)} · '
-          '${daysAway == 0 ? 'today' : daysAway == 1 ? 'tomorrow' : 'in $daysAway days'}';
-    }
-
-    return Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: isMobile ? 12 : 20,
-        vertical: 4,
-      ),
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: isMobile ? 8 : 10,
-        ),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: border),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: fg, size: isMobile ? 16 : 18),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      color: fg,
-                      fontWeight: FontWeight.w700,
-                      fontSize: isMobile ? 12 : 13,
-                    ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: fg.withOpacity(0.85),
-                      fontSize: isMobile ? 10 : 11,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (info != null)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: fg,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  info.payLabel,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 11,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  bool _isSameDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
-
-  String _fmtBannerDate(DateTime d) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${months[d.month - 1]} ${d.day}';
-  }
-
   String _formatTime(String? time) {
     if (time == null || time.isEmpty) return '--';
     final minutes = _timeStringToMinutes(time);
@@ -1397,8 +1131,6 @@ class _AttendancePageState extends State<AttendancePage> {
                     const DashboardHeader(title: 'Attendance'),
 
                     SizedBox(height: isMobile ? 4 : 8),
-
-                    _buildHolidayBanner(selectedDate, isMobile: isMobile),
 
                     // Search, filters and actions - Responsive
                     Padding(
@@ -1842,6 +1574,68 @@ class _AttendancePageState extends State<AttendancePage> {
                                               child: const Icon(
                                                 Icons.edit_calendar,
                                                 color: Color(0xFF16A085),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              colors: [
+                                                primary,
+                                                primary.withOpacity(0.85),
+                                              ],
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black12,
+                                                blurRadius: 8,
+                                                offset: Offset(0, 4),
+                                              ),
+                                            ],
+                                          ),
+                                          child: Material(
+                                            color: Colors.transparent,
+                                            child: InkWell(
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                              onTap: () =>
+                                                  ScaffoldMessenger.of(
+                                                    context,
+                                                  ).showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text(
+                                                        'Export (demo)',
+                                                      ),
+                                                    ),
+                                                  ),
+                                              child: Padding(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 14,
+                                                      vertical: 10,
+                                                    ),
+                                                child: Row(
+                                                  children: const [
+                                                    Icon(
+                                                      Icons.download,
+                                                      color: Colors.white,
+                                                    ),
+                                                    SizedBox(width: 8),
+                                                    Text(
+                                                      'Export',
+                                                      style: TextStyle(
+                                                        color: Colors.white,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
                                               ),
                                             ),
                                           ),
@@ -2387,13 +2181,13 @@ class _AttendancePageState extends State<AttendancePage> {
   Color _getActionColor(String action) {
     switch (action) {
       case 'Time In':
-        return const Color(0xFF12956A); // green — start work
+        return const Color(0xFFFF6F00);
       case 'Time Out':
-        return const Color(0xFFD4483C); // red — end work
+        return const Color(0xFF757575);
       case 'Break In':
-        return const Color(0xFFFF7A18); // orange — start break
+        return const Color(0xFFFF8F00);
       case 'Break Out':
-        return const Color(0xFF1396E9); // blue — resume work
+        return const Color(0xFFBDBDBD);
       default:
         return Colors.grey;
     }
@@ -2406,152 +2200,128 @@ class _AttendancePageState extends State<AttendancePage> {
       case 'Time Out':
         return Icons.logout;
       case 'Break In':
-        return Icons.pause_circle_outline;
+        return Icons.play_arrow;
       case 'Break Out':
-        return Icons.play_circle_outline;
+        return Icons.pause;
       default:
         return Icons.access_time;
     }
   }
 
-  String _getActionSubtitle(String action) {
-    switch (action) {
-      case 'Time In':
-        return 'Start of shift';
-      case 'Time Out':
-        return 'End of shift';
-      case 'Break In':
-        return 'Begin break';
-      case 'Break Out':
-        return 'Resume work';
-      default:
-        return '';
-    }
-  }
-
   void _showActionSelectionDialog() {
-    const headerStart = Color(0xFFFF9141);
-    const headerEnd = Color(0xFFFF7A18);
-    const borderColor = Color(0xFFE3E8EF);
-
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.white,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                padding: const EdgeInsets.fromLTRB(20, 20, 12, 20),
-                decoration: const BoxDecoration(
-                  borderRadius:
-                      BorderRadius.vertical(top: Radius.circular(20)),
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [headerStart, headerEnd],
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        contentPadding: const EdgeInsets.all(0),
+        content: Container(
+          width: 380,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Colors.blue.shade50, Colors.indigo.shade50],
+            ),
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [primary, Colors.blue.shade700],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.qr_code_scanner,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Select Action',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Choose attendance action to scan',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.18),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.qr_code_scanner,
-                        color: Colors.white,
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Select Action',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          SizedBox(height: 2),
-                          Text(
-                            'Choose attendance action to scan',
-                            style: TextStyle(
-                              color: Color(0xFFFFE5CF),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close,
-                          color: Colors.white, size: 20),
-                      splashRadius: 18,
-                      tooltip: 'Close',
-                    ),
-                  ],
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      _buildActionButton(context, 'Time In'),
+                      const SizedBox(height: 12),
+                      _buildActionButton(context, 'Time Out'),
+                      const SizedBox(height: 12),
+                      _buildActionButton(context, 'Break In'),
+                      const SizedBox(height: 12),
+                      _buildActionButton(context, 'Break Out'),
+                    ],
+                  ),
                 ),
-              ),
-
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
-                child: GridView.count(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  childAspectRatio: 1.15,
-                  children: [
-                    _buildActionButton(context, 'Time In'),
-                    _buildActionButton(context, 'Time Out'),
-                    _buildActionButton(context, 'Break In'),
-                    _buildActionButton(context, 'Break Out'),
-                  ],
-                ),
-              ),
-
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 42,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   child: OutlinedButton(
                     onPressed: () => Navigator.pop(context),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF4B5563),
-                      side: const BorderSide(color: borderColor),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      side: BorderSide(color: Colors.grey.shade300),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
-                    child: const Text(
-                      'Cancel',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
+                    child: const SizedBox(
+                      width: double.infinity,
+                      child: Text(
+                        'Cancel',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -2561,75 +2331,50 @@ class _AttendancePageState extends State<AttendancePage> {
   Widget _buildActionButton(BuildContext context, String action) {
     final color = _getActionColor(action);
     final icon = _getActionIcon(action);
-    final subtitle = _getActionSubtitle(action);
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () async {
-          Navigator.pop(context);
-          _showQRScannerDialog(action);
-        },
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: color.withOpacity(0.22), width: 1.5),
-            boxShadow: [
-              BoxShadow(
-                color: color.withOpacity(0.06),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
+    return InkWell(
+      onTap: () async {
+        Navigator.pop(context);
+        _showQRScannerDialog(action);
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.3), width: 2),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.1),
+              blurRadius: 8,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(10),
               ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: color.withOpacity(0.14),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(icon, color: color, size: 20),
-                  ),
-                  const Spacer(),
-                  Icon(Icons.chevron_right,
-                      color: color.withOpacity(0.55), size: 20),
-                ],
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                action,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    action,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: color,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: Color(0xFF6B7280),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+            ),
+            Icon(Icons.arrow_forward_ios, color: color, size: 18),
+          ],
         ),
       ),
     );
@@ -2862,57 +2607,178 @@ class _AttendancePageState extends State<AttendancePage> {
     });
   }
 
-  Future<void> _showManualAttendanceDialog() async {
-    if (_activeProjectId() == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a project before adding attendance.'),
-        ),
-      );
-      return;
-    }
-
-    showDialog<void>(
+  void _showManualAttendanceDialog() {
+    showDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
-    );
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          String? selectedWorkerId;
+          String checkInTime = '';
+          String checkOutTime = '';
+          String selectedStatus = 'on_site';
 
-    List<Map<String, dynamic>> workers;
-    try {
-      workers = await _fieldWorkersFuture;
-    } catch (_) {
-      workers = const [];
-    }
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            backgroundColor: Colors.white,
+            title: const Text('Add Attendance'),
+            content: FutureBuilder<List<Map<String, dynamic>>>(
+              future: _fieldWorkersFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting)
+                  return const Center(child: CircularProgressIndicator());
+                if (!snapshot.hasData || snapshot.data!.isEmpty)
+                  return const Text('No workers found');
 
-    if (!mounted) return;
-    Navigator.of(context).pop(); // dismiss loading spinner
-
-    if (workers.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No workers available for the selected project.'),
-        ),
-      );
-      return;
-    }
-
-    await showDialog<void>(
-      context: context,
-      builder: (_) => _ManualAttendanceDialog(
-        workers: workers,
-        initialDate: selectedDate,
-        onSubmit: (payload, date) async {
-          try {
-            return await _saveAttendance(payload, attendanceDate: date);
-          } catch (e) {
-            if (!mounted) return false;
-            final msg = e.toString().replaceFirst('Exception: ', '').trim();
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Failed to save attendance: $msg')),
-            );
-            return false;
-          }
+                final workers = snapshot.data!;
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Worker',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: DropdownButton<String>(
+                        value: selectedWorkerId,
+                        hint: const Text('Select worker'),
+                        underline: const SizedBox(),
+                        isExpanded: true,
+                        items: (() {
+                          final sortedWorkers = List<Map<String, dynamic>>.from(
+                            workers,
+                          );
+                          sortedWorkers.sort((a, b) {
+                            final nameA = '${a['first_name']} ${a['last_name']}'
+                                .toLowerCase();
+                            final nameB = '${b['first_name']} ${b['last_name']}'
+                                .toLowerCase();
+                            return nameA.compareTo(nameB);
+                          });
+                          return sortedWorkers
+                              .map(
+                                (w) => DropdownMenuItem<String>(
+                                  value: w['field_worker_id'].toString(),
+                                  child: Text(
+                                    '${w['first_name']} ${w['last_name']} - ${w['role']}',
+                                  ),
+                                ),
+                              )
+                              .toList();
+                        })(),
+                        onChanged: (val) =>
+                            setState(() => selectedWorkerId = val),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Status',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: DropdownButton<String>(
+                        value: selectedStatus,
+                        underline: const SizedBox(),
+                        isExpanded: true,
+                        items: ['on_site', 'on_break', 'absent']
+                            .map(
+                              (status) => DropdownMenuItem<String>(
+                                value: status,
+                                child: Text(status.replaceAll('_', ' ')),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (val) =>
+                            setState(() => selectedStatus = val!),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Check In',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      decoration: InputDecoration(
+                        hintText: '07:30',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onChanged: (v) => checkInTime = v,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Check Out',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      decoration: InputDecoration(
+                        hintText: '17:00',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onChanged: (v) => checkOutTime = v,
+                    ),
+                  ],
+                );
+              },
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: selectedWorkerId != null
+                    ? () {
+                        final attendanceData = {
+                          'field_worker': int.parse(selectedWorkerId!),
+                          'status': selectedStatus,
+                          'check_in_time': checkInTime.isNotEmpty
+                              ? checkInTime
+                              : null,
+                          'check_out_time': checkOutTime.isNotEmpty
+                              ? checkOutTime
+                              : null,
+                        };
+                        _saveAttendance(attendanceData);
+                        Navigator.pop(context);
+                      }
+                    : null,
+                style: ElevatedButton.styleFrom(backgroundColor: primary),
+                child: const Text('Add'),
+              ),
+            ],
+          );
         },
       ),
     );
@@ -3031,592 +2897,6 @@ class _AttendancePageState extends State<AttendancePage> {
             ],
           );
         },
-      ),
-    );
-  }
-}
-
-// =============================================================================
-// Manual Attendance Dialog
-// =============================================================================
-
-typedef _ManualAttendanceSubmit = Future<bool> Function(
-  Map<String, dynamic> payload,
-  DateTime attendanceDate,
-);
-
-class _ManualAttendanceDialog extends StatefulWidget {
-  const _ManualAttendanceDialog({
-    required this.workers,
-    required this.initialDate,
-    required this.onSubmit,
-  });
-
-  final List<Map<String, dynamic>> workers;
-  final DateTime initialDate;
-  final _ManualAttendanceSubmit onSubmit;
-
-  @override
-  State<_ManualAttendanceDialog> createState() =>
-      _ManualAttendanceDialogState();
-}
-
-class _ManualAttendanceDialogState extends State<_ManualAttendanceDialog> {
-  static const _accent = Color(0xFFFF7A18);
-  static const _accentDark = Color(0xFFD85F00);
-  static const _fieldBorder = Color(0xFFE3E8EF);
-  static const _fieldBg = Color(0xFFF7F9FC);
-
-  Map<String, dynamic>? _selectedWorker;
-  late DateTime _attendanceDate;
-  String _status = 'on_site';
-  TimeOfDay? _checkIn;
-  TimeOfDay? _checkOut;
-  bool _saving = false;
-
-  late final List<Map<String, dynamic>> _sortedWorkers;
-
-  @override
-  void initState() {
-    super.initState();
-    _attendanceDate = widget.initialDate;
-    _sortedWorkers = List<Map<String, dynamic>>.from(widget.workers)
-      ..sort((a, b) => _workerDisplayName(a)
-          .toLowerCase()
-          .compareTo(_workerDisplayName(b).toLowerCase()));
-  }
-
-  // ---------- Helpers ----------
-
-  String _workerDisplayName(Map<String, dynamic> w) {
-    final first = (w['first_name'] ?? '').toString().trim();
-    final last = (w['last_name'] ?? '').toString().trim();
-    final full = '$first $last'.trim();
-    return full.isEmpty ? 'Unnamed Worker' : full;
-  }
-
-  int? _workerId(Map<String, dynamic> w) {
-    final raw = w['fieldworker_id'] ?? w['field_worker_id'] ?? w['id'];
-    if (raw is int) return raw;
-    if (raw is num) return raw.toInt();
-    if (raw is String) return int.tryParse(raw);
-    return null;
-  }
-
-  String _fmtTime(TimeOfDay? t) {
-    if (t == null) return '--:--';
-    final period = t.hour >= 12 ? 'PM' : 'AM';
-    final hour12 = t.hour % 12 == 0 ? 12 : t.hour % 12;
-    return '$hour12:${t.minute.toString().padLeft(2, '0')} $period';
-  }
-
-  String _fmtDate(DateTime d) {
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    return '${months[d.month - 1]} ${d.day}, ${d.year}';
-  }
-
-  String? _timeToPayload(TimeOfDay? t) {
-    if (t == null) return null;
-    return '${t.hour.toString().padLeft(2, '0')}:'
-        '${t.minute.toString().padLeft(2, '0')}:00';
-  }
-
-  // ---------- Actions ----------
-
-  Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _attendanceDate,
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now().add(const Duration(days: 1)),
-    );
-    if (picked != null) setState(() => _attendanceDate = picked);
-  }
-
-  Future<void> _pickTime({required bool isCheckIn}) async {
-    final initial = isCheckIn
-        ? (_checkIn ?? const TimeOfDay(hour: 7, minute: 30))
-        : (_checkOut ?? const TimeOfDay(hour: 17, minute: 0));
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: initial,
-    );
-    if (picked != null) {
-      setState(() {
-        if (isCheckIn) {
-          _checkIn = picked;
-        } else {
-          _checkOut = picked;
-        }
-      });
-    }
-  }
-
-  String? _validate() {
-    if (_selectedWorker == null) return 'Please select a worker.';
-    final workerId = _workerId(_selectedWorker!);
-    if (workerId == null) return 'Selected worker is missing an id.';
-    if (_status != 'absent' && _checkIn == null) {
-      return 'Check-in time is required unless the status is absent.';
-    }
-    if (_checkIn != null && _checkOut != null) {
-      final inMinutes = _checkIn!.hour * 60 + _checkIn!.minute;
-      final outMinutes = _checkOut!.hour * 60 + _checkOut!.minute;
-      if (outMinutes <= inMinutes) {
-        return 'Check-out must be later than check-in.';
-      }
-    }
-    return null;
-  }
-
-  Future<void> _handleSubmit() async {
-    final error = _validate();
-    if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error)),
-      );
-      return;
-    }
-
-    setState(() => _saving = true);
-
-    final payload = <String, dynamic>{
-      'field_worker': _workerId(_selectedWorker!),
-      'status': _status,
-      'check_in_time': _timeToPayload(_checkIn),
-      'check_out_time': _timeToPayload(_checkOut),
-    };
-
-    final ok = await widget.onSubmit(payload, _attendanceDate);
-    if (!mounted) return;
-
-    if (ok) {
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Attendance saved for ${_workerDisplayName(_selectedWorker!)}.',
-          ),
-        ),
-      );
-    } else {
-      setState(() => _saving = false);
-    }
-  }
-
-  // ---------- UI ----------
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.white,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460, maxHeight: 720),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildHeader(),
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildFieldLabel('Worker', Icons.person_outline),
-                    _buildWorkerDropdown(),
-                    const SizedBox(height: 16),
-                    _buildFieldLabel('Date', Icons.calendar_today_outlined),
-                    _buildDateField(),
-                    const SizedBox(height: 16),
-                    _buildFieldLabel('Status', Icons.assignment_turned_in_outlined),
-                    _buildStatusSelector(),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _buildFieldLabel('Check In', Icons.login),
-                              _buildTimeField(
-                                value: _checkIn,
-                                placeholder: 'Set time',
-                                onTap: () => _pickTime(isCheckIn: true),
-                                onClear: _checkIn == null
-                                    ? null
-                                    : () => setState(() => _checkIn = null),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _buildFieldLabel('Check Out', Icons.logout),
-                              _buildTimeField(
-                                value: _checkOut,
-                                placeholder: 'Optional',
-                                onTap: () => _pickTime(isCheckIn: false),
-                                onClear: _checkOut == null
-                                    ? null
-                                    : () => setState(() => _checkOut = null),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            _buildFooter(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 20, 12, 20),
-      decoration: const BoxDecoration(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFFF9141), Color(0xFFFF7A18)],
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.18),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.edit_calendar,
-              color: Colors.white,
-              size: 22,
-            ),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Manual Attendance',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  'Record attendance without scanning a QR code',
-                  style: TextStyle(
-                    color: Color(0xFFFFE5CF),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            onPressed: _saving ? null : () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.close, color: Colors.white, size: 20),
-            splashRadius: 18,
-            tooltip: 'Close',
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFieldLabel(String text, IconData icon) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Icon(icon, size: 14, color: _accent),
-          const SizedBox(width: 6),
-          Text(
-            text,
-            style: const TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 13,
-              color: Color(0xFF1F2937),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWorkerDropdown() {
-    final current = _selectedWorker != null ? _workerId(_selectedWorker!) : null;
-    return DropdownButtonFormField<int>(
-      value: current,
-      isExpanded: true,
-      icon: const Icon(Icons.keyboard_arrow_down_rounded, color: _accentDark),
-      decoration: _outlineDecoration(hint: 'Select worker'),
-      items: _sortedWorkers
-          .where((w) => _workerId(w) != null)
-          .map(
-            (w) => DropdownMenuItem<int>(
-              value: _workerId(w),
-              child: Text(
-                '${_workerDisplayName(w)} '
-                '${(w['role'] ?? '').toString().isNotEmpty ? "- ${w['role']}" : ''}',
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 14),
-              ),
-            ),
-          )
-          .toList(),
-      onChanged: _saving
-          ? null
-          : (val) {
-              final match = _sortedWorkers.firstWhere(
-                (w) => _workerId(w) == val,
-                orElse: () => <String, dynamic>{},
-              );
-              setState(() => _selectedWorker = match.isEmpty ? null : match);
-            },
-    );
-  }
-
-  Widget _buildDateField() {
-    return InkWell(
-      borderRadius: BorderRadius.circular(10),
-      onTap: _saving ? null : _pickDate,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: _fieldBorder),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                _fmtDate(_attendanceDate),
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1F2937),
-                ),
-              ),
-            ),
-            const Icon(Icons.calendar_month, size: 18, color: _accentDark),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatusSelector() {
-    const statuses = [
-      ('on_site', 'On Site', Color(0xFF12956A)),
-      ('on_break', 'On Break', _accent),
-      ('absent', 'Absent', Color(0xFFD4483C)),
-    ];
-    return Row(
-      children: [
-        for (final s in statuses)
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(right: s.$1 == 'absent' ? 0 : 8),
-              child: _buildStatusChip(
-                value: s.$1,
-                label: s.$2,
-                color: s.$3,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildStatusChip({
-    required String value,
-    required String label,
-    required Color color,
-  }) {
-    final selected = _status == value;
-    return InkWell(
-      borderRadius: BorderRadius.circular(10),
-      onTap: _saving ? null : () => setState(() => _status = value),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: selected ? color.withOpacity(0.12) : Colors.white,
-          border: Border.all(
-            color: selected ? color : _fieldBorder,
-            width: selected ? 1.5 : 1,
-          ),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: selected ? color : const Color(0xFF6B7280),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTimeField({
-    required TimeOfDay? value,
-    required String placeholder,
-    required VoidCallback onTap,
-    VoidCallback? onClear,
-  }) {
-    final hasValue = value != null;
-    return InkWell(
-      borderRadius: BorderRadius.circular(10),
-      onTap: _saving ? null : onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: _fieldBorder),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.schedule, size: 16, color: _accent),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                hasValue ? _fmtTime(value) : placeholder,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: hasValue
-                      ? const Color(0xFF1F2937)
-                      : const Color(0xFF9CA3AF),
-                ),
-              ),
-            ),
-            if (hasValue && onClear != null)
-              InkWell(
-                onTap: _saving ? null : onClear,
-                borderRadius: BorderRadius.circular(12),
-                child: const Padding(
-                  padding: EdgeInsets.all(2),
-                  child: Icon(Icons.close, size: 16, color: Color(0xFF9CA3AF)),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFooter() {
-    return Container(
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: _fieldBorder)),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-      child: Row(
-        children: [
-          Expanded(
-            child: OutlinedButton(
-              onPressed:
-                  _saving ? null : () => Navigator.of(context).pop(),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF4B5563),
-                side: const BorderSide(color: _fieldBorder),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 2,
-            child: ElevatedButton.icon(
-              onPressed: _saving ? null : _handleSubmit,
-              icon: _saving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
-                  : const Icon(Icons.check_circle_outline, size: 18),
-              label: Text(
-                _saving ? 'Saving...' : 'Save Attendance',
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _accent,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  InputDecoration _outlineDecoration({String? hint}) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 13),
-      filled: true,
-      fillColor: _fieldBg,
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: _fieldBorder),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: _fieldBorder),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: _accent, width: 1.5),
       ),
     );
   }
