@@ -25,3 +25,9 @@ services:
         value: https://martyscrackling.github.io,https://structura-frontend-jc7s.onrender.com
       - key: CSRF_TRUSTED_ORIGINS
         value: https://martyscrackling.github.io,https://structura-frontend-jc7s.onrender.com
+
+  - type: web
+    name: structura-frontend
+    env: docker
+    plan: free
+    dockerfilePath: Dockerfile.frontend
