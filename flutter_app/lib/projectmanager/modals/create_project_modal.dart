@@ -442,6 +442,17 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
           return;
         }
 
+        if (_selectedClientId == null || _selectedSupervisorId == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please select both client and supervisor'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          setState(() => _isSubmitting = false);
+          return;
+        }
+
         // Convert dates to YYYY-MM-DD format
         final startDate = _convertDateFormat(_startDateController.text);
         final endDate = _convertDateFormat(_calculatedEndDate ?? '');
@@ -1224,6 +1235,12 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
                     _selectedClientId = newValue;
                   });
                 },
+                validator: (value) {
+                  if (value == null) {
+                    return 'Please select a client';
+                  }
+                  return null;
+                },
               ),
         const SizedBox(height: 12),
 
@@ -1292,6 +1309,12 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
                   setState(() {
                     _selectedSupervisorId = newValue;
                   });
+                },
+                validator: (value) {
+                  if (value == null) {
+                    return 'Please select a supervisor';
+                  }
+                  return null;
                 },
               ),
         const SizedBox(height: 12),

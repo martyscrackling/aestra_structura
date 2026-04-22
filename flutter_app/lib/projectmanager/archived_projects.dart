@@ -202,8 +202,7 @@ class _ArchivedProjectsPageState extends State<ArchivedProjectsPage> {
         final List<dynamic> data = jsonDecode(response.body);
         print('📊 Projects fetched: ${data.length}');
 
-        // Include projects that are archived by status or already 100% complete.
-        const archivedStatuses = {'deactivated', 'cancelled', 'completed'};
+        // Include only projects that are completed by status or progress.
 
         List<ProjectOverviewData> projects = [];
         for (var project in data) {
@@ -223,19 +222,17 @@ class _ArchivedProjectsPageState extends State<ArchivedProjectsPage> {
                 (project['project_type'] as String?) ?? '';
             final metrics = await _calculateProjectMetrics(projectId);
             final bool isCompletedByProgress = metrics.progress >= 1.0;
-            final bool isArchivedByStatus =
-                archivedStatuses.contains(status.toLowerCase());
+            final bool isCompletedByStatus = status.toLowerCase() == 'completed';
 
-            if (!isArchivedByStatus && !isCompletedByProgress) {
+            if (!isCompletedByStatus && !isCompletedByProgress) {
               continue;
             }
 
-            final String computedStatus =
-                isCompletedByProgress ? 'Completed' : status;
+            const String computedStatus = 'Completed';
             final int projectWorkforceCount = await _fetchProjectWorkforceCount(
               projectId: projectId,
               userId: userId,
-            );
+            ); 
 
             print('✅ Archived Project ID: $projectId, Name: $projectName');
 
@@ -417,7 +414,7 @@ class _ArchivedProjectsPageState extends State<ArchivedProjectsPage> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Deactivated, cancelled, or completed projects will appear here.',
+                    'Completed projects will appear here.',
                     style: TextStyle(color: Colors.grey[600]),
                     textAlign: TextAlign.center,
                   ),
@@ -506,7 +503,7 @@ class _ArchivedProjectsHeader extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           const Text(
-            'View deactivated, cancelled, and completed projects.',
+            'View completed projects.',
             style: TextStyle(fontSize: 14, color: Color(0xFF6B7280)),
           ),
           const SizedBox(height: 16),
@@ -552,7 +549,7 @@ class _ArchivedProjectsHeader extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             const Text(
-              'View deactivated, cancelled, and completed projects.',
+              'View completed projects.',
               style: TextStyle(fontSize: 14, color: Color(0xFF6B7280)),
             ),
           ],
