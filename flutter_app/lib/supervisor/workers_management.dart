@@ -1101,11 +1101,8 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
 
                     final url = AppConfig.apiUri('field-workers/${worker['fieldworker_id']}/');
                     try {
-                      final authService = Provider.of<AuthService>(context, listen: false);
-                      final token = authService.token;
                       final headers = {
                         'Content-Type': 'application/json',
-                        if (token != null) 'Authorization': 'Token $token',
                       };
                       final response = await http.patch(
                         url,
