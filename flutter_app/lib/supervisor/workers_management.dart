@@ -790,6 +790,233 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
     );
   }
 
+  void _showWorkerDamagesModal(
+    BuildContext context,
+    Map<String, dynamic> worker,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final workerName = _getWorkerName(worker);
+        
+        String selectedCategory = 'Tools';
+        String selectedItem = '';
+        String price = '';
+        String paymentSchedule = 'Weekly';
+        String deductionAmount = '';
+        final TextEditingController priceController = TextEditingController();
+        final TextEditingController itemSearchController = TextEditingController();
+
+        final List<String> dummyTools = ['Hammer', 'Power Drill', 'Circular Saw', 'Wrench Set', 'Screwdriver Set'];
+        final List<String> dummyMachinery = ['Concrete Mixer', 'Generator', 'Jackhammer', 'Compactor'];
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final isCustom = selectedCategory == 'Custom';
+            
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              backgroundColor: Colors.white,
+              title: Text('Report Damage - $workerName'),
+              content: Container(
+                width: double.maxFinite,
+                constraints: const BoxConstraints(maxWidth: 400),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Damage Category',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          return DropdownMenu<String>(
+                            initialSelection: selectedCategory,
+                            width: constraints.maxWidth,
+                            enableFilter: false,
+                            enableSearch: false,
+                            requestFocusOnTap: false,
+                            menuStyle: MenuStyle(
+                              backgroundColor: MaterialStateProperty.all(Colors.white),
+                              surfaceTintColor: MaterialStateProperty.all(Colors.white),
+                            ),
+                            inputDecorationTheme: InputDecorationTheme(
+                              filled: true,
+                              fillColor: Colors.white,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                            ),
+                            dropdownMenuEntries: ['Tools', 'Machinery', 'Custom']
+                                .map((c) => DropdownMenuEntry(value: c, label: c))
+                                .toList(),
+                            onSelected: (val) {
+                              if (val != null) {
+                                setModalState(() {
+                                  selectedCategory = val;
+                                  itemSearchController.clear();
+                                  selectedItem = '';
+                                  if (val != 'Custom') {
+                                    priceController.clear();
+                                    price = '';
+                                  }
+                                });
+                              }
+                            },
+                          );
+                        }
+                      ),
+                      const SizedBox(height: 16),
+                      if (!isCustom) ...[
+                        const Text(
+                          'Search Item',
+                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                        ),
+                        const SizedBox(height: 8),
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            return DropdownMenu<String>(
+                              controller: itemSearchController,
+                              width: constraints.maxWidth,
+                              hintText: 'Search or select...',
+                              enableFilter: true,
+                              menuStyle: MenuStyle(
+                                backgroundColor: MaterialStateProperty.all(Colors.white),
+                                surfaceTintColor: MaterialStateProperty.all(Colors.white),
+                              ),
+                              inputDecorationTheme: InputDecorationTheme(
+                                filled: true,
+                                fillColor: Colors.white,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                              ),
+                              dropdownMenuEntries: (selectedCategory == 'Tools' ? dummyTools : dummyMachinery)
+                                  .map((item) => DropdownMenuEntry<String>(value: item, label: item))
+                                  .toList(),
+                              onSelected: (String? selection) {
+                                if (selection != null) {
+                                  setModalState(() {
+                                    selectedItem = selection;
+                                  });
+                                }
+                              },
+                            );
+                          }
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      const Text(
+                        'Price of Damaged Item (₱)',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: priceController,
+                        enabled: isCustom,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: InputDecoration(
+                          hintText: isCustom ? '0.00' : 'Will be automatically fetched',
+                          filled: !isCustom,
+                          fillColor: !isCustom ? Colors.grey.shade100 : Colors.white,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        ),
+                        onChanged: (val) => price = val,
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Payment Schedule',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          return DropdownMenu<String>(
+                            initialSelection: paymentSchedule,
+                            width: constraints.maxWidth,
+                            enableFilter: false,
+                            enableSearch: false,
+                            requestFocusOnTap: false,
+                            menuStyle: MenuStyle(
+                              backgroundColor: MaterialStateProperty.all(Colors.white),
+                              surfaceTintColor: MaterialStateProperty.all(Colors.white),
+                            ),
+                            inputDecorationTheme: InputDecorationTheme(
+                              filled: true,
+                              fillColor: Colors.white,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                            ),
+                            dropdownMenuEntries: ['Weekly', 'Every 2 Weeks', 'Every 3 Weeks', 'Monthly']
+                                .map((c) => DropdownMenuEntry(value: c, label: c))
+                                .toList(),
+                            onSelected: (val) {
+                              if (val != null) {
+                                setModalState(() => paymentSchedule = val);
+                              }
+                            },
+                          );
+                        }
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Deduction Amount per Schedule (₱)',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: InputDecoration(
+                          hintText: '0.00',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        ),
+                        onChanged: (val) => deductionAmount = val,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    // Logic to save damage report can go here
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Damage report saved!')),
+                    );
+                    Navigator.pop(context);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1396E9),
+                  ),
+                  child: const Text('Save Report'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   String _buildWorkerQrPayload({required int fieldWorkerId}) {
     // Keep the payload simple and stable so scanning is easy.
     return 'structura-fw:$fieldWorkerId';
@@ -1706,14 +1933,25 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                     maxLines: 2,
                   ),
                   const SizedBox(height: 10),
-                  // Action button
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () => _showWorkerDetailModal(context, worker),
-                      icon: const Icon(Icons.remove_red_eye_outlined, size: 18),
-                      label: const Text('View Details'),
-                    ),
+                  // Action buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => _showWorkerDamagesModal(context, worker),
+                          icon: const Icon(Icons.broken_image_outlined, size: 16),
+                          label: const Text('Damages'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => _showWorkerDetailModal(context, worker),
+                          icon: const Icon(Icons.remove_red_eye_outlined, size: 16),
+                          label: const Text('Details'),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -1771,6 +2009,7 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                 _buildHeaderCell('Role', flex: 2),
                 _buildHeaderCell('Project', flex: isTablet ? 3 : 4),
                 _buildHeaderCell('Status', flex: 2),
+                _buildHeaderCell('Damages', flex: 2),
                 _buildHeaderCell('Actions', flex: 1),
               ],
             ),
@@ -1927,6 +2166,22 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                                 ),
                               ),
                             ],
+                          ),
+                        ),
+                      ),
+                      // Damages column
+                      Expanded(
+                        flex: 2,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: OutlinedButton.icon(
+                            onPressed: () => _showWorkerDamagesModal(context, worker),
+                            icon: const Icon(Icons.broken_image_outlined, size: 16),
+                            label: const Text('View', style: TextStyle(fontSize: 12)),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              minimumSize: const Size(0, 32),
+                            ),
                           ),
                         ),
                       ),

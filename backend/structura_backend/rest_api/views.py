@@ -1794,6 +1794,21 @@ class AttendanceViewSet(viewsets.ModelViewSet):
 
         attendance_qs = attendance_qs.select_related('field_worker', 'project').order_by('-attendance_date')
 
+        shift_assignments = models.SubtaskFieldWorker.objects.filter(
+            field_worker__in=workers_qs,
+            subtask__phase__project_id=project_id,
+            shift_start__isnull=False,
+            shift_end__isnull=False
+        ).order_by('field_worker_id', 'shift_start', 'assignment_id')
+        
+        worker_shifts = {}
+        for sa in shift_assignments:
+            if sa.field_worker_id not in worker_shifts:
+                worker_shifts[sa.field_worker_id] = {
+                    'shift_start': sa.shift_start.strftime('%H:%M:%S'),
+                    'shift_end': sa.shift_end.strftime('%H:%M:%S')
+                }
+
         field_workers_payload = [
             {
                 'fieldworker_id': worker.fieldworker_id,
@@ -1802,6 +1817,10 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 'last_name': worker.last_name,
                 'role': worker.role,
                 'photo': worker.photo.url if getattr(worker, 'photo', None) else None,
+                'shift_start': worker_shifts.get(worker.fieldworker_id, {}).get('shift_start'),
+                'shift_end': worker_shifts.get(worker.fieldworker_id, {}).get('shift_end'),
+                'current_project_shift_start': worker_shifts.get(worker.fieldworker_id, {}).get('shift_start'),
+                'current_project_shift_end': worker_shifts.get(worker.fieldworker_id, {}).get('shift_end'),
             }
             for worker in workers_qs.order_by('first_name', 'last_name', 'fieldworker_id')
         ]

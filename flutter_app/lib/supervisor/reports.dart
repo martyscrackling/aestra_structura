@@ -27,6 +27,7 @@ class AttendanceReport {
     required this.overtimeHours,
     required this.cashAdvance,
     required this.deduction,
+    required this.damagesDeduction,
     required this.hourlyRate,
     required this.sssDeduction,
     required this.philhealthDeduction,
@@ -41,6 +42,7 @@ class AttendanceReport {
   final double overtimeHours;
   final double cashAdvance;
   final double deduction;
+  final double damagesDeduction;
   final double hourlyRate;
   final double sssDeduction;
   final double philhealthDeduction;
@@ -55,7 +57,7 @@ class AttendanceReport {
   double get totalGovernmentDeductions =>
       sssDeduction + philhealthDeduction + pagibigDeduction;
 
-  double get totalDeductions => deduction + totalGovernmentDeductions;
+  double get totalDeductions => deduction + damagesDeduction + totalGovernmentDeductions;
 
   double get computedSalary => grossPay - totalDeductions;
 }
@@ -404,6 +406,7 @@ class _ReportsPageState extends State<ReportsPage> {
               'hourly_rate': r.hourlyRate,
               'cash_advance': r.cashAdvance,
               'deduction': r.deduction,
+              'damages_deduction': r.damagesDeduction,
               'gross_pay': r.grossPay,
               'computed_salary': r.computedSalary,
             },
@@ -465,6 +468,7 @@ class _ReportsPageState extends State<ReportsPage> {
               overtimeHours: row.overtimeHours,
               cashAdvance: cashAdvanceBalance,
               deduction: deductionPerSalary,
+              damagesDeduction: row.damagesDeduction,
               hourlyRate: row.hourlyRate,
               sssDeduction: row.sssDeduction,
               philhealthDeduction: row.philhealthDeduction,
@@ -1084,6 +1088,11 @@ class _ReportsPageState extends State<ReportsPage> {
             worker['deduction_per_salary'] ??
                 worker['deduction'] ??
                 worker['other_deduction'] ??
+                0,
+          ),
+          damagesDeduction: _toDouble(
+            worker['damages_deduction_per_salary'] ??
+                worker['damages_deduction'] ??
                 0,
           ),
           hourlyRate: hourlyRate,
@@ -2495,7 +2504,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                             Expanded(
                                               flex: 2,
                                               child: Text(
-                                                'Cash Adv. Deduct',
+                                                'Deductions',
                                                 style: TextStyle(
                                                   fontWeight: FontWeight.w700,
                                                   color: Colors.grey[800],
@@ -2820,7 +2829,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                                           flex: 2,
                                                           child: Text(
                                                             _money.format(
-                                                              r.deduction,
+                                                              r.deduction + r.damagesDeduction,
                                                             ),
                                                             style:
                                                                 const TextStyle(
