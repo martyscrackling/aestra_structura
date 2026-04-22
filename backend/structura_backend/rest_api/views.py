@@ -2232,6 +2232,412 @@ def pm_dashboard_summary(request):
     )
 
 
+@csrf_exempt
+@api_view(['GET'])
+def pm_audit_trail(request):
+    """Return a list of recent audit events scoped to a Project Manager's organization.
+
+    Aggregates creation / update events across projects, phases, subtasks,
+    task assignments, workforce changes, inventory operations and attendance
+    records that belong to the given Project Manager (`user_id`). Rows are
+    merged and sorted by timestamp (desc) then truncated to `limit`.
+    """
+    user_id_raw = request.query_params.get('user_id')
+    if not user_id_raw:
+        return Response(
+            {'success': False, 'message': 'user_id is required'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        user_id = int(user_id_raw)
+    except (TypeError, ValueError):
+        return Response(
+            {'success': False, 'message': 'user_id must be an integer'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        pm_user = models.User.objects.get(user_id=user_id)
+    except models.User.DoesNotExist:
+        return Response(
+            {'success': False, 'message': 'User not found'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    try:
+        limit = int(request.query_params.get('limit', '100'))
+    except (TypeError, ValueError):
+        limit = 100
+    limit = max(1, min(limit, 500))
+
+    def _full_name(first, middle, last):
+        parts = [p for p in (first, middle, last) if p]
+        name = ' '.join(str(part).strip() for part in parts if str(part).strip())
+        return name or 'Unknown'
+
+    pm_name = _full_name(pm_user.first_name, pm_user.middle_name, pm_user.last_name)
+    pm_role_label = 'Project Manager'
+
+    per_type_cap = min(limit, 150)
+    events = []
+
+    def _push(
+        user_name,
+        user_role,
+        action_text,
+        ts,
+        category,
+        affected_record='—',
+        old_value='—',
+        new_value='—',
+        module='General',
+        status_result='Success',
+    ):
+        if not ts:
+            return
+        events.append({
+            'user_name': user_name or 'Unknown',
+            'user_role': user_role or 'User',
+            'action': action_text,
+            'timestamp': ts.isoformat(),
+            'category': category,
+            'affected_record': affected_record or '—',
+            'old_value': old_value or '—',
+            'new_value': new_value or '—',
+            'module': module or 'General',
+            'status_result': status_result or 'Success',
+        })
+
+    # Project creations
+    projects_qs = (
+        models.Project.objects.filter(user_id=user_id)
+        .order_by('-created_at')[:per_type_cap]
+    )
+    for p in projects_qs:
+        _push(
+            pm_name,
+            pm_role_label,
+            f"Created project '{p.project_name}'",
+            p.created_at,
+            'Project',
+            affected_record=f"Project #{p.project_id} - {p.project_name}",
+            old_value='—',
+            new_value=f"Status: {p.status or 'Active'}",
+            module='Projects',
+            status_result='Success',
+        )
+
+    # Phase creations
+    phases_qs = (
+        models.Phase.objects.filter(project__user_id=user_id)
+        .select_related('project')
+        .order_by('-created_at')[:per_type_cap]
+    )
+    for ph in phases_qs:
+        proj_name = ph.project.project_name if ph.project_id else 'N/A'
+        _push(
+            pm_name,
+            pm_role_label,
+            f"Added phase '{ph.phase_name}' to '{proj_name}'",
+            ph.created_at,
+            'Phase',
+            affected_record=f"Phase #{ph.phase_id} - {ph.phase_name}",
+            old_value='—',
+            new_value=f"Project: {proj_name}",
+            module='Projects',
+            status_result='Success',
+        )
+
+    # Subtask creations
+    subtask_qs = (
+        models.Subtask.objects.filter(phase__project__user_id=user_id)
+        .select_related('phase__project', 'phase__project__supervisor')
+        .order_by('-created_at')[:per_type_cap]
+    )
+    for st in subtask_qs:
+        proj_name = st.phase.project.project_name if st.phase_id else 'N/A'
+        _push(
+            pm_name,
+            pm_role_label,
+            f"Created task '{st.title}' in '{proj_name}'",
+            st.created_at,
+            'Task',
+            affected_record=f"Task #{st.subtask_id} - {st.title}",
+            old_value='—',
+            new_value=f"Status: {st.status or 'pending'}",
+            module='Tasks',
+            status_result='Success',
+        )
+
+    # Subtask status updates (approximated by updated_at differing from created_at)
+    subtask_updates_qs = (
+        models.Subtask.objects.filter(phase__project__user_id=user_id)
+        .select_related('phase__project', 'phase__project__supervisor')
+        .order_by('-updated_at')[:per_type_cap]
+    )
+    status_label_map = {
+        'pending': 'Pending',
+        'in_progress': 'In Progress',
+        'completed': 'Completed',
+    }
+    for st in subtask_updates_qs:
+        if not (st.created_at and st.updated_at):
+            continue
+        if (st.updated_at - st.created_at).total_seconds() < 2:
+            continue
+
+        supv = st.phase.project.supervisor if st.phase_id else None
+        if supv:
+            actor_name = _full_name(supv.first_name, supv.middle_name, supv.last_name)
+            actor_role = 'Supervisor'
+        else:
+            actor_name = pm_name
+            actor_role = pm_role_label
+
+        label = status_label_map.get(st.status, (st.status or 'Updated').title())
+        proj_name = st.phase.project.project_name if st.phase_id else 'N/A'
+        result_label = 'Completed' if (st.status or '').lower() == 'completed' else 'Success'
+        _push(
+            actor_name,
+            actor_role,
+            f"Updated task '{st.title}' to {label} in '{proj_name}'",
+            st.updated_at,
+            'Task',
+            affected_record=f"Task #{st.subtask_id} - {st.title}",
+            old_value='Previous status',
+            new_value=f"Status: {label}",
+            module='Tasks',
+            status_result=result_label,
+        )
+
+    # Task assignments
+    assignments_qs = (
+        models.SubtaskFieldWorker.objects
+        .filter(subtask__phase__project__user_id=user_id)
+        .select_related('subtask__phase__project', 'field_worker')
+        .order_by('-assigned_at')[:per_type_cap]
+    )
+    for a in assignments_qs:
+        fw = a.field_worker
+        worker_name = (
+            _full_name(fw.first_name, fw.middle_name, fw.last_name)
+            if fw else 'Unknown'
+        )
+        task_title = a.subtask.title if a.subtask_id else 'Unknown task'
+        _push(
+            pm_name,
+            pm_role_label,
+            f"Assigned {worker_name} to task '{task_title}'",
+            a.assigned_at,
+            'Assignment',
+            affected_record=f"Task #{a.subtask_id} - {task_title}",
+            old_value='Unassigned',
+            new_value=f"Assigned: {worker_name}",
+            module='Tasks',
+            status_result='Success',
+        )
+
+    # Field worker additions
+    field_workers_qs = (
+        models.FieldWorker.objects.filter(user_id=user_id)
+        .order_by('-created_at')[:per_type_cap]
+    )
+    for fw in field_workers_qs:
+        name = _full_name(fw.first_name, fw.middle_name, fw.last_name)
+        role_label = fw.role or 'Field Worker'
+        _push(
+            pm_name,
+            pm_role_label,
+            f"Added field worker {name} ({role_label})",
+            fw.created_at,
+            'Worker',
+            affected_record=f"Field Worker #{fw.fieldworker_id} - {name}",
+            old_value='—',
+            new_value=f"Role: {role_label}",
+            module='Workforce',
+            status_result='Success',
+        )
+
+    # Supervisor additions
+    supervisors_qs = (
+        models.Supervisors.objects.filter(
+            Q(created_by_id=user_id) | Q(project_id__user_id=user_id)
+        )
+        .distinct()
+        .order_by('-created_at')[:per_type_cap]
+    )
+    for sv in supervisors_qs:
+        name = _full_name(sv.first_name, sv.middle_name, sv.last_name)
+        _push(
+            pm_name,
+            pm_role_label,
+            f"Added supervisor {name}",
+            sv.created_at,
+            'Supervisor',
+            affected_record=f"Supervisor #{sv.supervisor_id} - {name}",
+            old_value='—',
+            new_value='Role: Supervisor',
+            module='Workforce',
+            status_result='Success',
+        )
+
+    # Client additions
+    clients_qs = (
+        models.Client.objects.filter(
+            Q(created_by_id=user_id) | Q(project_id__user_id=user_id)
+        )
+        .distinct()
+        .order_by('-created_at')[:per_type_cap]
+    )
+    for c in clients_qs:
+        name = _full_name(c.first_name, c.middle_name, c.last_name)
+        _push(
+            pm_name,
+            pm_role_label,
+            f"Added client {name}",
+            c.created_at,
+            'Client',
+            affected_record=f"Client #{c.client_id} - {name}",
+            old_value='—',
+            new_value=f"Status: {c.status or 'active'}",
+            module='Clients',
+            status_result='Success',
+        )
+
+    # Inventory item creations
+    items_qs = (
+        models.InventoryItem.objects.filter(created_by_id=user_id)
+        .order_by('-created_at')[:per_type_cap]
+    )
+    for it in items_qs:
+        _push(
+            pm_name,
+            pm_role_label,
+            f"Added inventory item '{it.name}'",
+            it.created_at,
+            'Inventory',
+            affected_record=f"Item #{it.item_id} - {it.name}",
+            old_value='—',
+            new_value=f"Status: {it.status or 'Available'} • Qty: {it.quantity}",
+            module='Inventory',
+            status_result='Success',
+        )
+
+    # Inventory unit movements
+    movements_qs = (
+        models.InventoryUnitMovement.objects
+        .filter(
+            Q(unit__inventory_item__created_by_id=user_id)
+            | Q(from_project__user_id=user_id)
+            | Q(to_project__user_id=user_id)
+        )
+        .select_related('unit', 'moved_by', 'from_project', 'to_project')
+        .distinct()
+        .order_by('-created_at')[:per_type_cap]
+    )
+    for mv in movements_qs:
+        actor = mv.moved_by
+        if actor:
+            actor_name = _full_name(actor.first_name, actor.middle_name, actor.last_name)
+            if (actor.role or '').lower() == 'projectmanager':
+                actor_role = 'Project Manager'
+            else:
+                actor_role = actor.role or 'User'
+        else:
+            actor_name = 'System'
+            actor_role = 'System'
+
+        unit_code = mv.unit.unit_code if mv.unit_id else 'Unit'
+        to_name = mv.to_project.project_name if mv.to_project_id else None
+        from_name = mv.from_project.project_name if mv.from_project_id else None
+        if mv.action == 'Transferred' and from_name and to_name:
+            desc = f"Transferred unit {unit_code} from '{from_name}' to '{to_name}'"
+            old_val = f"Project: {from_name}"
+            new_val = f"Project: {to_name}"
+        elif mv.action == 'Assigned' and to_name:
+            desc = f"Assigned unit {unit_code} to '{to_name}'"
+            old_val = 'Unassigned'
+            new_val = f"Project: {to_name}"
+        elif mv.action == 'Returned' and from_name:
+            desc = f"Returned unit {unit_code} from '{from_name}'"
+            old_val = f"Project: {from_name}"
+            new_val = 'Returned to inventory'
+        else:
+            desc = f"Unit {unit_code} {mv.action}"
+            old_val = '—'
+            new_val = f"Action: {mv.action}"
+        _push(
+            actor_name,
+            actor_role,
+            desc,
+            mv.created_at,
+            'Inventory',
+            affected_record=f"Unit {unit_code}",
+            old_value=old_val,
+            new_value=new_val,
+            module='Inventory',
+            status_result='Success',
+        )
+
+    # Attendance updates
+    attendance_qs = (
+        models.Attendance.objects.filter(project__user_id=user_id)
+        .select_related('field_worker', 'project')
+        .order_by('-updated_at')[:per_type_cap]
+    )
+    attendance_label_map = {
+        'on_site': 'Checked in (On Site)',
+        'on_break': 'Started break',
+        'absent': 'Marked absent',
+    }
+    attendance_status_map = {
+        'on_site': 'On Site',
+        'on_break': 'On Break',
+        'absent': 'Absent',
+    }
+    for at in attendance_qs:
+        fw = at.field_worker
+        worker_name = (
+            _full_name(fw.first_name, fw.middle_name, fw.last_name)
+            if fw else 'Unknown'
+        )
+        proj_name = at.project.project_name if at.project_id else 'N/A'
+        status_label = attendance_label_map.get(
+            at.status,
+            (at.status or 'Attendance update').title(),
+        )
+        new_val_label = attendance_status_map.get(
+            at.status,
+            (at.status or '—').title(),
+        )
+        result_label = 'Absent' if (at.status or '').lower() == 'absent' else 'Success'
+        _push(
+            worker_name,
+            'Field Worker',
+            f"{status_label} at '{proj_name}' ({at.attendance_date})",
+            at.updated_at,
+            'Attendance',
+            affected_record=f"Attendance #{at.attendance_id} - {worker_name}",
+            old_value='Previous attendance state',
+            new_value=f"Status: {new_val_label} • {at.attendance_date}",
+            module='Attendance',
+            status_result=result_label,
+        )
+
+    events.sort(key=lambda e: e['timestamp'], reverse=True)
+    events = events[:limit]
+
+    return Response(
+        {
+            'success': True,
+            'count': len(events),
+            'items': events,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
 # ── Inventory ViewSets ───────────────────────────────────────────────────────
 
 class InventoryItemViewSet(viewsets.ModelViewSet):

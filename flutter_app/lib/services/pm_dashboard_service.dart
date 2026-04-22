@@ -241,6 +241,56 @@ class PmTaskTodayItem {
   }
 }
 
+class PmAuditTrailEntry {
+  final String userName;
+  final String userRole;
+  final String action;
+  final DateTime? timestamp;
+  final String category;
+  final String affectedRecord;
+  final String oldValue;
+  final String newValue;
+  final String module;
+  final String statusResult;
+
+  const PmAuditTrailEntry({
+    required this.userName,
+    required this.userRole,
+    required this.action,
+    required this.timestamp,
+    required this.category,
+    required this.affectedRecord,
+    required this.oldValue,
+    required this.newValue,
+    required this.module,
+    required this.statusResult,
+  });
+
+  factory PmAuditTrailEntry.fromJson(Map<String, dynamic> json) {
+    String _readString(String key, {String fallback = '—'}) {
+      final raw = json[key];
+      if (raw is String) {
+        final trimmed = raw.trim();
+        return trimmed.isEmpty ? fallback : trimmed;
+      }
+      return fallback;
+    }
+
+    return PmAuditTrailEntry(
+      userName: _readString('user_name', fallback: 'Unknown'),
+      userRole: _readString('user_role', fallback: 'User'),
+      action: (json['action'] as String?) ?? '',
+      timestamp: DateTime.tryParse((json['timestamp'] as String?) ?? ''),
+      category: _readString('category', fallback: 'Event'),
+      affectedRecord: _readString('affected_record'),
+      oldValue: _readString('old_value'),
+      newValue: _readString('new_value'),
+      module: _readString('module', fallback: 'General'),
+      statusResult: _readString('status_result', fallback: 'Success'),
+    );
+  }
+}
+
 class PmDashboardService {
   static const Duration _timeout = Duration(seconds: 30);
   static const Duration _cacheTtl = Duration(seconds: 45);
@@ -316,6 +366,32 @@ class PmDashboardService {
       notificationsCount: summary.notificationsCount,
       notificationsItems: summary.notificationsItems,
     );
+  }
+
+  Future<List<PmAuditTrailEntry>> fetchAuditTrail({
+    required int userId,
+    int limit = 100,
+  }) async {
+    final uri = AppConfig.apiUri(
+      'pm/audit-trail/?user_id=$userId&limit=$limit',
+    );
+
+    final response = await http.get(uri).timeout(_timeout);
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load audit trail: ${response.statusCode}');
+    }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    if (decoded['success'] != true) {
+      throw Exception(decoded['message'] ?? 'Audit trail request failed');
+    }
+
+    final itemsRaw = (decoded['items'] as List<dynamic>? ?? const []);
+    return itemsRaw
+        .whereType<Map<String, dynamic>>()
+        .map(PmAuditTrailEntry.fromJson)
+        .toList(growable: false);
   }
 
   Future<_PmWorkerCounts> _fetchWorkerManagementCounts({

@@ -28,6 +28,7 @@ from .views import (
     InventoryItemViewSet,
     InventoryUsageViewSet,
     pm_dashboard_summary,
+    pm_audit_trail,
     debug_projects,
     debug_all_data
 )
@@ -61,6 +62,7 @@ urlpatterns = [
     path('subscription/check/', check_subscription_status, name='check_subscription_status'),
     path('subscription/activate/', activate_subscription, name='activate_subscription'),
     path('pm/dashboard/', pm_dashboard_summary, name='pm_dashboard_summary'),
+    path('pm/audit-trail/', pm_audit_trail, name='pm_audit_trail'),
     path('image-verification/', verify_profile_photo, name='verify_profile_photo'),
     path('debug/projects/', debug_projects, name='debug_projects'),
     path('debug/all/', debug_all_data, name='debug_all_data'),

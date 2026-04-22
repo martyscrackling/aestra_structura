@@ -69,13 +69,12 @@ class AuthService extends ChangeNotifier {
       print('Attempting login with email: $email');
       print('API_BASE_URL: ${AppConfig.apiBaseUrl}');
       print('Login URL: ${AppConfig.apiUri('login/')}');
-      final response = await http
-          .post(
-            AppConfig.apiUri('login/'),
-            headers: {"Content-Type": "application/json"},
-            body: jsonEncode({"email": email, "password": password}),
-          )
-          .timeout(_networkTimeout);
+
+      // Retry once on 502/503/504 to survive Render cold starts.
+      http.Response response = await _postJsonWithRetry(
+        AppConfig.apiUri('login/'),
+        {"email": email, "password": password},
+      );
 
       print('Login response status: ${response.statusCode}');
       print('Login response body: ${response.body}');
@@ -98,6 +97,27 @@ class AuthService extends ChangeNotifier {
       print("Login error: $e");
       return false;
     }
+  }
+
+  /// POST JSON with a single retry for transient gateway errors (502/503/504)
+  /// that are common on free-tier hosts during cold start.
+  Future<http.Response> _postJsonWithRetry(
+    Uri url,
+    Map<String, dynamic> body,
+  ) async {
+    final encoded = jsonEncode(body);
+    const headers = {"Content-Type": "application/json"};
+
+    Future<http.Response> doPost() =>
+        http.post(url, headers: headers, body: encoded).timeout(_networkTimeout);
+
+    final first = await doPost();
+    if (first.statusCode == 502 || first.statusCode == 503 || first.statusCode == 504) {
+      print('Transient ${first.statusCode} from $url — retrying once after backend wake-up.');
+      await Future.delayed(const Duration(seconds: 3));
+      return doPost();
+    }
+    return first;
   }
 
   /// Change password for Supervisor/Client accounts.

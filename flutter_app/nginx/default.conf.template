@@ -5,6 +5,9 @@ server {
   root /usr/share/nginx/html;
   index index.html;
 
+  # Needed so nginx can resolve the upstream hostname at runtime.
+  resolver 1.1.1.1 8.8.8.8 ipv6=off valid=60s;
+
   location / {
     try_files $uri $uri/ /index.html;
   }
@@ -13,9 +16,22 @@ server {
   # Flutter Web is built with API_BASE_URL=/api/.
   location /api/ {
     proxy_pass ${BACKEND_ORIGIN};
-    proxy_set_header Host $proxy_host;
+
+    # Use the backend's real hostname for Host + SNI (required by Render).
+    proxy_set_header Host ${BACKEND_HOST};
+    proxy_ssl_server_name on;
+    proxy_ssl_name ${BACKEND_HOST};
+
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
+
+    # Cold-start on Render free tier can take 30-60s.
+    proxy_connect_timeout 75s;
+    proxy_send_timeout    75s;
+    proxy_read_timeout    75s;
+
+    # Avoid buffering request bodies which can delay uploads and break streaming.
+    proxy_request_buffering off;
   }
 }

@@ -12,7 +12,7 @@ import 'widgets/dashboard_header.dart';
 import 'widgets/recent_projects.dart';
 import 'widgets/activity_widget.dart';
 import 'widgets/task_summary_widget.dart';
-import 'widgets/task_today_widget.dart';
+import 'widgets/audit_trail_widget.dart';
 import 'widgets/active_workers_widget.dart';
 import 'modals/upgrade_plan_modal.dart';
 
@@ -585,11 +585,11 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
             layout != LayoutType.mobile)
           SizedBox(height: spacing),
 
-        // Task Today and Active Workers
+        // Audit Trail and Active Workers
         if (layout == LayoutType.extraSmallPhone ||
             layout == LayoutType.smallPhone ||
             layout == LayoutType.mobile) ...[
-          TaskTodayWidget(tasksToday: summary.tasksToday),
+          const AuditTrailWidget(),
           SizedBox(height: spacing),
           ActiveWorkersWidget(
             supervisorsCount: summary.supervisorsCount,
@@ -602,7 +602,7 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: TaskTodayWidget(tasksToday: summary.tasksToday)),
+              const Expanded(child: AuditTrailWidget()),
               SizedBox(width: spacing),
               Expanded(
                 child: ActiveWorkersWidget(
@@ -618,9 +618,9 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
+              const Expanded(
                 flex: 2,
-                child: TaskTodayWidget(tasksToday: summary.tasksToday),
+                child: AuditTrailWidget(),
               ),
               SizedBox(width: spacing),
               Expanded(

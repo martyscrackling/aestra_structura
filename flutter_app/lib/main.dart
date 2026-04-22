@@ -14,6 +14,7 @@ import 'projectmanager/reports_page.dart';
 import 'projectmanager/inventory_page.dart';
 import 'projectmanager/settings_page.dart';
 import 'projectmanager/notification_page.dart';
+import 'projectmanager/audit_trail_page.dart';
 import 'projectmanager/test_time_page.dart';
 import 'supervisor/dashboard_page.dart' as supervisor;
 import 'supervisor/all_projects.dart' as supervisor;
@@ -182,6 +183,11 @@ class StructuraApp extends StatelessWidget {
           path: '/notifications',
           builder: (context, state) => const NotificationPage(),
           name: 'notifications',
+        ),
+        GoRoute(
+          path: '/audit-trail',
+          builder: (context, state) => const AuditTrailPage(),
+          name: 'audit-trail',
         ),
         GoRoute(
           path: '/test-time',
