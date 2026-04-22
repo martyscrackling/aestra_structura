@@ -529,6 +529,11 @@ class FieldWorkerSerializer(serializers.ModelSerializer):
             'shift_schedule',
             'current_project_shift_start',
             'current_project_shift_end',
+            'damages_category',
+            'damages_item',
+            'damages_price',
+            'damages_schedule',
+            'damages_deduction_per_salary',
             'created_at',
         ]
         extra_kwargs = {
@@ -555,6 +560,11 @@ class FieldWorkerSerializer(serializers.ModelSerializer):
             'philhealth_weekly_topup': {'required': False, 'allow_null': True},
             'pagibig_weekly_topup': {'required': False, 'allow_null': True},
             'photo': {'required': False, 'allow_null': True},
+            'damages_category': {'required': False, 'allow_null': True},
+            'damages_item': {'required': False, 'allow_null': True},
+            'damages_price': {'required': False, 'allow_null': True},
+            'damages_schedule': {'required': False, 'allow_null': True},
+            'damages_deduction_per_salary': {'required': False, 'allow_null': True},
         }
 
     def get_assignment_status(self, obj):
@@ -890,6 +900,42 @@ class ClientSerializer(serializers.ModelSerializer):
                 'detail': 'No human face detected. Please upload another photo containing the face of a human.',
             })
         return value
+
+    def update(self, instance, validated_data):
+        # These write-only invitation fields are only relevant for create.
+        validated_data.pop('invited_by_email', None)
+        validated_data.pop('invited_by_name', None)
+        validated_data.pop('project_name', None)
+
+        next_email = validated_data.get('email', instance.email)
+
+        try:
+            with transaction.atomic():
+                # Keep linked User.email in sync when this legacy relation exists.
+                linked_user = getattr(instance, 'user_id', None)
+                if linked_user is not None and next_email:
+                    email_changed = (linked_user.email or '').strip().lower() != (
+                        str(next_email).strip().lower()
+                    )
+                    if email_changed:
+                        if models.User.objects.exclude(pk=linked_user.pk).filter(
+                            email=next_email
+                        ).exists():
+                            raise serializers.ValidationError(
+                                {'email': ['This email is already used by another user account.']}
+                            )
+                        linked_user.email = next_email
+                        linked_user.save(update_fields=['email'])
+
+                for attr, value in validated_data.items():
+                    setattr(instance, attr, value)
+                instance.save()
+        except IntegrityError:
+            raise serializers.ValidationError(
+                {'email': ['A client with this email already exists.']}
+            )
+
+        return instance
 
 
 class BackJobReviewSerializer(serializers.ModelSerializer):
@@ -1353,6 +1399,7 @@ class InventoryItemSerializer(serializers.ModelSerializer):
             'category',
             'serial_number',
             'quantity',
+            'price',
             'location',
             'notes',
             'photo',
