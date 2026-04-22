@@ -28,6 +28,9 @@ class AttendanceReport {
     required this.cashAdvance,
     required this.deduction,
     required this.damagesDeduction,
+    required this.damagesCategory,
+    required this.damagesItem,
+    required this.damagesPrice,
     required this.hourlyRate,
     required this.sssDeduction,
     required this.philhealthDeduction,
@@ -43,6 +46,9 @@ class AttendanceReport {
   final double cashAdvance;
   final double deduction;
   final double damagesDeduction;
+  final String? damagesCategory;
+  final String? damagesItem;
+  final double damagesPrice;
   final double hourlyRate;
   final double sssDeduction;
   final double philhealthDeduction;
@@ -469,6 +475,9 @@ class _ReportsPageState extends State<ReportsPage> {
               cashAdvance: cashAdvanceBalance,
               deduction: deductionPerSalary,
               damagesDeduction: row.damagesDeduction,
+              damagesCategory: row.damagesCategory,
+              damagesItem: row.damagesItem,
+              damagesPrice: row.damagesPrice,
               hourlyRate: row.hourlyRate,
               sssDeduction: row.sssDeduction,
               philhealthDeduction: row.philhealthDeduction,
@@ -939,23 +948,31 @@ class _ReportsPageState extends State<ReportsPage> {
       dates.add(date);
     }
 
-    final attendanceByDate = await Future.wait<({
-      DateTime date,
-      List<Map<String, dynamic>> attendance,
-    })>(
-      dates.map((date) async {
-        final attendance = await _fetchAttendanceForDate(
-          projectId,
-          date,
-          workerIds,
-        );
-        return (date: date, attendance: attendance);
-      }),
+    // Fetch all attendance for this project once to avoid N daily parallel requests.
+    final response = await http.get(
+      AppConfig.apiUri('attendance/?project_id=$projectId'),
     );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load attendance data (${response.statusCode})');
+    }
+    final allAttendance = (jsonDecode(response.body) as List<dynamic>)
+        .whereType<Map<String, dynamic>>()
+        .toList();
 
-    for (final daily in attendanceByDate) {
-      final date = daily.date;
-      final attendance = daily.attendance;
+    // Group attendance records by date for easy lookup.
+    final attendanceByDateMap = <String, List<Map<String, dynamic>>>{};
+    for (final record in allAttendance) {
+      final rawDate = (record['attendance_date'] ?? '').toString().trim();
+      if (rawDate.isEmpty || rawDate == 'null') continue;
+      final parsedDate = DateTime.tryParse(rawDate);
+      if (parsedDate == null) continue;
+      final dateKey = _dateString(parsedDate);
+      attendanceByDateMap.putIfAbsent(dateKey, () => []).add(record);
+    }
+
+    for (final date in dates) {
+      final dateKey = _dateString(date);
+      final attendance = attendanceByDateMap[dateKey] ?? [];
       final mergedByWorker = <int, Map<String, dynamic>>{};
 
       for (final record in attendance) {
@@ -1023,11 +1040,7 @@ class _ReportsPageState extends State<ReportsPage> {
         continue;
       }
 
-      final cumulativeWorkedDays = await _countWorkedDaysForWorkerUntil(
-        projectId: projectId,
-        workerId: workerId,
-        endDate: end,
-      );
+      final cumulativeWorkedDays = totals.totalDaysPresent;
 
       final firstName = (worker['first_name'] ?? '').toString().trim();
       final lastName = (worker['last_name'] ?? '').toString().trim();
@@ -1095,6 +1108,9 @@ class _ReportsPageState extends State<ReportsPage> {
                 worker['damages_deduction'] ??
                 0,
           ),
+          damagesCategory: worker['damages_category']?.toString(),
+          damagesItem: worker['damages_item']?.toString(),
+          damagesPrice: _toDouble(worker['damages_price']),
           hourlyRate: hourlyRate,
           sssDeduction: sssDeduction,
           philhealthDeduction: philhealthDeduction,
