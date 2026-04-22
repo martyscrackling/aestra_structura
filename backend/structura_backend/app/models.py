@@ -556,6 +556,23 @@ class Subtask(models.Model):
         return f"{self.title} - {self.phase.phase_name}"
 
 
+class SubtaskPhoto(models.Model):
+    photo_id = models.AutoField(primary_key=True)
+    subtask = models.ForeignKey(
+        Subtask,
+        on_delete=models.CASCADE,
+        related_name='update_photos',
+    )
+    photo = models.FileField(upload_to='subtask_update_photos/')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"SubtaskPhoto #{self.photo_id} - Subtask {self.subtask_id}"
+
+
 # SubtaskFieldWorker Assignment Model
 class SubtaskFieldWorker(models.Model):
     """Tracks which field workers are assigned to which subtasks"""

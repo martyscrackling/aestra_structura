@@ -930,6 +930,7 @@ class BackJobReviewSerializer(serializers.ModelSerializer):
 
 class SubtaskSerializer(serializers.ModelSerializer):
     assigned_workers = serializers.SerializerMethodField()
+    update_photos = serializers.SerializerMethodField()
 
     class Meta:
         model = models.Subtask
@@ -942,6 +943,7 @@ class SubtaskSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
             'assigned_workers',
+            'update_photos',
         ]
         extra_kwargs = {
             'subtask_id': {'read_only': True},
@@ -970,6 +972,17 @@ class SubtaskSerializer(serializers.ModelSerializer):
                 'photo': worker.photo.url if worker.photo else None,
             })
         return workers
+
+    def get_update_photos(self, obj):
+        photos = obj.update_photos.all()
+        return [
+            {
+                'photo_id': photo.photo_id,
+                'photo': photo.photo.url if photo.photo else None,
+                'created_at': photo.created_at,
+            }
+            for photo in photos
+        ]
 
 
 class PhaseSerializer(serializers.ModelSerializer):
