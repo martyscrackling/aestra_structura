@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
 
 class AppConfig {
+  static const _defaultProdApiBase =
+      'https://structura-backend-4vxo.onrender.com/api/';
+
   // Configure at build/run time:
   // flutter run -d chrome --dart-define=API_BASE_URL=https://YOUR_BACKEND/api/
   // flutter build web --release --dart-define=API_BASE_URL=https://YOUR_BACKEND/api/
@@ -9,6 +12,12 @@ class AppConfig {
     const envUrl = String.fromEnvironment('API_BASE_URL', defaultValue: '');
     if (envUrl.isNotEmpty) {
       return _normalize(envUrl);
+    }
+
+    // Hosted web deployments should default to production API when no
+    // dart-define is provided by the build platform.
+    if (kIsWeb) {
+      return _defaultProdApiBase;
     }
 
     // Android emulators cannot reach host localhost via 127.0.0.1.
