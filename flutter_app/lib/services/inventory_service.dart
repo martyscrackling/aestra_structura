@@ -46,6 +46,7 @@ class InventoryService {
     String? serialNumber,
     List<String>? serialNumbers,
     int quantity = 1,
+    required double price,
     String? location,
     String? notes,
   }) async {
@@ -62,6 +63,7 @@ class InventoryService {
     if (serialNumbers != null && serialNumbers.isNotEmpty) {
       body['serial_numbers'] = serialNumbers;
     }
+    if (price != null) body['price'] = price;
     if (location != null && location.isNotEmpty) body['location'] = location;
     if (notes != null && notes.isNotEmpty) body['notes'] = notes;
 
