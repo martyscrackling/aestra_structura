@@ -43,6 +43,7 @@ class InventoryService {
     required dynamic userId,
     required String name,
     required String category,
+    String? unitOfMeasure,
     String? serialNumber,
     List<String>? serialNumbers,
     int quantity = 1,
@@ -57,6 +58,9 @@ class InventoryService {
       'quantity': quantity,
       'created_by': userId,
     };
+    if (unitOfMeasure != null && unitOfMeasure.isNotEmpty) {
+      body['unit_of_measure'] = unitOfMeasure;
+    }
     if (serialNumber != null && serialNumber.isNotEmpty) {
       body['serial_number'] = serialNumber;
     }

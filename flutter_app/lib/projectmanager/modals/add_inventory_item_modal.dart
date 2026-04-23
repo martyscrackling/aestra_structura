@@ -22,9 +22,24 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
   ];
   final _locationController = TextEditingController();
   final _notesController = TextEditingController();
-  final List<String> _categoryOptions = const ['Tools', 'Machines'];
+  final List<String> _categoryOptions = const ['Material', 'Tools', 'Machines'];
+  final List<String> _unitOptions = const [
+    'pc',
+    'pcs',
+    'bag',
+    'sheet',
+    'kg',
+    'cu.m',
+    'liter',
+    'set',
+    'box',
+    'roll',
+  ];
 
   String? _selectedCategory;
+  String _selectedUnit = 'pc';
+
+  bool get _isMaterial => _selectedCategory == 'Material';
 
   Uint8List? _selectedImageBytes;
   String? _selectedImageName;
@@ -86,17 +101,22 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
         throw Exception('User not logged in');
       }
 
-      // Step 1: Create the item
-      _syncSerialInputsWithQuantity();
-      final serialNumbers = _serialNumberControllers
-          .map((controller) => controller.text.trim())
-          .where((value) => value.isNotEmpty)
-          .toList();
+      // Step 1: Create the item. Materials are bulk stock and never carry
+      // serial numbers — only tools/machines do.
+      List<String> serialNumbers = const [];
+      if (!_isMaterial) {
+        _syncSerialInputsWithQuantity();
+        serialNumbers = _serialNumberControllers
+            .map((controller) => controller.text.trim())
+            .where((value) => value.isNotEmpty)
+            .toList();
+      }
 
       final result = await InventoryService.addInventoryItem(
         userId: userId,
         name: _nameController.text.trim(),
         category: _selectedCategory!,
+        unitOfMeasure: _isMaterial ? _selectedUnit : null,
         serialNumber: serialNumbers.isNotEmpty ? serialNumbers.first : null,
         serialNumbers: serialNumbers,
         quantity: int.tryParse(_quantityController.text.trim()) ?? 1,
@@ -582,7 +602,7 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
           Expanded(
             flex: 2,
             child: DropdownButtonFormField<String>(
-              value: _selectedCategory,
+              initialValue: _selectedCategory,
               isExpanded: true,
               decoration: InputDecoration(
                 labelText: 'Category *',
@@ -619,7 +639,16 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
                   .toList(),
               onChanged: _isLoading
                   ? null
-                  : (value) => setState(() => _selectedCategory = value),
+                  : (value) => setState(() {
+                      _selectedCategory = value;
+                      if (_isMaterial) {
+                        // Materials don't use serial numbers; clear anything
+                        // the user may have typed under tools/machines.
+                        for (final c in _serialNumberControllers) {
+                          c.clear();
+                        }
+                      }
+                    }),
               validator: (value) {
                 if (value == null || value.isEmpty) {
                   return 'Please select a category';
@@ -632,10 +661,20 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
           Expanded(
             child: _buildTextField(
               controller: _quantityController,
-              hintText: 'Number of Units',
+              hintText: _isMaterial ? 'Quantity *' : 'Number of Units',
               keyboardType: TextInputType.number,
-              onChanged: (_) => _syncSerialInputsWithQuantity(),
+              onChanged: (_) {
+                if (!_isMaterial) _syncSerialInputsWithQuantity();
+              },
               validator: (value) {
+                if (_isMaterial) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Enter quantity';
+                  }
+                  final qty = int.tryParse(value.trim());
+                  if (qty == null || qty < 1) return 'Invalid';
+                  return null;
+                }
                 if (value != null && value.isNotEmpty) {
                   final qty = int.tryParse(value);
                   if (qty == null || qty < 1) return 'Invalid';
@@ -648,13 +687,62 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
       ),
       const SizedBox(height: 8),
       Text(
-        'Set number of units to add serial fields for each unit.',
+        _isMaterial
+            ? 'Materials are bulk stock — quantity is consumed as phases '
+                  'record usage. No serial numbers needed.'
+            : 'Set number of units to add serial fields for each unit.',
         style: TextStyle(fontSize: 11, color: Colors.grey[600]),
       ),
+      if (_isMaterial) ...[
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          initialValue: _selectedUnit,
+          isExpanded: true,
+          decoration: InputDecoration(
+            labelText: 'Unit of Measure *',
+            labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            filled: true,
+            fillColor: const Color(0xFFF9FAFB),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(
+                color: Color(0xFF0C1935),
+                width: 2,
+              ),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
+            ),
+          ),
+          items: _unitOptions
+              .map(
+                (unit) => DropdownMenuItem<String>(
+                  value: unit,
+                  child: Text(unit),
+                ),
+              )
+              .toList(),
+          onChanged: _isLoading
+              ? null
+              : (value) {
+                  if (value == null) return;
+                  setState(() => _selectedUnit = value);
+                },
+        ),
+      ],
       const SizedBox(height: 12),
       _buildTextField(
         controller: _priceController,
-        hintText: 'Price / Unit *',
+        hintText: _isMaterial ? 'Unit Price *' : 'Price / Unit *',
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         validator: (value) {
           if (value == null || value.trim().isEmpty) {
@@ -667,8 +755,8 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
         },
       ),
       const SizedBox(height: 12),
-      ..._buildSerialNumberFields(),
-      const SizedBox(height: 12),
+      if (!_isMaterial) ..._buildSerialNumberFields(),
+      if (!_isMaterial) const SizedBox(height: 12),
       _buildTextField(
         controller: _locationController,
         hintText: 'Location (Optional)',

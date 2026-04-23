@@ -493,6 +493,47 @@ class _ReportsPageState extends State<ReportsPage> {
           .toList(),
     };
 
+    var stored = Map<String, dynamic>.from(payload);
+    try {
+      final response = await http.post(
+        AppConfig.apiUri('supervisor-reports/'),
+        headers: const {'Content-Type': 'application/json; charset=utf-8'},
+        body: jsonEncode(payload),
+      );
+      if (response.statusCode != 201) {
+        String msg =
+            'Could not send report to the server (${response.statusCode}).';
+        try {
+          final decoded = jsonDecode(response.body);
+          if (decoded is Map && decoded['detail'] != null) {
+            msg = decoded['detail'].toString();
+          }
+        } catch (_) {}
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map) {
+        stored = Map<String, dynamic>.from(decoded);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Network error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Local cache (optional); project manager list is loaded from the API.
     final prefs = await SharedPreferences.getInstance();
     final existingRaw = prefs.getString('supervisor_submitted_reports_v1');
     final existingList = existingRaw == null
@@ -502,18 +543,22 @@ class _ReportsPageState extends State<ReportsPage> {
     final filtered = existingList.where((entry) {
       if (entry is! Map) return true;
       final map = Map<String, dynamic>.from(entry);
-      return map['submission_id'] != payload['submission_id'];
+      return map['submission_id'] != stored['submission_id'];
     }).toList();
-    filtered.add(payload);
+    filtered.add(stored);
 
     await prefs.setString(
       'supervisor_submitted_reports_v1',
       jsonEncode(filtered),
     );
-    await prefs.setString('pm_latest_report_v1', jsonEncode(payload));
+    await prefs.setString('pm_latest_report_v1', jsonEncode(stored));
 
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Report submitted to Project Manager')),
+      const SnackBar(
+        content: Text('Report sent to the Project Manager (saved on the server)'),
+        backgroundColor: Color(0xFF0C1935),
+      ),
     );
   }
 

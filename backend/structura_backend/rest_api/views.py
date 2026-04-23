@@ -3,8 +3,7 @@ from rest_framework import generics, status, viewsets
 from rest_framework.decorators import api_view, action, parser_classes
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
-from django.contrib.auth.hashers import check_password
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import check_password, identify_hasher, make_password
 from django.views.decorators.csrf import csrf_exempt
 from django.db.models import Count, Q, Prefetch
 from django.db import transaction
@@ -21,6 +20,40 @@ from datetime import timedelta
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _is_django_encoded_password(encoded):
+    if not encoded:
+        return False
+    try:
+        identify_hasher(encoded)
+        return True
+    except ValueError:
+        return False
+
+
+def _verify_password(raw_password, encoded):
+    """Match Django hashed passwords; also accept legacy plaintext rows in the DB."""
+    if raw_password is None or encoded is None:
+        return False
+    if check_password(raw_password, encoded):
+        return True
+    if _is_django_encoded_password(encoded):
+        return False
+    try:
+        return secrets.compare_digest(str(encoded), str(raw_password))
+    except TypeError:
+        return str(encoded) == str(raw_password)
+
+
+def _rehash_password_if_plaintext(model_obj, field_name, raw_password):
+    """Upgrade legacy plaintext passwords to Django hashes on successful login."""
+    encoded = getattr(model_obj, field_name, None)
+    if not encoded or _is_django_encoded_password(encoded):
+        return
+    setattr(model_obj, field_name, raw_password)
+    model_obj.save(update_fields=[field_name])
+
 
 from app.image_verification import verify_image_has_human_face
 from .email_utils import (
@@ -200,6 +233,18 @@ def verify_profile_photo(request):
 
 # Create your views here.
 from app import models
+from app.services.phase_lifecycle import close_phase_material_plans
+from app.services.material_usage import (
+    record_material_usage,
+    MaterialUsageError,
+    project_budget_summary,
+)
+from app.services.budget_validation import (
+    check_project_budget,
+    check_phase_allocation,
+    check_phase_is_deletable,
+    check_inventory_item_is_deletable,
+)
 from .serializers import (
     UserSerializer, 
     RegionSerializer, 
@@ -220,8 +265,10 @@ from .serializers import (
     InventoryUsageSerializer,
     InventoryUnitSerializer,
     InventoryUnitMovementSerializer,
+    PhaseMaterialPlanSerializer,
 )
 from rest_framework.exceptions import ValidationError
+from decimal import Decimal, InvalidOperation
 
 class ListUser(generics.ListCreateAPIView):
     queryset = models.User.objects.all()
@@ -386,33 +433,67 @@ def verify_signup_otp(request):
 def login_user(request):
     """
     Authenticate user with email and password.
-    Can login as either a User (ProjectManager), Worker, or Client.
+    Can log in as a Supervisor, User (ProjectManager, etc.), or Client.
     """
     try:
         data = json.loads(request.body)
-        email = data.get('email')
+        email = (data.get('email') or '').strip()
         password = data.get('password')
-        
+
         if not email or not password:
             return Response(
                 {'success': False, 'message': 'Email and password required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         account_found = False
 
-        # First, try to find user as a regular User (ProjectManager, etc.)
-        try:
-            user = models.User.objects.get(email=email)
+        # Supervisors first: the same email can exist on `User` and `Supervisors`;
+        # supervisor credentials must authenticate against the supervisor row.
+        supervisor = models.Supervisors.objects.filter(email__iexact=email).first()
+        if supervisor is not None:
             account_found = True
-            # Check password
-            if check_password(password, user.password_hash):
-                # If this is a Client user, also resolve the corresponding Client profile.
-                # Many parts of the mobile/web clients rely on `client_id` / `project_id`.
+            if _verify_password(password, supervisor.password_hash):
+                _rehash_password_if_plaintext(supervisor, 'password_hash', password)
+                project_obj = supervisor.project_id
+                if project_obj is None:
+                    project_obj = (
+                        models.Project.objects.filter(supervisor=supervisor)
+                        .order_by('-created_at')
+                        .first()
+                    )
+                    if project_obj is not None:
+                        supervisor.project_id = project_obj
+                        supervisor.save(update_fields=['project_id'])
+
+                return Response({
+                    'success': True,
+                    'message': 'Login successful',
+                    'user': {
+                        'supervisor_id': supervisor.supervisor_id,
+                        'user_id': supervisor.supervisor_id,
+                        'project_id': project_obj.project_id if project_obj else None,
+                        'email': supervisor.email,
+                        'first_name': supervisor.first_name,
+                        'middle_name': supervisor.middle_name,
+                        'last_name': supervisor.last_name,
+                        'phone': supervisor.phone_number,
+                        'phone_number': supervisor.phone_number,
+                        'role': 'Supervisor',
+                        'type': 'Supervisor',
+                        'force_password_change': password == 'PASSWORD',
+                    }
+                }, status=status.HTTP_200_OK)
+
+        user = models.User.objects.filter(email__iexact=email).first()
+        if user is not None:
+            account_found = True
+            if _verify_password(password, user.password_hash):
+                _rehash_password_if_plaintext(user, 'password_hash', password)
                 if user.role == 'Client':
                     client = (
                         models.Client.objects.filter(user_id=user).select_related('project_id').first()
-                        or models.Client.objects.filter(email=email).select_related('project_id').first()
+                        or models.Client.objects.filter(email__iexact=email).select_related('project_id').first()
                     )
                     return Response({
                         'success': True,
@@ -445,65 +526,21 @@ def login_user(request):
                         'phone': user.phone,
                         'phone_number': user.phone,
                         'role': user.role,
-                        'type': 'user',  # Indicate this is a regular user/project manager
+                        'type': 'user',
                     }
                 }, status=status.HTTP_200_OK)
-        except models.User.DoesNotExist:
-            pass  # Not a User, check if it's a Worker or Client
-        
-        # If not a regular user, check if they're a Supervisor
-        try:
-            supervisor = models.Supervisors.objects.get(email=email)
-            account_found = True
-            # Check password
-            if check_password(password, supervisor.password_hash):
-                # Prefer the explicit FK on the supervisor row, but fall back to
-                # resolving the project through Project.supervisor.
-                project_obj = supervisor.project_id
-                if project_obj is None:
-                    project_obj = (
-                        models.Project.objects.filter(supervisor=supervisor)
-                        .order_by('-created_at')
-                        .first()
-                    )
-                    if project_obj is not None:
-                        # Backfill for future logins
-                        supervisor.project_id = project_obj
-                        supervisor.save(update_fields=['project_id'])
 
-                return Response({
-                    'success': True,
-                    'message': 'Login successful',
-                    'user': {
-                        'supervisor_id': supervisor.supervisor_id,
-                        'user_id': supervisor.supervisor_id,  # Use supervisor_id as user_id
-                        'project_id': project_obj.project_id if project_obj else None,
-                        'email': supervisor.email,
-                        'first_name': supervisor.first_name,
-                        'middle_name': supervisor.middle_name,
-                        'last_name': supervisor.last_name,
-                        'phone': supervisor.phone_number,
-                        'phone_number': supervisor.phone_number,
-                        'role': 'Supervisor',
-                        'type': 'Supervisor',  # Indicate this is a supervisor
-                        'force_password_change': password == 'PASSWORD',
-                    }
-                }, status=status.HTTP_200_OK)
-        except models.Supervisors.DoesNotExist:
-            pass  # Not a Supervisor, check if it's a Client
-        
-        # If not a supervisor, check if they're a Client
-        try:
-            client = models.Client.objects.get(email=email)
+        client = models.Client.objects.filter(email__iexact=email).first()
+        if client is not None:
             account_found = True
-            # Check password
-            if check_password(password, client.password_hash):
+            if _verify_password(password, client.password_hash):
+                _rehash_password_if_plaintext(client, 'password_hash', password)
                 return Response({
                     'success': True,
                     'message': 'Login successful',
                     'user': {
                         'client_id': client.client_id,
-                        'user_id': client.client_id,  # Use client_id as user_id
+                        'user_id': client.client_id,
                         'project_id': client.project_id.project_id if client.project_id else None,
                         'email': client.email,
                         'first_name': client.first_name,
@@ -512,13 +549,10 @@ def login_user(request):
                         'phone': client.phone_number,
                         'phone_number': client.phone_number,
                         'role': 'Client',
-                        'type': 'Client',  # Indicate this is a client
+                        'type': 'Client',
                         'force_password_change': password == 'PASSWORD',
                     }
                 }, status=status.HTTP_200_OK)
-        except models.Client.DoesNotExist:
-
-            pass
 
         if account_found:
             return Response(
@@ -530,7 +564,7 @@ def login_user(request):
             {'success': False, 'message': 'Email not found in system'},
             status=status.HTTP_404_NOT_FOUND
         )
-        
+
     except Exception as e:
         return Response(
             {'success': False, 'message': str(e)},
@@ -575,9 +609,9 @@ def change_password(request):
             )
 
         # Supervisors table
-        supervisor = models.Supervisors.objects.filter(email=email).first()
+        supervisor = models.Supervisors.objects.filter(email__iexact=email).first()
         if supervisor is not None:
-            if not check_password(current_password, supervisor.password_hash):
+            if not _verify_password(current_password, supervisor.password_hash):
                 return Response(
                     {'success': False, 'message': 'Current password is incorrect'},
                     status=status.HTTP_401_UNAUTHORIZED,
@@ -587,9 +621,9 @@ def change_password(request):
             return Response({'success': True, 'message': 'Password updated'}, status=status.HTTP_200_OK)
 
         # Clients table
-        client = models.Client.objects.filter(email=email).first()
+        client = models.Client.objects.filter(email__iexact=email).first()
         if client is not None:
-            if not check_password(current_password, client.password_hash):
+            if not _verify_password(current_password, client.password_hash):
                 return Response(
                     {'success': False, 'message': 'Current password is incorrect'},
                     status=status.HTTP_401_UNAUTHORIZED,
@@ -599,9 +633,9 @@ def change_password(request):
             return Response({'success': True, 'message': 'Password updated'}, status=status.HTTP_200_OK)
 
         # Regular User accounts (ProjectManager, Client, etc.)
-        user = models.User.objects.filter(email=email).first()
+        user = models.User.objects.filter(email__iexact=email).first()
         if user is not None:
-            if not check_password(current_password, user.password_hash):
+            if not _verify_password(current_password, user.password_hash):
                 return Response(
                     {'success': False, 'message': 'Current password is incorrect'},
                     status=status.HTTP_401_UNAUTHORIZED,
@@ -874,7 +908,6 @@ class ProjectViewSet(viewsets.ModelViewSet):
         supervisor.project_id = project
         supervisor.save()
         
-        print(f'✅ Supervisor {supervisor.first_name} {supervisor.last_name} (ID: {supervisor_id}) assigned to project {project.project_name} (ID: {project.project_id})')
         
         # Return updated supervisor data
         serializer = SupervisorsSerializer(supervisor)
@@ -924,7 +957,6 @@ class ProjectViewSet(viewsets.ModelViewSet):
         
         project.save()
         
-        print(f'✅ Project {project.project_name} (ID: {project.project_id}) status changed to {project.status}')
         
         # Return updated project data
         serializer = ProjectSerializer(project)
@@ -940,8 +972,6 @@ class ProjectViewSet(viewsets.ModelViewSet):
         user_id = self.request.query_params.get('user_id')
         client_id = self.request.query_params.get('client_id')
         supervisor_id = self.request.query_params.get('supervisor_id')
-        print(f"🔍 ProjectViewSet get_queryset called")
-        print(f"🔍 Received user_id: {user_id}")
 
         if supervisor_id:
             # Check for projects where this supervisor is assigned via two methods:
@@ -951,13 +981,10 @@ class ProjectViewSet(viewsets.ModelViewSet):
                 Q(supervisor_id=supervisor_id) |  # Old single-supervisor FK
                 Q(supervisors__supervisor_id=supervisor_id)  # New multi-supervisor FK
             ).distinct().order_by('-created_at')
-            print(f"✅ Filtered projects by supervisor_id count: {queryset.count()}")
-            print(f"  - Checking both Project.supervisor_id and Supervisors.project_id relationships")
             return queryset
-        
+
         if client_id:
             queryset = models.Project.objects.filter(client_id=client_id).order_by('-created_at')
-            print(f"✅ Filtered projects by client_id count: {queryset.count()}")
             return queryset
 
         if user_id:
@@ -972,33 +999,28 @@ class ProjectViewSet(viewsets.ModelViewSet):
                 # First, interpret this as a real User PK if it exists.
                 user_obj = models.User.objects.filter(user_id=user_id_int).only('role').first()
                 if user_obj and user_obj.role == 'Client':
-                    queryset = models.Project.objects.filter(client__user_id=user_id_int).order_by('-created_at')
-                    print(f"✅ Filtered projects by client user_id count: {queryset.count()}")
-                    return queryset
+                    return models.Project.objects.filter(
+                        client__user_id=user_id_int
+                    ).order_by('-created_at')
 
                 if user_obj:
-                    queryset = models.Project.objects.filter(user_id=user_id_int).order_by('-created_at')
-                    print(f"✅ Filtered projects by PM user_id count: {queryset.count()}")
-                    return queryset
+                    return models.Project.objects.filter(
+                        user_id=user_id_int
+                    ).order_by('-created_at')
 
                 # Legacy/mobile fallback: some clients stored `user_id` as the Client PK.
                 # Only apply this if there is no matching User record; otherwise PM user_id values
                 # can accidentally collide with Client PKs.
                 if models.Client.objects.filter(client_id=user_id_int).exists():
-                    queryset = models.Project.objects.filter(client_id=user_id_int).order_by('-created_at')
-                    print(f"✅ Filtered projects by legacy client_id(user_id) count: {queryset.count()}")
-                    return queryset
+                    return models.Project.objects.filter(
+                        client_id=user_id_int
+                    ).order_by('-created_at')
 
-                queryset = models.Project.objects.none()
-                print("⚠️ user_id provided but no matching User/Client found; returning empty queryset")
-                return queryset
+                return models.Project.objects.none()
 
-            queryset = models.Project.objects.filter(user_id=user_id).order_by('-created_at')
-            print(f"✅ Filtered projects count: {queryset.count()}")
-            return queryset
-        
+            return models.Project.objects.filter(user_id=user_id).order_by('-created_at')
+
         # If no user_id provided, return all projects (for individual project retrieval)
-        print(f"⚠️ No user_id provided, returning all projects")
         return models.Project.objects.all()
     
     def perform_create(self, serializer):
@@ -1006,11 +1028,42 @@ class ProjectViewSet(viewsets.ModelViewSet):
         Automatically set the user_id when creating a project
         """
         user_id = self.request.data.get('user_id') or self.request.query_params.get('user_id')
-        print(f"🔍 perform_create called with user_id: {user_id}")
         if user_id:
             serializer.save(user_id=user_id)
         else:
             raise ValueError("user_id is required to create a project")
+
+    @action(detail=True, methods=['patch'], url_path='set-budget')
+    def set_budget(self, request, pk=None):
+        """
+        Update the project's total budget. Validates that the new budget
+        is not smaller than the sum of already-allocated phase budgets.
+        """
+        project = self.get_object()
+        raw = request.data.get('budget')
+        if raw is None:
+            return Response({'error': 'budget is required'}, status=400)
+        try:
+            new_budget = Decimal(str(raw))
+        except (InvalidOperation, TypeError):
+            return Response({'error': 'budget must be a number'}, status=400)
+
+        err = check_project_budget(project, new_budget)
+        if err:
+            return Response({'error': err}, status=400)
+
+        project.budget = new_budget
+        project.save(update_fields=['budget'])
+        return Response(ProjectSerializer(project, context={'request': request}).data)
+
+    @action(detail=True, methods=['get'], url_path='budget-summary')
+    def budget_summary(self, request, pk=None):
+        """
+        Aggregated budget read-model for dashboards: total, used, remaining,
+        per-phase breakdown.
+        """
+        project = self.get_object()
+        return Response(project_budget_summary(project))
 
 
 @csrf_exempt
@@ -1416,29 +1469,18 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
         Set include_direct_project=true to include fallback direct project rows.
         """
         try:
-            print(f"\n{'='*80}")
-            print(f"🔍 active_projects endpoint called with pk={pk}")
-            print(f"   Request path: {request.path}")
-            print(f"   Request user: {request.user}")
-            
-            # Try to bypass permission filters and get directly from all field workers
             try:
                 field_worker = models.FieldWorker.objects.get(fieldworker_id=int(pk))
-                print(f"✓ Found field worker: {field_worker.first_name} {field_worker.last_name} (ID: {field_worker.fieldworker_id})")
             except models.FieldWorker.DoesNotExist:
-                print(f"❌ FieldWorker with id={pk} does not exist in database")
                 return Response(
                     {'error': f'Field worker {pk} not found in database'},
                     status=status.HTTP_404_NOT_FOUND
                 )
-            except (ValueError, TypeError) as e:
-                print(f"❌ Invalid pk type: {e}")
+            except (ValueError, TypeError):
                 return Response(
                     {'error': f'Invalid field worker ID: {pk}'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            
-            print(f"   Direct project assignment: {field_worker.project_id}")
 
             include_direct_project = str(
                 request.query_params.get('include_direct_project', 'false')
@@ -1457,13 +1499,12 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
                 'subtask__phase__project__barangay',
             )
             
-            print(f"📊 Subtask assignments: {subtask_assignments.count()}")
-            for i, assignment in enumerate(subtask_assignments, 1):
+            for assignment in subtask_assignments:
                 try:
                     subtask = assignment.subtask
                     phase = subtask.phase
                     project = phase.project
-                    
+
                     assignment_info = {
                         'assignment_id': assignment.assignment_id,
                         'assigned_at': assignment.assigned_at.isoformat(),
@@ -1491,20 +1532,17 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
                         }
                     }
                     assignments_data.append(assignment_info)
-                    print(f"  #{i} ✓ Subtask: {project.project_name} > {phase.phase_name} > {subtask.title}")
-                except Exception as e:
-                    print(f"  #{i} ❌ Error: {e}")
-            
+                except Exception:
+                    continue
+
             # Optional method 2: include direct project only when explicitly requested.
             if include_direct_project and len(assignments_data) == 0 and field_worker.project_id:
-                print(f"⚠️  No subtask assignments, checking direct project assignment...")
                 try:
                     project = field_worker.project_id
-                    
+
                     # Get all phases for this project
                     phases = models.Phase.objects.filter(project_id=project.project_id)
-                    print(f"   Project has {phases.count()} phases")
-                    
+
                     for phase in phases:
                         assignment_info = {
                             'assignment_id': None,
@@ -1533,25 +1571,17 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
                             }
                         }
                         assignments_data.append(assignment_info)
-                        print(f"  ✓ Direct: {project.project_name} > {phase.phase_name}")
-                except Exception as e:
-                    print(f"  ❌ Error getting direct project: {e}")
-            
-            print(f"✅ Returning {len(assignments_data)} total assignments")
-            print(f"{'='*80}\n")
-            
+                except Exception:
+                    pass
+
             return Response(assignments_data, status=status.HTTP_200_OK)
-            
+
         except models.FieldWorker.DoesNotExist:
-            print(f"❌ Field worker not found: {pk}")
             return Response(
                 {'error': f'Field worker {pk} not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
         except Exception as e:
-            print(f"❌ Unexpected error: {e}")
-            import traceback
-            traceback.print_exc()
             return Response(
                 {'error': str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1656,19 +1686,27 @@ class ClientViewSet(viewsets.ModelViewSet):
 
 
 class BackJobReviewViewSet(viewsets.ModelViewSet):
-    queryset = models.BackJobReview.objects.select_related('project', 'client').all()
+    queryset = models.BackJobReview.objects.select_related(
+        'project', 'client', 'phase',
+    ).all()
     serializer_class = BackJobReviewSerializer
 
     def get_queryset(self):
         queryset = self.queryset
         project_id = self.request.query_params.get('project_id')
         client_id = self.request.query_params.get('client_id')
+        phase_id = self.request.query_params.get('phase_id')
         is_resolved = self.request.query_params.get('is_resolved')
 
         if project_id:
             queryset = queryset.filter(project_id=project_id)
         if client_id:
             queryset = queryset.filter(client_id=client_id)
+        if phase_id not in [None, '']:
+            if phase_id in ['null', 'none']:
+                queryset = queryset.filter(phase_id__isnull=True)
+            else:
+                queryset = queryset.filter(phase_id=phase_id)
         if is_resolved in ['true', 'false']:
             queryset = queryset.filter(is_resolved=(is_resolved == 'true'))
         return queryset
@@ -1730,6 +1768,30 @@ class BackJobReviewViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        phase_id = mutable_data.get('phase')
+        if phase_id not in [None, '', 'null', 'none']:
+            try:
+                phase_pk = int(phase_id)
+            except (TypeError, ValueError):
+                return Response(
+                    {'detail': 'Invalid phase id.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            phase_obj = models.Phase.objects.filter(phase_id=phase_pk).first()
+            if phase_obj is None:
+                return Response(
+                    {'detail': 'Phase not found.'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            if phase_obj.project_id != project.project_id:
+                return Response(
+                    {'detail': 'Phase does not belong to this project.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            mutable_data['phase'] = phase_obj.phase_id
+        else:
+            mutable_data['phase'] = None
+
         mutable_data['project'] = project.project_id
         mutable_data['client'] = client.client_id
 
@@ -1738,6 +1800,157 @@ class BackJobReviewViewSet(viewsets.ModelViewSet):
         self.perform_create(serializer)
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+
+def _supervisor_assigned_to_project(project, supervisor_pk: int) -> bool:
+    if project.supervisor_id == supervisor_pk:
+        return True
+    sup = models.Supervisors.objects.filter(supervisor_id=supervisor_pk).first()
+    if sup is not None and sup.project_id_id == project.project_id:
+        return True
+    return False
+
+
+def _flatten_supervisor_report_for_client(instance: models.SupervisorReportSubmission) -> dict:
+    """Merge stored JSON with server id for mobile clients."""
+    payload = instance.report_data if isinstance(instance.report_data, dict) else {}
+    out = dict(payload)
+    out['id'] = instance.pk
+    out['submission_id'] = instance.submission_id
+    out['project_id'] = instance.project_id
+    if instance.supervisor_id:
+        out['supervisor_id'] = instance.supervisor_id
+    return out
+
+
+class SupervisorReportSubmissionViewSet(viewsets.ViewSet):
+    """Supervisor submits payroll reports; project manager lists and deletes (scoped by user_id)."""
+
+    def list(self, request):
+        pm_id = _get_request_pm_user_id(request)
+        if pm_id is None:
+            return Response(
+                {'detail': 'user_id is required to list report submissions.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if _get_pm_user_or_none(pm_id) is None:
+            return Response(
+                {'detail': 'Invalid project manager user_id.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        project_id = request.query_params.get('project_id')
+        try:
+            owned_ids = list(
+                models.Project.objects.filter(user_id=pm_id).values_list(
+                    'project_id', flat=True,
+                ),
+            )
+        except Exception:
+            owned_ids = []
+
+        qs = models.SupervisorReportSubmission.objects.filter(
+            project_id__in=owned_ids,
+        ).select_related('project', 'supervisor')
+        if project_id not in [None, '']:
+            try:
+                pid = int(project_id)
+            except (TypeError, ValueError):
+                return Response(
+                    {'detail': 'Invalid project_id.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if pid not in owned_ids:
+                return Response(
+                    {'detail': 'You do not have access to this project.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            qs = qs.filter(project_id=pid)
+
+        data = [_flatten_supervisor_report_for_client(row) for row in qs]
+        return Response(data)
+
+    def create(self, request):
+        data = request.data
+        if not isinstance(data, dict):
+            return Response(
+                {'detail': 'Expected a JSON object.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        submission_id = data.get('submission_id')
+        project_id = data.get('project_id')
+        supervisor_id = data.get('supervisor_id')
+        if not submission_id or not project_id:
+            return Response(
+                {'detail': 'submission_id and project_id are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            project = models.Project.objects.get(project_id=project_id)
+        except models.Project.DoesNotExist:
+            return Response(
+                {'detail': 'Project not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        try:
+            sup_id = int(supervisor_id)
+        except (TypeError, ValueError):
+            return Response(
+                {'detail': 'supervisor_id is required and must be an integer.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not _supervisor_assigned_to_project(project, sup_id):
+            return Response(
+                {'detail': 'Supervisor is not assigned to this project.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        sup = models.Supervisors.objects.filter(supervisor_id=sup_id).first()
+
+        obj, _created = models.SupervisorReportSubmission.objects.update_or_create(
+            submission_id=str(submission_id),
+            defaults={
+                'project': project,
+                'supervisor': sup,
+                'report_data': data,
+            },
+        )
+        return Response(
+            _flatten_supervisor_report_for_client(obj),
+            status=status.HTTP_201_CREATED,
+        )
+
+    def destroy(self, request, pk=None):
+        pm_id = _get_request_pm_user_id(request)
+        if pm_id is None:
+            return Response(
+                {'detail': 'user_id is required to delete a report.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if _get_pm_user_or_none(pm_id) is None:
+            return Response(
+                {'detail': 'Invalid project manager user_id.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        try:
+            pk_int = int(pk)
+        except (TypeError, ValueError):
+            return Response(
+                {'detail': 'Invalid id.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        inst = models.SupervisorReportSubmission.objects.filter(pk=pk_int).first()
+        if inst is None:
+            return Response(
+                {'detail': 'Not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if inst.project.user_id != pm_id:
+            return Response(
+                {'detail': 'You can only delete reports for your own projects.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        inst.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 # Phase ViewSet
@@ -1751,6 +1964,245 @@ class PhaseViewSet(viewsets.ModelViewSet):
         if project_id:
             queryset = queryset.filter(project_id=project_id)
         return queryset
+
+    def destroy(self, request, *args, **kwargs):
+        phase = self.get_object()
+        err = check_phase_is_deletable(phase)
+        if err:
+            return Response({'error': err}, status=400)
+        return super().destroy(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        return self._update_with_completion_hook(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        return self._update_with_completion_hook(request, *args, partial=True, **kwargs)
+
+    def _update_with_completion_hook(self, request, *args, **kwargs):
+        """
+        Whenever a phase transitions into `completed`, auto-close all of
+        its active material plans (Policy A from design discussion).
+        The leftover summary is attached to the response body so the
+        PM UI can show a "returned to inventory" dialog.
+        """
+        phase = self.get_object()
+        previous_status = phase.status
+        response = super().update(request, *args, **kwargs)
+
+        if response.status_code < 300:
+            phase.refresh_from_db()
+            if previous_status != 'completed' and phase.status == 'completed':
+                leftovers = close_phase_material_plans(phase=phase)
+                if leftovers:
+                    # Splice the summary into the serializer payload so
+                    # the Flutter client can pick it up without a second
+                    # round-trip.
+                    data = response.data if isinstance(response.data, dict) else {}
+                    data.setdefault('material_plan_closure', {
+                        'phase_id': phase.phase_id,
+                        'closed_at': phase.updated_at,
+                        'leftovers': leftovers,
+                    })
+                    response.data = data
+        return response
+
+    @action(detail=True, methods=['post'], url_path='close-materials')
+    def close_materials(self, request, pk=None):
+        """
+        Explicit endpoint for closing a phase's material plans without
+        touching its status. Handy for phases that were already marked
+        completed before this feature shipped (or for a manual "end-of-
+        phase cleanup" button).
+        """
+        phase = self.get_object()
+        leftovers = close_phase_material_plans(phase=phase)
+        return Response({
+            'phase_id': phase.phase_id,
+            'leftovers': leftovers,
+        })
+
+    @action(detail=True, methods=['patch'], url_path='allocate-budget')
+    def allocate_budget(self, request, pk=None):
+        """
+        Set this phase's allocated_budget. Validates that the new allocation
+        does not push the project's total allocations above the project budget.
+        """
+        phase = self.get_object()
+        raw = request.data.get('allocated_budget')
+        if raw is None:
+            return Response({'error': 'allocated_budget is required'}, status=400)
+        try:
+            new_alloc = Decimal(str(raw))
+        except (InvalidOperation, TypeError):
+            return Response({'error': 'allocated_budget must be a number'}, status=400)
+
+        err = check_phase_allocation(phase, new_alloc)
+        if err:
+            return Response({'error': err}, status=400)
+
+        phase.allocated_budget = new_alloc
+        phase.save(update_fields=['allocated_budget', 'updated_at'])
+        return Response(PhaseSerializer(phase, context={'request': request}).data)
+
+    @action(detail=True, methods=['post'], url_path='record-usage')
+    def record_usage(self, request, pk=None):
+        """
+        Supervisor records actual material consumption for this phase.
+        Body:
+            inventory_item (id, required)
+            quantity (int, required)
+            supervisor_id (int, required)
+            field_worker_id (int, optional)
+            notes (str, optional)
+        """
+        phase = self.get_object()
+        item_id = request.data.get('inventory_item') or request.data.get('inventory_item_id')
+        qty = request.data.get('quantity') or request.data.get('quantity_used')
+        supervisor_id = request.data.get('supervisor_id') or request.data.get('checked_out_by')
+        field_worker_id = request.data.get('field_worker_id') or request.data.get('field_worker')
+        notes = request.data.get('notes', '') or ''
+
+        if phase.status == 'completed':
+            return Response(
+                {'error': 'This phase is completed — material usage can no longer be recorded.'},
+                status=400,
+            )
+        if not item_id:
+            return Response({'error': 'inventory_item is required'}, status=400)
+        if not supervisor_id:
+            return Response({'error': 'supervisor_id is required'}, status=400)
+        try:
+            qty = int(qty)
+        except (TypeError, ValueError):
+            return Response({'error': 'quantity must be an integer'}, status=400)
+        if qty <= 0:
+            return Response({'error': 'quantity must be positive'}, status=400)
+
+        item = models.InventoryItem.objects.filter(pk=item_id).first()
+        if not item:
+            return Response({'error': 'inventory_item not found'}, status=404)
+        supervisor = models.Supervisors.objects.filter(pk=supervisor_id).first()
+        if not supervisor:
+            return Response({'error': 'supervisor not found'}, status=404)
+        field_worker = None
+        if field_worker_id:
+            field_worker = models.FieldWorker.objects.filter(pk=field_worker_id).first()
+            if not field_worker:
+                return Response({'error': 'field_worker not found'}, status=404)
+
+        try:
+            usage, warnings = record_material_usage(
+                phase=phase,
+                inventory_item=item,
+                quantity=qty,
+                supervisor=supervisor,
+                field_worker=field_worker,
+                notes=notes,
+            )
+        except MaterialUsageError as e:
+            msg = getattr(e, 'message', None) or (e.messages[0] if getattr(e, 'messages', None) else str(e))
+            return Response({'error': msg}, status=400)
+
+        # Service rebinds phase/item internally via select_for_update; refresh the
+        # caller's references so the response reflects post-mutation DB state.
+        phase.refresh_from_db()
+        project = phase.project
+        project.refresh_from_db()
+
+        return Response(
+            {
+                'usage': InventoryUsageSerializer(usage, context={'request': request}).data,
+                'warnings': warnings,
+                'phase': PhaseSerializer(phase, context={'request': request}).data,
+                'project_remaining_budget': str(project.remaining_budget),
+            },
+            status=201,
+        )
+
+    @action(detail=True, methods=['get'], url_path='planned-vs-actual')
+    def planned_vs_actual(self, request, pk=None):
+        """
+        For each material planned for this phase, return planned vs actual
+        quantities and costs. Also includes actual-only usages (materials
+        that were consumed without a plan entry).
+        """
+        phase = self.get_object()
+        from django.db.models import Sum as _Sum
+
+        actual_rows = (
+            phase.usages.values('inventory_item_id', 'inventory_item__name')
+            .annotate(
+                actual_quantity=_Sum('quantity_used'),
+                actual_cost=_Sum('total_cost'),
+            )
+        )
+        actual_by_item = {
+            row['inventory_item_id']: row for row in actual_rows
+        }
+
+        results = []
+        seen_item_ids = set()
+        for plan in phase.material_plans.select_related('inventory_item').all():
+            item = plan.inventory_item
+            actual = actual_by_item.get(item.item_id, {})
+            planned_cost = plan.planned_cost
+            actual_qty = actual.get('actual_quantity') or 0
+            actual_cost = actual.get('actual_cost') or Decimal('0')
+            if plan.status == models.PhaseMaterialPlan.STATUS_CLOSED:
+                # Freeze the numbers at close time so the auditing view
+                # keeps showing what actually happened; "remaining" is
+                # always 0 because leftovers have been returned.
+                remaining = 0
+            else:
+                remaining = max(0, int(plan.planned_quantity or 0) - int(actual_qty or 0))
+            results.append({
+                'inventory_item_id': item.item_id,
+                'inventory_item_name': item.name,
+                'unit_of_measure': item.unit_of_measure or 'pcs',
+                'unit_price': str(item.price or Decimal('0')),
+                'planned_quantity': plan.planned_quantity,
+                'planned_cost': str(planned_cost),
+                'actual_quantity': actual_qty,
+                'actual_cost': str(actual_cost),
+                'remaining_quantity': remaining,
+                'quantity_variance': actual_qty - plan.planned_quantity,
+                'cost_variance': str(Decimal(str(actual_cost)) - Decimal(str(planned_cost))),
+                'has_plan': True,
+                'plan_status': plan.status,
+                'leftover_quantity': plan.leftover_quantity,
+                'closed_at': plan.closed_at,
+            })
+            seen_item_ids.add(item.item_id)
+
+        # Materials that were consumed but never planned
+        for row in actual_rows:
+            iid = row['inventory_item_id']
+            if iid in seen_item_ids or iid is None:
+                continue
+            item = models.InventoryItem.objects.filter(pk=iid).first()
+            results.append({
+                'inventory_item_id': iid,
+                'inventory_item_name': row['inventory_item__name'],
+                'unit_of_measure': (item.unit_of_measure if item else None) or 'pcs',
+                'unit_price': None,
+                'planned_quantity': 0,
+                'planned_cost': '0',
+                'actual_quantity': row['actual_quantity'] or 0,
+                'actual_cost': str(row['actual_cost'] or Decimal('0')),
+                'remaining_quantity': 0,
+                'quantity_variance': row['actual_quantity'] or 0,
+                'cost_variance': str(row['actual_cost'] or Decimal('0')),
+                'has_plan': False,
+            })
+
+        return Response({
+            'phase_id': phase.phase_id,
+            'phase_name': phase.phase_name,
+            'phase_status': phase.status,
+            'allocated_budget': str(phase.allocated_budget or Decimal('0')),
+            'used_budget': str(phase.used_budget or Decimal('0')),
+            'items': results,
+        })
 
 
 # Subtask ViewSet
@@ -2650,6 +3102,13 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         item = self.get_object()
+
+        # Block if there is budget history (usages charged to phase budgets)
+        # or the item is referenced by any phase material plan.
+        err = check_inventory_item_is_deletable(item)
+        if err:
+            return Response({'error': err}, status=400)
+
         assigned_count = item.units.exclude(current_project__isnull=True).count()
         if assigned_count > 0:
             return Response(
@@ -2701,22 +3160,36 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
         pm_user_id = _get_request_pm_user_id(self.request)
         supervisor_id = self.request.query_params.get('supervisor_id')
 
-        # Supervisor accessing inventory: show items assigned to projects
-        # the supervisor is assigned to.
+        # Supervisor accessing inventory. Two visibility rules:
+        #   - Tools / machines: project-scoped. A unit or the item itself
+        #     must be assigned to one of the supervisor's projects.
+        #   - Materials: shared "centralized inventory" owned by the PM who
+        #     runs the supervisor's project(s). Any material created by any
+        #     of those PMs is visible, regardless of per-item project link.
         if supervisor_id:
             try:
                 sv = models.Supervisors.objects.get(supervisor_id=int(supervisor_id))
             except (models.Supervisors.DoesNotExist, ValueError, TypeError):
                 return models.InventoryItem.objects.none()
-            # Find project IDs the supervisor is assigned to
+
+            assigned_projects = models.Project.objects.filter(
+                Q(supervisor_id=sv.supervisor_id)
+                | Q(supervisors__supervisor_id=sv.supervisor_id)
+            ).distinct()
             project_ids = list(
-                models.Project.objects
-                .filter(supervisor_id=sv.supervisor_id)
-                .values_list('project_id', flat=True)
+                assigned_projects.values_list('project_id', flat=True)
             )
+            pm_user_ids = list(
+                assigned_projects
+                .exclude(user_id__isnull=True)
+                .values_list('user_id', flat=True)
+                .distinct()
+            )
+
             return models.InventoryItem.objects.filter(
                 Q(units__current_project_id__in=project_ids)
                 | Q(project_id__in=project_ids)
+                | (Q(item_type='Material') & Q(created_by_id__in=pm_user_ids))
             ).distinct()
 
         # PM accessing inventory
@@ -2754,6 +3227,34 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
                 save_kwargs['project'] = project
             except (models.Project.DoesNotExist, ValueError, TypeError):
                 pass
+
+        # Classify the item. We accept the display `category` the PM picked in
+        # the UI ("Material", "Tools", "Machines") and map it to the canonical
+        # `item_type` column used by the budget / usage flow.
+        category_raw = (self.request.data.get('category') or '').strip()
+        category_key = category_raw.lower().rstrip('s')
+        if category_key == 'material':
+            item_type = 'Material'
+        elif category_key == 'machine':
+            item_type = 'Machine'
+        else:
+            item_type = 'Tool'
+        save_kwargs['item_type'] = item_type
+
+        unit_of_measure = (
+            (self.request.data.get('unit_of_measure') or '').strip() or None
+        )
+        if unit_of_measure is None:
+            unit_of_measure = 'pc' if item_type == 'Material' else 'pcs'
+        save_kwargs['unit_of_measure'] = unit_of_measure
+
+        # Materials are bulk consumables (e.g. cement, rebar) and must NOT be
+        # tracked via InventoryUnit rows — their stock is the scalar `quantity`
+        # field on InventoryItem, consumed by the material-usage service.
+        if item_type == 'Material':
+            save_kwargs['quantity'] = quantity
+            serializer.save(**save_kwargs)
+            return
 
         item = serializer.save(**save_kwargs)
 
@@ -3346,16 +3847,43 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
         })
 
 
+class PhaseMaterialPlanViewSet(viewsets.ModelViewSet):
+    """
+    CRUD for planned materials per phase.
+    Query params:
+        phase_id     - filter by phase
+        project_id   - filter by project (joined through phase)
+    Creating a plan entry for an (phase, inventory_item) pair that already
+    exists will return 400 because of unique_together; clients should PATCH
+    the existing plan_id instead.
+    """
+    serializer_class = PhaseMaterialPlanSerializer
+
+    def get_queryset(self):
+        qs = models.PhaseMaterialPlan.objects.select_related(
+            'phase', 'inventory_item'
+        ).order_by('phase_id', 'inventory_item_id')
+        phase_id = self.request.query_params.get('phase_id')
+        project_id = self.request.query_params.get('project_id')
+        if phase_id:
+            qs = qs.filter(phase_id=phase_id)
+        if project_id:
+            qs = qs.filter(phase__project_id=project_id)
+        return qs
+
+
 class InventoryUsageViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = InventoryUsageSerializer
 
     def get_queryset(self):
         qs = models.InventoryUsage.objects.select_related(
-            'inventory_item', 'checked_out_by'
+            'inventory_item', 'checked_out_by', 'phase'
         )
         pm_user_id = _get_request_pm_user_id(self.request)
         supervisor_id = self.request.query_params.get('supervisor_id')
         usage_status = self.request.query_params.get('status')
+        phase_id = self.request.query_params.get('phase_id')
+        project_id = self.request.query_params.get('project_id')
 
         if supervisor_id:
             qs = qs.filter(checked_out_by_id=int(supervisor_id))
@@ -3366,4 +3894,8 @@ class InventoryUsageViewSet(viewsets.ReadOnlyModelViewSet):
 
         if usage_status:
             qs = qs.filter(status=usage_status)
+        if phase_id:
+            qs = qs.filter(phase_id=phase_id)
+        if project_id:
+            qs = qs.filter(project_id=project_id)
         return qs
