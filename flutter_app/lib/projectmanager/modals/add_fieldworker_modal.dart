@@ -26,6 +26,7 @@ class AddFieldWorkerModal extends StatefulWidget {
 }
 
 class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
+  static const double _standardHoursPerDay = 8;
   static const double _standardHoursPerWeek = 48;
 
   final _formKey = GlobalKey<FormState>();
@@ -39,6 +40,9 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
   final _philHealthTopupController = TextEditingController();
   final _pagIbigTopupController = TextEditingController();
   final _customRoleController = TextEditingController();
+
+  /// 'hour' or 'day' — UI-only. Backend always stores the hourly rate.
+  String _rateUnit = 'hour';
 
   String _selectedRole = 'Mason';
   bool _isCustomRole = false;
@@ -113,7 +117,19 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
     return _round2((monthlyEmployeeShare * 12) / 52);
   }
 
-  double get _hourlyPayrate => math.max(0, _readMoney(_payrateController));
+  /// Raw number typed by the user, as a non-negative amount.
+  double get _enteredAmount => math.max(0, _readMoney(_payrateController));
+
+  /// Always resolve to an hourly rate for storage / downstream computations.
+  double get _hourlyPayrate => _rateUnit == 'day'
+      ? _round2(_enteredAmount / _standardHoursPerDay)
+      : _round2(_enteredAmount);
+
+  /// The per-day equivalent of whatever the user entered.
+  double get _dailyPayrate => _rateUnit == 'day'
+      ? _round2(_enteredAmount)
+      : _round2(_enteredAmount * _standardHoursPerDay);
+
   double get _weeklySalary => _round2(_hourlyPayrate * _standardHoursPerWeek);
   double get _sssTopup => math.max(0, _readMoney(_sssTopupController));
   double get _philHealthTopup =>
@@ -1239,21 +1255,62 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
         style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
       ),
       SizedBox(height: spacing),
+      _buildRateUnitToggle(),
+      const SizedBox(height: 8),
       _buildTextField(
         controller: _payrateController,
-        hintText: 'Payrate Per Hour',
-        keyboardType: TextInputType.number,
+        hintText: _rateUnit == 'day' ? 'Payrate Per Day' : 'Payrate Per Hour',
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
         onChanged: (_) => setState(() {}),
         validator: (value) {
           final amount = double.tryParse(
             (value ?? '').trim().replaceAll(',', ''),
           );
           if (amount == null || amount <= 0) {
-            return 'Hourly payrate is required';
+            return _rateUnit == 'day'
+                ? 'Daily payrate is required'
+                : 'Hourly payrate is required';
           }
           return null;
         },
       ),
+      if (_rateUnit == 'day' && _enteredAmount > 0) ...[
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFEFF6FF),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFBFDBFE)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'PHP ${_dailyPayrate.toStringAsFixed(2)} / day '
+                '÷ ${_standardHoursPerDay.toStringAsFixed(0)} hrs '
+                '= PHP ${_hourlyPayrate.toStringAsFixed(2)} / hour',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1E3A8A),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Stored as hourly rate so weekly salary '
+                '(${_standardHoursPerWeek.toStringAsFixed(0)} hrs/wk) '
+                'and deductions stay consistent.',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Color(0xFF1E40AF),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
       SizedBox(height: spacing),
       Container(
         width: double.infinity,
@@ -1430,6 +1487,60 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
         ),
       ],
     ];
+  }
+
+  Widget _buildRateUnitToggle() {
+    Widget buildSegment(String value, String label) {
+      final isActive = _rateUnit == value;
+      return Expanded(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(6),
+          onTap: () {
+            if (_rateUnit == value) return;
+            setState(() {
+              _rateUnit = value;
+            });
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: isActive ? const Color(0xFFFF7A18) : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: isActive ? Colors.white : const Color(0xFF6B7280),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF3F4F6),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+            ),
+            child: Row(
+              children: [
+                buildSegment('hour', 'Per hour'),
+                buildSegment('day', 'Per day'),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildDeductionRow(String label, double value) {

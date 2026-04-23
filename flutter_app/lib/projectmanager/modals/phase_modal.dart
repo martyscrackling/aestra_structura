@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../services/app_config.dart';
+import '../../services/budget_service.dart';
 import '../../services/subscription_helper.dart';
 
 class PhaseModal extends StatefulWidget {
@@ -23,6 +25,7 @@ class _PhaseModalState extends State<PhaseModal> {
 
   final _descriptionController = TextEditingController();
   final _daysDurationController = TextEditingController();
+  final _allocatedBudgetController = TextEditingController();
   final _customPhaseController = TextEditingController();
 
   String? _selectedPhase;
@@ -35,6 +38,11 @@ class _PhaseModalState extends State<PhaseModal> {
   bool _showSubtaskError = false;
   bool _useCustomPhase = false;
   bool _isLoadingExistingPhases = true;
+  bool _isLoadingBudget = true;
+  /// From `/projects/{id}/budget-summary/` (project total and sum of existing phases).
+  double? _projectTotalBudget;
+  double _otherPhasesAllocated = 0;
+  String? _budgetWarning;
 
   final List<String> _phases = [
     'PHASE 1 - Pre-Construction Phase',
@@ -52,6 +60,7 @@ class _PhaseModalState extends State<PhaseModal> {
     _subtaskControllers.add(TextEditingController());
     _fetchProjectDuration();
     _fetchExistingPhases();
+    _fetchBudgetForAllocation();
   }
 
   Future<void> _fetchProjectDuration() async {
@@ -68,12 +77,68 @@ class _PhaseModalState extends State<PhaseModal> {
         setState(() {
           _projectDurationDays = parsed;
         });
+        _recomputeDurationWarning();
       }
     } catch (e) {
       // Silently fail; modal can still work without duration validation.
       // ignore: avoid_print
       print('Error fetching project duration: $e');
     }
+  }
+
+  Future<void> _fetchBudgetForAllocation() async {
+    try {
+      final summary = await BudgetService.getBudgetSummary(
+        projectId: widget.projectId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _projectTotalBudget = (summary['total_budget'] as num?)?.toDouble();
+        _otherPhasesAllocated =
+            (summary['total_allocated'] as num?)?.toDouble() ?? 0.0;
+        _isLoadingBudget = false;
+      });
+      _recomputeBudgetWarning();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingBudget = false;
+        });
+      }
+      // ignore: avoid_print
+      print('Error fetching budget summary: $e');
+    }
+  }
+
+  /// Room left in the project budget for *this* new phase (others already counted).
+  double? get _roomLeftForNewPhase {
+    final t = _projectTotalBudget;
+    if (t == null) return null;
+    return (t - _otherPhasesAllocated).clamp(0.0, double.infinity);
+  }
+
+  /// Null when the field is empty or not a number (use after validation).
+  double? _parseAllocAmount() {
+    final raw = _allocatedBudgetController.text.trim().replaceAll(',', '');
+    if (raw.isEmpty) return null;
+    return double.tryParse(raw);
+  }
+
+  void _recomputeBudgetWarning() {
+    setState(() {
+      _budgetWarning = _computeBudgetWarningSync();
+    });
+  }
+
+  String? _computeBudgetWarningSync() {
+    final max = _roomLeftForNewPhase;
+    if (max == null) return null;
+    final v = _parseAllocAmount();
+    if (v == null) return null;
+    if (v > max) {
+      return 'Exceeds available budget for a new phase. You can assign up to ₱${max.toStringAsFixed(2)}.';
+    }
+    return null;
   }
 
   Future<void> _fetchExistingPhases() async {
@@ -109,43 +174,51 @@ class _PhaseModalState extends State<PhaseModal> {
     }
   }
 
-  void _recomputeDurationWarning() {
-    final projectDays = _projectDurationDays;
-    final enteredDays = int.tryParse(_daysDurationController.text.trim());
+  static const String _kScheduleExhaustedMessage =
+      'All project days are already allocated. Increase the project duration or adjust an existing phase before adding a new phase.';
 
-    if (projectDays == null || projectDays <= 0) {
-      setState(() {
-        _durationWarning = null;
-      });
-      return;
+  /// True when the sum of existing phase days has used the full project duration
+  /// (or more). In that case no new phase may be added.
+  bool get _isScheduleExhausted {
+    final p = _projectDurationDays;
+    if (p == null) return false;
+    return p - _existingPhasesDurationDays <= 0;
+  }
+
+  String? _computeDurationWarningSync() {
+    final projectDays = _projectDurationDays;
+    if (projectDays == null) {
+      return null;
     }
 
+    final remainingBeforeNew = projectDays - _existingPhasesDurationDays;
+    if (remainingBeforeNew <= 0) {
+      return _kScheduleExhaustedMessage;
+    }
+
+    final enteredDays = int.tryParse(_daysDurationController.text.trim());
     if (enteredDays == null) {
-      setState(() {
-        _durationWarning = null;
-      });
-      return;
+      return null;
     }
 
     final total = _existingPhasesDurationDays + enteredDays;
-    final remaining = projectDays - _existingPhasesDurationDays;
-
     if (total > projectDays) {
-      setState(() {
-        _durationWarning =
-            'Not valid: phase duration exceeds project duration. Remaining: $remaining days.';
-      });
-    } else {
-      setState(() {
-        _durationWarning = null;
-      });
+      return 'Not valid: phase duration exceeds project duration. Remaining: $remainingBeforeNew days.';
     }
+    return null;
+  }
+
+  void _recomputeDurationWarning() {
+    setState(() {
+      _durationWarning = _computeDurationWarningSync();
+    });
   }
 
   @override
   void dispose() {
     _descriptionController.dispose();
     _daysDurationController.dispose();
+    _allocatedBudgetController.dispose();
     _customPhaseController.dispose();
     for (var controller in _subtaskControllers) {
       controller.dispose();
@@ -174,6 +247,10 @@ class _PhaseModalState extends State<PhaseModal> {
       final item = _subtaskControllers.removeAt(oldIndex);
       _subtaskControllers.insert(newIndex, item);
     });
+  }
+
+  String _formatMoney(double v) {
+    return v.toStringAsFixed(2);
   }
 
   bool _isLoading = false;
@@ -208,11 +285,25 @@ class _PhaseModalState extends State<PhaseModal> {
       _showSubtaskError = false;
     });
 
-    if (_durationWarning != null) {
+    final durationWarning = _computeDurationWarningSync();
+    if (durationWarning != null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_durationWarning!),
+            content: Text(durationWarning),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    final budgetErr = _computeBudgetWarningSync();
+    if (budgetErr != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(budgetErr),
             backgroundColor: Colors.red,
           ),
         );
@@ -239,6 +330,19 @@ class _PhaseModalState extends State<PhaseModal> {
       // Get the phase name
       final phaseName = _useCustomPhase ? _customPhaseController.text.trim() : _selectedPhase;
 
+      final alloc = _parseAllocAmount();
+      if (alloc == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Allocated budget is required'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
       // Prepare phase data
       final phaseData = {
         'project': widget.projectId,
@@ -248,6 +352,7 @@ class _PhaseModalState extends State<PhaseModal> {
             ? int.tryParse(_daysDurationController.text)
             : null,
         'status': 'not_started',
+        'allocated_budget': alloc,
         'subtasks': subtasks,
       };
 
@@ -303,6 +408,12 @@ class _PhaseModalState extends State<PhaseModal> {
     final remainingDays = (projectDays == null)
         ? null
         : (projectDays - _existingPhasesDurationDays);
+    final roomLeft = _roomLeftForNewPhase;
+    final projectBudgetStr = _projectTotalBudget == null
+        ? '—'
+        : '₱${_formatMoney(_projectTotalBudget!)}';
+    final allocatedStr = '₱${_formatMoney(_otherPhasesAllocated)}';
+    final roomStr = roomLeft == null ? '—' : '₱${_formatMoney(roomLeft)}';
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -534,6 +645,17 @@ class _PhaseModalState extends State<PhaseModal> {
                                 : Colors.grey,
                           ),
                         ),
+                        if (remainingDays != null && remainingDays <= 0) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'No days are left in the project schedule. You cannot add another phase until you increase the project duration or free days on an existing phase.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              height: 1.35,
+                              color: Colors.orange.shade900,
+                            ),
+                          ),
+                        ],
                       ],
                       const SizedBox(height: 12),
                       TextFormField(
@@ -541,6 +663,14 @@ class _PhaseModalState extends State<PhaseModal> {
                         keyboardType: TextInputType.number,
                         onChanged: (_) => _recomputeDurationWarning(),
                         validator: (value) {
+                          final pd = _projectDurationDays;
+                          if (pd != null) {
+                            final rem = pd - _existingPhasesDurationDays;
+                            if (rem <= 0) {
+                              return 'No days left in the schedule. Adjust project or phase durations first.';
+                            }
+                          }
+
                           final trimmed = (value ?? '').trim();
                           if (trimmed.isEmpty) return null;
 
@@ -549,8 +679,7 @@ class _PhaseModalState extends State<PhaseModal> {
                             return 'Please enter a valid number of days';
                           }
 
-                          final pd = _projectDurationDays;
-                          if (pd == null || pd <= 0) return null;
+                          if (pd == null) return null;
 
                           final total = _existingPhasesDurationDays + days;
                           if (total > pd) {
@@ -599,6 +728,123 @@ class _PhaseModalState extends State<PhaseModal> {
                           ),
                         ),
                       ),
+
+                      const SizedBox(height: 20),
+                      // Phase budget (new phase share of project budget)
+                      const Text(
+                        'Phase budget',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 6),
+                      if (_isLoadingBudget)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            'Loading project budget…',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF6B7280),
+                            ),
+                          ),
+                        )
+                      else ...[
+                        Text(
+                          'Project budget: $projectBudgetStr · '
+                          'Already allocated: $allocatedStr · '
+                          'You can assign up to: $roomStr',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF6B7280),
+                            height: 1.35,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _allocatedBudgetController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'[0-9.,]'),
+                            ),
+                          ],
+                          onChanged: (_) => _recomputeBudgetWarning(),
+                          autovalidateMode: AutovalidateMode.onUserInteraction,
+                          validator: (value) {
+                            final max = _roomLeftForNewPhase;
+                            final raw = (value ?? '')
+                                .trim()
+                                .replaceAll(',', '');
+                            if (raw.isEmpty) {
+                              return 'Allocated budget is required';
+                            }
+                            final am = double.tryParse(raw);
+                            if (am == null) {
+                              return 'Enter a valid amount';
+                            }
+                            if (am < 0) return 'Cannot be negative';
+                            if (max != null && am > max) {
+                              return 'Cannot exceed available ₱${_formatMoney(max)}';
+                            }
+                            return null;
+                          },
+                          decoration: InputDecoration(
+                            labelText: 'ALLOCATED BUDGET FOR THIS PHASE (PHP) *',
+                            labelStyle: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                            ),
+                            hintText: '0.00',
+                            filled: true,
+                            fillColor: const Color(0xFFF9FAFB),
+                            prefixText: '₱ ',
+                            helperText: _budgetWarning,
+                            helperStyle: TextStyle(
+                              color: _budgetWarning != null
+                                  ? Colors.red
+                                  : Colors.grey.shade600,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: const BorderSide(
+                                color: Color(0xFFE5E7EB),
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: const BorderSide(
+                                color: Color(0xFFE5E7EB),
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: const BorderSide(
+                                color: Color(0xFF0C1935),
+                                width: 2,
+                              ),
+                            ),
+                            errorBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: const BorderSide(
+                                color: Colors.red,
+                                width: 1.5,
+                              ),
+                            ),
+                            focusedErrorBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: const BorderSide(
+                                color: Colors.red,
+                                width: 2,
+                              ),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                          ),
+                        ),
+                      ],
 
                       const SizedBox(height: 16),
 
@@ -767,7 +1013,12 @@ class _PhaseModalState extends State<PhaseModal> {
                 children: [
                   const Spacer(),
                   ElevatedButton(
-                    onPressed: _isLoading ? null : _submitPhase,
+                    onPressed: (_isLoading ||
+                            _isLoadingExistingPhases ||
+                            _isLoadingBudget ||
+                            _isScheduleExhausted)
+                        ? null
+                        : _submitPhase,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFFF7A18),
                       padding: const EdgeInsets.symmetric(

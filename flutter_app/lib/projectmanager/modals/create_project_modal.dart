@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'dart:io';
 import '../../services/auth_service.dart';
 import '../../services/app_config.dart';
+import '../../services/app_time_service.dart';
 import '../../services/date_utils.dart' as ph_date_utils;
 
 class CreateProjectModal extends StatefulWidget {
@@ -483,7 +484,9 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
 
         final response = await http
             .post(
-              AppConfig.apiUri('projects/'),
+              AppConfig.apiUri(
+                AppTimeService.withAsOfQuery('projects/'),
+              ),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode(payload),
             )

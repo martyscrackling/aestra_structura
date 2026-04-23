@@ -20,6 +20,10 @@ class ProjectDetailsPage extends StatefulWidget {
   final int projectId;
   final bool useResponsiveLayout;
 
+  /// True for archived projects and any [completed] project: project plan is view-only
+  /// (no add phase, no budget allocation changes from this UI).
+  final bool viewOnly;
+
   const ProjectDetailsPage({
     super.key,
     required this.projectTitle,
@@ -29,6 +33,7 @@ class ProjectDetailsPage extends StatefulWidget {
     this.budget,
     required this.projectId,
     this.useResponsiveLayout = true,
+    this.viewOnly = false,
   });
 
   @override
@@ -140,7 +145,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
 
   void _onTestTimeChanged() {
     if (!mounted) return;
-    setState(() {});
+    _fetchProjectDetails();
   }
 
   int? _toInt(dynamic value) {
@@ -343,10 +348,15 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
 
       // First fetch project details to get client_id
       final candidateProjectUrls = <String>[
-        if (userId != null) 'projects/${widget.projectId}/?user_id=$userId',
+        if (userId != null)
+          AppTimeService.withAsOfQuery(
+            'projects/${widget.projectId}/?user_id=$userId',
+          ),
         if (authProjectId != null)
-          'projects/${widget.projectId}/?project_id=$authProjectId',
-        'projects/${widget.projectId}/',
+          AppTimeService.withAsOfQuery(
+            'projects/${widget.projectId}/?project_id=$authProjectId',
+          ),
+        AppTimeService.withAsOfQuery('projects/${widget.projectId}/'),
       ];
 
       http.Response? projectResponse;
@@ -908,13 +918,18 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                                 budget: widget.budget,
                                 projectId: widget.projectId,
                                 projectStartDate: _projectInfo?['start_date'],
+                                viewOnly: widget.viewOnly,
                               ),
                         ),
                       );
                       await _refreshProjectPlanPreview();
                     },
                     icon: const Icon(Icons.arrow_forward, size: 16),
-                    label: const Text("Manage Project Plan"),
+                    label: Text(
+                      widget.viewOnly
+                          ? "View Project Plan"
+                          : "Manage Project Plan",
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.black,
                       foregroundColor: Colors.white,
@@ -1184,16 +1199,11 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     );
   }
 
+  /// Active or auto Overdue: same actions (hold / deactivate).
   bool _isProjectActive() {
     final status =
         _projectInfo?['status']?.toString().toLowerCase() ?? 'active';
-    return status == 'active';
-  }
-
-  bool _isProjectOnHold() {
-    final status =
-        _projectInfo?['status']?.toString().toLowerCase() ?? 'active';
-    return status == 'on hold';
+    return status == 'active' || status == 'overdue';
   }
 
   void _showDeactivationModal() {
@@ -1218,9 +1228,9 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
             ),
             if (isActive)
               TextButton(
-                onPressed: () async {
+                onPressed: () {
                   Navigator.of(context).pop();
-                  await _setProjectStatus('On Hold');
+                  _showOnHoldReasonDialog();
                 },
                 child: const Text(
                   'Hold the Project',
@@ -1255,55 +1265,105 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     );
   }
 
-  Future<void> _setProjectStatus(String targetStatus) async {
+  void _showOnHoldReasonDialog() {
+    final controller = TextEditingController();
+    showDialog<void>(
+      context: context,
+      builder: (BuildContext ctx) {
+        return AlertDialog(
+          title: const Text('Place project on hold'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              labelText: 'Reason',
+              hintText: 'Why is this project being put on hold?',
+            ),
+            maxLines: 3,
+            autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () async {
+                final t = controller.text.trim();
+                if (t.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please provide a reason.'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                  return;
+                }
+                Navigator.of(ctx).pop();
+                await _setProjectStatus('On Hold', onHoldReason: t);
+              },
+              child: const Text(
+                'Confirm hold',
+                style: TextStyle(color: Colors.orange),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _setProjectStatus(
+    String targetStatus, {
+    String? onHoldReason,
+  }) async {
     try {
       final authUser = AuthService().currentUser;
       final userId = authUser?['user_id'];
 
-      // Get the current status
-      final currentStatus = _projectInfo?['status']?.toString() ?? 'Active';
-      final url = userId != null
-          ? 'projects/${widget.projectId}/deactivate/?user_id=$userId'
-          : 'projects/${widget.projectId}/deactivate/';
+      final path = 'projects/${widget.projectId}/set-status/';
+      final url = userId != null ? '$path?user_id=$userId' : path;
 
-      // Keep calling deactivate until we reach the target status
-      var currentStatusLoop = currentStatus;
-      while (currentStatusLoop != targetStatus) {
-        final response = await http.post(AppConfig.apiUri(url));
-
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-          currentStatusLoop = data['status'] ?? 'Unknown';
-
-          if (currentStatusLoop == targetStatus) {
-            if (!mounted) return;
-
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Project status changed to: $targetStatus'),
-                backgroundColor: Colors.green,
-              ),
-            );
-
-            setState(() {
-              _projectInfo?['status'] = targetStatus;
-            });
-            break;
-          }
-        } else {
-          if (!mounted) return;
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Failed to change project status (${response.statusCode})',
-              ),
-              backgroundColor: Colors.red,
-            ),
-          );
-          break;
-        }
+      final body = <String, dynamic>{'status': targetStatus};
+      if (onHoldReason != null && onHoldReason.isNotEmpty) {
+        body['on_hold_reason'] = onHoldReason;
       }
+
+      final response = await http.post(
+        AppConfig.apiUri(url),
+        headers: const {'Content-Type': 'application/json; charset=utf-8'},
+        body: jsonEncode(body),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Project status changed to: $targetStatus'),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        setState(() {
+          _projectInfo = data;
+        });
+        return;
+      }
+
+      if (!mounted) return;
+      var msg = 'Failed to change project status (${response.statusCode})';
+      try {
+        final err = jsonDecode(response.body);
+        if (err is Map && err['detail'] != null) {
+          msg = err['detail'].toString();
+        }
+      } catch (_) {}
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: Colors.red),
+      );
     } catch (e) {
       if (!mounted) return;
 

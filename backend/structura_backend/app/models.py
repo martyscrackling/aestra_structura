@@ -247,6 +247,7 @@ class Project(models.Model):
     STATUS_CHOICES = [
         ('Active', 'Active'),
         ('On Hold', 'On Hold'),
+        ('Overdue', 'Overdue'),
         ('Completed', 'Completed'),
         ('Deactivated', 'Deactivated'),
     ]
@@ -273,6 +274,7 @@ class Project(models.Model):
     supervisor = models.ForeignKey('Supervisors', on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_projects')
     budget = models.DecimalField(max_digits=12, decimal_places=2)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Active')
+    on_hold_reason = models.TextField(blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
 
     def get_progress(self):
@@ -290,12 +292,73 @@ class Project(models.Model):
         
         return completed_subtasks / total_subtasks
 
+    def get_scheduled_end_date(self):
+        """
+        Prefer explicit end_date; if missing, use start_date + duration_days when set.
+        """
+        if self.end_date is not None:
+            return self.end_date
+        if self.start_date is not None and self.duration_days:
+            from datetime import timedelta
+
+            return self.start_date + timedelta(days=int(self.duration_days))
+        return None
+
+    def is_past_scheduled_end(self, as_of=None):
+        from datetime import date, datetime as py_datetime
+
+        from django.utils import timezone
+
+        if as_of is None:
+            as_of = timezone.localdate()
+        elif isinstance(as_of, py_datetime):
+            as_of = as_of.date()
+        elif not isinstance(as_of, date):
+            as_of = timezone.localdate()
+        end = self.get_scheduled_end_date()
+        if end is None:
+            return False
+        return as_of > end
+
+    def refresh_overdue_status(self, as_of_date=None):
+        """
+        Set Overdue when today is after the scheduled end and the project is not finished.
+        Scheduled end: end_date, or start_date + duration_days if end_date is not set.
+        Skips: Completed, Deactivated, On Hold. Not overdue when all subtasks are done (100%).
+
+        as_of_date: optional date for "as of" calculations (e.g. Flutter Test Time via ?as_of=).
+        """
+        if self.get_progress() >= 1.0 and self.status != 'Completed':
+            self.update_status_based_on_progress()
+        if self.status in ('Completed', 'Deactivated', 'On Hold'):
+            return False
+        if self.status not in ('Active', 'Overdue'):
+            return False
+
+        should_overdue = (
+            self.is_past_scheduled_end(as_of=as_of_date) and self.get_progress() < 1.0
+        )
+
+        if should_overdue:
+            if self.status != 'Overdue':
+                self.status = 'Overdue'
+                self.save(update_fields=['status'])
+                return True
+            return False
+
+        if self.status == 'Overdue' and not should_overdue:
+            self.status = 'Active'
+            self.save(update_fields=['status'])
+            return True
+        return False
+
     def update_status_based_on_progress(self):
         """Automatically update status to Completed if progress reaches 100%"""
         progress = self.get_progress()
         if progress >= 1.0 and self.status != 'Completed':
             self.status = 'Completed'
-            self.save(update_fields=['status'])
+            self.on_hold_reason = ''
+            self.save(update_fields=['status', 'on_hold_reason'])
             return True
         return False
 
@@ -557,7 +620,7 @@ class SupervisorReportSubmission(models.Model):
         ordering = ['-updated_at']
 
     def __str__(self):
-        return f"SupervisorReportSubmission {self.submission_id} (project {self.project_id_id})"
+        return f"SupervisorReportSubmission {self.submission_id} (project {self.project_id})"
 
 
 # Phase Model

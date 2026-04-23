@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
 import 'widgets/responsive_page_layout.dart';
+import 'project_details_page.dart' show ProjectTaskDetailsPage;
 import '../services/auth_service.dart';
 import '../services/app_config.dart';
 
@@ -935,6 +936,32 @@ class ProjectOverviewCard extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (data.status.toLowerCase() == 'on hold' &&
+                    data.onHoldReason.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.info_outline,
+                        size: 16,
+                        color: Color(0xFFFF7A18),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          data.onHoldReason,
+                          style: TextStyle(
+                            fontSize: 12,
+                            height: 1.3,
+                            color: Colors.grey[600],
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 12),
                 Row(
                   children: [
@@ -1080,8 +1107,22 @@ class ProjectListPanel extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 16),
               child: GestureDetector(
                 onTap: () {
-                  // Navigate to project details if needed
-                  print('📌 Tapped project: ${item.title}');
+                  final safeImage = item.image.trim().isNotEmpty
+                      ? item.image
+                      : 'assets/images/engineer.jpg';
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (context) => ProjectTaskDetailsPage(
+                        projectTitle: item.title,
+                        projectLocation: item.location,
+                        projectImage: safeImage,
+                        progress: item.progress,
+                        budget: item.budget,
+                        projectId: item.projectId,
+                        viewOnly: true,
+                      ),
+                    ),
+                  );
                 },
                 child: ProjectOverviewCard(data: item),
               ),
@@ -1098,6 +1139,7 @@ class ProjectOverviewData {
     required this.projectId,
     required this.title,
     required this.status,
+    this.onHoldReason = '',
     required this.location,
     required this.startDate,
     required this.endDate,
@@ -1113,6 +1155,7 @@ class ProjectOverviewData {
   final int projectId;
   final String title;
   final String status;
+  final String onHoldReason;
   final String location;
   final String startDate;
   final String endDate;

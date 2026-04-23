@@ -7,8 +7,10 @@ import 'widgets/responsive_page_layout.dart';
 import 'widgets/budget_overview_card.dart';
 import 'modals/task_details_modal.dart';
 import 'modals/phase_modal.dart';
+import 'modals/allocate_phase_budget_modal.dart';
 import 'subtask_manage.dart';
 import '../services/app_config.dart';
+import '../services/budget_service.dart';
 
 class Phase {
   final int phaseId;
@@ -65,6 +67,20 @@ class Phase {
     if (subtasks.isEmpty) return 1.0;
     final completed = subtasks.where((s) => s.status == 'completed').length;
     return completed / subtasks.length;
+  }
+
+  /// PM cannot add/change subtask workers when the phase is completed, or when
+  /// every subtask is already completed (only view assignees).
+  bool get isWorkerAssignmentLocked {
+    if (status.toLowerCase().trim() == 'completed') {
+      return true;
+    }
+    if (subtasks.isEmpty) {
+      return false;
+    }
+    return subtasks.every(
+      (s) => s.status.toLowerCase().trim() == 'completed',
+    );
   }
 }
 
@@ -219,6 +235,10 @@ class ProjectTaskDetailsPage extends StatefulWidget {
   final int projectId;
   final String? projectStartDate;
 
+  /// When true: show phases, subtasks, budget (read-only); no add phase or allocations. Set for archived
+  /// and for any [completed] project opened from the main project list.
+  final bool viewOnly;
+
   const ProjectTaskDetailsPage({
     super.key,
     required this.projectTitle,
@@ -228,6 +248,7 @@ class ProjectTaskDetailsPage extends StatefulWidget {
     this.budget,
     required this.projectId,
     this.projectStartDate,
+    this.viewOnly = false,
   });
 
   @override
@@ -422,6 +443,75 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
         }
       } catch (e) {
         debugPrint('Error editing phase: $e');
+      }
+    }
+  }
+
+  Future<void> _openAllocatePhaseBudget(Phase phase) async {
+    try {
+      final summary = await BudgetService.getBudgetSummary(
+        projectId: widget.projectId,
+      );
+      if (!mounted) return;
+      final total = (summary['total_budget'] as num?)?.toDouble() ?? 0.0;
+      final totAlloc =
+          (summary['total_allocated'] as num?)?.toDouble() ?? 0.0;
+      final phases = (summary['phases'] as List?) ?? [];
+      Map<String, dynamic>? found;
+      for (final p in phases) {
+        if (p is Map && (p['phase_id'] as int) == phase.phaseId) {
+          found = Map<String, dynamic>.from(p);
+          break;
+        }
+      }
+      if (found == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Could not load this phase in the budget summary.'),
+            ),
+          );
+        }
+        return;
+      }
+      final row = found;
+      final thisAlloc =
+          (row['allocated_budget'] as num?)?.toDouble() ?? 0.0;
+      final other = totAlloc - thisAlloc;
+      final usedInPhase =
+          (row['used_budget'] as num?)?.toDouble() ?? 0.0;
+      final updated = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (_) => AllocatePhaseBudgetModal(
+          phaseId: phase.phaseId,
+          phaseName: phase.phaseName,
+          currentAllocation: thisAlloc,
+          phaseUsedBudget: usedInPhase,
+          projectBudget: total,
+          otherPhasesAllocated: other,
+        ),
+      );
+      if (updated != null) {
+        _budgetCardKey.currentState?.reload();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Phase budget updated'),
+            ),
+          );
+        }
+      }
+    } on BudgetApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
       }
     }
   }
@@ -779,6 +869,7 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
               key: _budgetCardKey,
               projectId: widget.projectId,
               projectName: widget.projectTitle,
+              viewOnly: widget.viewOnly,
             ),
             const SizedBox(height: 20),
 
@@ -833,27 +924,40 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
             ),
             const SizedBox(height: 20),
 
-            // Tabs
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _TabButton(
-                  label: 'Add Phase',
-                  icon: Icons.list,
-                  isSelected: true,
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) => PhaseModal(
-                        projectTitle: widget.projectTitle,
-                        projectId: widget.projectId,
-                      ),
-                    ).then((_) => _fetchPhases());
-                  },
+            if (!widget.viewOnly)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _TabButton(
+                    label: 'Add Phase',
+                    icon: Icons.list,
+                    isSelected: true,
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => PhaseModal(
+                          projectTitle: widget.projectTitle,
+                          projectId: widget.projectId,
+                        ),
+                      ).then((_) => _fetchPhases());
+                    },
+                  ),
+                ],
+              )
+            else
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 4),
+                child: Text(
+                  'This project is completed — read-only. You can view phases, subtasks, and budget, but you cannot add phases or change allocations.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF6B7280),
+                    height: 1.35,
+                  ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 24),
+              ),
+            if (!widget.viewOnly) const SizedBox(height: 24),
+            if (widget.viewOnly) const SizedBox(height: 16),
 
             // Search and Filter
             Row(
@@ -939,7 +1043,9 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'No phases yet, add first',
+                        widget.viewOnly
+                            ? 'No phases in this project.'
+                            : 'No phases yet, add first',
                         style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                       ),
                     ],
@@ -960,6 +1066,7 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
                   });
                 },
                 projectStartDate: widget.projectStartDate,
+                viewOnly: widget.viewOnly,
               ),
               const SizedBox(height: 24),
 
@@ -976,6 +1083,7 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
                   });
                 },
                 projectStartDate: widget.projectStartDate,
+                viewOnly: widget.viewOnly,
               ),
             ],
             SizedBox(height: isMobile ? 80 : 32), // Space for bottom nav
@@ -1218,6 +1326,7 @@ class _PhaseSection extends StatelessWidget {
   final bool isGanttView;
   final VoidCallback onToggleView;
   final String? projectStartDate;
+  final bool viewOnly;
 
   const _PhaseSection({
     required this.title,
@@ -1227,6 +1336,7 @@ class _PhaseSection extends StatelessWidget {
     required this.isGanttView,
     required this.onToggleView,
     this.projectStartDate,
+    this.viewOnly = false,
   });
 
   @override
@@ -1322,7 +1432,11 @@ class _PhaseSection extends StatelessWidget {
               ),
             )
           else if (isGanttView)
-            _GanttChartView(phases: phases, projectStartDate: projectStartDate)
+            _GanttChartView(
+              phases: phases,
+              projectStartDate: projectStartDate,
+              viewOnly: viewOnly,
+            )
           else
             ...phases.asMap().entries.map((entry) {
               final phase = entry.value;
@@ -1339,7 +1453,11 @@ class _PhaseSection extends StatelessWidget {
                   masterIndex > 0 &&
                   masterPhases[masterIndex - 1].calculateProgress() < 1.0;
 
-              return _PhaseCard(phase: phase, isLocked: isLocked);
+              return _PhaseCard(
+                phase: phase,
+                isLocked: isLocked,
+                viewOnly: viewOnly,
+              );
             }),
         ],
       ),
@@ -1350,8 +1468,13 @@ class _PhaseSection extends StatelessWidget {
 class _PhaseCard extends StatelessWidget {
   final Phase phase;
   final bool isLocked;
+  final bool viewOnly;
 
-  const _PhaseCard({required this.phase, this.isLocked = false});
+  const _PhaseCard({
+    required this.phase,
+    this.isLocked = false,
+    this.viewOnly = false,
+  });
 
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
@@ -1418,8 +1541,8 @@ class _PhaseCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 16),
-              if (phase.status != 'not_started')
+              if (phase.status != 'not_started') ...[
+                const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,
@@ -1439,6 +1562,71 @@ class _PhaseCard extends StatelessWidget {
                       color: _getStatusColor(phase.status),
                     ),
                   ),
+                ),
+              ],
+              if (!viewOnly)
+                PopupMenuButton<String>(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
+                  icon: const Icon(
+                    Icons.more_vert,
+                    size: 20,
+                    color: Color(0xFF6B7280),
+                  ),
+                  onSelected: (value) {
+                    final state = context
+                        .findAncestorStateOfType<_ProjectTaskDetailsPageState>();
+                    if (state == null) return;
+                    if (value == 'edit') {
+                      state._editPhase(phase);
+                    } else if (value == 'remove') {
+                      state._removePhase(phase);
+                    } else if (value == 'allocate') {
+                      state._openAllocatePhaseBudget(phase);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'allocate',
+                      child: Row(
+                        children: [
+                          Icon(Icons.payments_outlined, size: 18),
+                          SizedBox(width: 8),
+                          Text('Phase budget…'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit_outlined, size: 18),
+                          SizedBox(width: 8),
+                          Text('Edit phase name'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'remove',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.delete_outline,
+                            size: 18,
+                            color: Colors.red,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Remove phase',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
             ],
           ),
@@ -1530,8 +1718,10 @@ class _PhaseCard extends StatelessWidget {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) =>
-                                  SubtaskManagePage(phase: phase),
+                              builder: (context) => SubtaskManagePage(
+                                phase: phase,
+                                viewOnly: viewOnly,
+                              ),
                             ),
                           );
                         },
@@ -1551,63 +1741,10 @@ class _PhaseCard extends StatelessWidget {
                   child: Text(
                     isLocked
                         ? 'Complete Previous Phase to Unlock'
-                        : 'Manage Subtask',
+                        : (viewOnly ? 'View subtasks' : 'Manage Subtask'),
                     style: const TextStyle(fontSize: 13),
                   ),
                 ),
-                if (isLocked) ...[
-                  const SizedBox(width: 8),
-                  PopupMenuButton<String>(
-                    icon: const Icon(
-                      Icons.more_vert,
-                      size: 20,
-                      color: Color(0xFF6B7280),
-                    ),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onSelected: (value) {
-                      final state = context
-                          .findAncestorStateOfType<
-                            _ProjectTaskDetailsPageState
-                          >();
-                      if (state == null) return;
-                      if (value == 'edit') {
-                        state._editPhase(phase);
-                      } else if (value == 'remove') {
-                        state._removePhase(phase);
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'edit',
-                        child: Row(
-                          children: [
-                            Icon(Icons.edit_outlined, size: 18),
-                            SizedBox(width: 8),
-                            Text('Edit Phase'),
-                          ],
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'remove',
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.delete_outline,
-                              size: 18,
-                              color: Colors.red,
-                            ),
-                            SizedBox(width: 8),
-                            Text(
-                              'Remove Phase',
-                              style: TextStyle(color: Colors.red),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
               ],
             ),
           ],
@@ -1621,8 +1758,13 @@ class _PhaseCard extends StatelessWidget {
 class _GanttChartView extends StatelessWidget {
   final List<Phase> phases;
   final String? projectStartDate;
+  final bool viewOnly;
 
-  const _GanttChartView({required this.phases, this.projectStartDate});
+  const _GanttChartView({
+    required this.phases,
+    this.projectStartDate,
+    this.viewOnly = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1712,6 +1854,7 @@ class _GanttChartView extends StatelessWidget {
                   totalDays,
                   chartWidth,
                   index,
+                  viewOnly,
                 );
               }).toList(),
             ],
@@ -1791,6 +1934,7 @@ class _GanttChartView extends StatelessWidget {
     int totalDays,
     double chartWidth,
     int index,
+    bool viewOnly,
   ) {
     final startOffset = startDate.difference(projectStart).inDays;
     final duration = endDate.difference(startDate).inDays;
@@ -1866,7 +2010,10 @@ class _GanttChartView extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => SubtaskManagePage(phase: phase),
+                    builder: (context) => SubtaskManagePage(
+                      phase: phase,
+                      viewOnly: viewOnly,
+                    ),
                   ),
                 );
               },

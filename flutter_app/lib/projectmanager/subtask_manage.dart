@@ -10,8 +10,13 @@ import '../services/auth_service.dart';
 
 class SubtaskManagePage extends StatefulWidget {
   final Phase phase;
+  final bool viewOnly;
 
-  const SubtaskManagePage({super.key, required this.phase});
+  const SubtaskManagePage({
+    super.key,
+    required this.phase,
+    this.viewOnly = false,
+  });
 
   @override
   State<SubtaskManagePage> createState() => _SubtaskManagePageState();
@@ -26,6 +31,8 @@ class _SubtaskManagePageState extends State<SubtaskManagePage> {
     super.initState();
     _phase = widget.phase;
   }
+
+  bool get _viewOnly => widget.viewOnly;
 
   Future<void> _refreshPhase() async {
     setState(() => _isLoading = true);
@@ -187,6 +194,16 @@ class _SubtaskManagePageState extends State<SubtaskManagePage> {
                               ),
                             ],
                           ),
+                          if (_viewOnly) ...[
+                            const SizedBox(height: 12),
+                            const Text(
+                              'Read-only (completed project) — view subtasks and field updates only.',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Color(0xFF6B7280),
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 24),
 
                           // Phase info
@@ -316,6 +333,7 @@ class _SubtaskManagePageState extends State<SubtaskManagePage> {
                                       _SubtaskTile(
                                         subtask: subtask,
                                         phase: _phase,
+                                        viewOnly: _viewOnly,
                                         onEdit: () => _editSubtask(subtask),
                                         onRemove: () => _removeSubtask(subtask),
                                       ),
@@ -856,12 +874,14 @@ class _SubtaskProgressPanel extends StatelessWidget {
 class _SubtaskTile extends StatelessWidget {
   final Subtask subtask;
   final Phase phase;
+  final bool viewOnly;
   final VoidCallback onEdit;
   final VoidCallback onRemove;
 
   const _SubtaskTile({
     required this.subtask,
     required this.phase,
+    this.viewOnly = false,
     required this.onEdit,
     required this.onRemove,
   });
@@ -902,6 +922,7 @@ class _SubtaskTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final latestUpdatePhotos = _subtaskManagerLatestUpdatePhotos(subtask);
     final hasProgress = _subtaskHasMeaningfulFieldContent(subtask);
+    final assignmentLocked = phase.isWorkerAssignmentLocked;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -952,67 +973,74 @@ class _SubtaskTile extends StatelessWidget {
                 onPressed: () {
                   showDialog(
                     context: context,
-                    builder: (context) => ViewWorkForceModal(subtask: subtask),
+                    builder: (context) => ViewWorkForceModal(
+                      subtask: subtask,
+                      readOnly: assignmentLocked,
+                    ),
                   );
                 },
                 icon: const Icon(Icons.groups_outlined, size: 22),
-                tooltip: 'View Work Force',
+                tooltip: assignmentLocked
+                    ? 'View who worked on this subtask'
+                    : 'View work force',
                 color: const Color(0xFF0C1935),
               ),
-              IconButton(
-                style: _iconActionStyle(),
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) =>
-                        ManageWorkersModal(subtask: subtask, phase: phase),
-                  );
-                },
-                icon: const Icon(Icons.person_add_outlined, size: 22),
-                tooltip: 'Manage workers',
-                color: const Color(0xFFFF7A18),
-              ),
-              PopupMenuButton<String>(
-                tooltip: 'Options',
-                padding: EdgeInsets.zero,
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: 'edit',
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.edit_outlined,
-                          size: 20,
-                          color: Color(0xFF0C1935),
-                        ),
-                        SizedBox(width: 12),
-                        Text('Edit'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'remove',
-                    child: Row(
-                      children: [
-                        Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                        SizedBox(width: 12),
-                        Text('Remove', style: TextStyle(color: Colors.red)),
-                      ],
-                    ),
-                  ),
-                ],
-                onSelected: (value) {
-                  if (value == 'edit') {
-                    onEdit();
-                  } else if (value == 'remove') {
-                    onRemove();
-                  }
-                },
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                  child: Icon(Icons.more_vert, color: Color(0xFF6B7280)),
+              if (!assignmentLocked && !viewOnly)
+                IconButton(
+                  style: _iconActionStyle(),
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) =>
+                          ManageWorkersModal(subtask: subtask, phase: phase),
+                    );
+                  },
+                  icon: const Icon(Icons.person_add_outlined, size: 22),
+                  tooltip: 'Manage workers',
+                  color: const Color(0xFFFF7A18),
                 ),
-              ),
+              if (!viewOnly)
+                PopupMenuButton<String>(
+                  tooltip: 'Options',
+                  padding: EdgeInsets.zero,
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.edit_outlined,
+                            size: 20,
+                            color: Color(0xFF0C1935),
+                          ),
+                          SizedBox(width: 12),
+                          Text('Edit'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'remove',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                          SizedBox(width: 12),
+                          Text('Remove', style: TextStyle(color: Colors.red)),
+                        ],
+                      ),
+                    ),
+                  ],
+                  onSelected: (value) {
+                    if (value == 'edit') {
+                      onEdit();
+                    } else if (value == 'remove') {
+                      onRemove();
+                    }
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                    child: Icon(Icons.more_vert, color: Color(0xFF6B7280)),
+                  ),
+                ),
             ],
           ),
           if (hasProgress) ...[
@@ -1032,7 +1060,14 @@ class _SubtaskTile extends StatelessWidget {
 class ViewWorkForceModal extends StatefulWidget {
   final Subtask subtask;
 
-  const ViewWorkForceModal({super.key, required this.subtask});
+  /// When the parent phase is completed, assignments cannot be changed — hide removal.
+  final bool readOnly;
+
+  const ViewWorkForceModal({
+    super.key,
+    required this.subtask,
+    this.readOnly = false,
+  });
 
   @override
   State<ViewWorkForceModal> createState() => _ViewWorkForceModalState();
@@ -1079,7 +1114,8 @@ class _ViewWorkForceModalState extends State<ViewWorkForceModal> {
       );
       final response = await http.get(
         AppConfig.apiUri(
-          'subtask-assignments/?subtask_id=${widget.subtask.subtaskId}',
+          'subtask-assignments/?subtask_id=${widget.subtask.subtaskId}&_cb='
+          '${DateTime.now().millisecondsSinceEpoch}',
         ),
       );
 
@@ -1137,6 +1173,7 @@ class _ViewWorkForceModalState extends State<ViewWorkForceModal> {
   }
 
   Future<void> _removeAssignedWorker(Map<String, dynamic> worker) async {
+    if (widget.readOnly) return;
     final assignmentId = worker['assignment_id'];
     if (assignmentId == null) {
       ScaffoldMessenger.of(
@@ -1223,9 +1260,11 @@ class _ViewWorkForceModalState extends State<ViewWorkForceModal> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Assigned Work Force',
-                          style: TextStyle(
+                        Text(
+                          widget.readOnly
+                              ? 'Who worked on this subtask'
+                              : 'Assigned work force',
+                          style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w700,
                             color: Color(0xFF0C1935),
@@ -1241,6 +1280,17 @@ class _ViewWorkForceModalState extends State<ViewWorkForceModal> {
                             color: Color(0xFF6B7280),
                           ),
                         ),
+                        if (widget.readOnly) ...[
+                          const SizedBox(height: 6),
+                          const Text(
+                            'Assignments are read-only for this phase — you can only view who was assigned.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF6B7280),
+                              height: 1.35,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -1303,7 +1353,10 @@ class _ViewWorkForceModalState extends State<ViewWorkForceModal> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'Click "Manage workers" to assign field workers',
+                              widget.readOnly
+                                  ? 'No field workers were assigned to this subtask.'
+                                  : 'Click "Manage workers" to assign field workers',
+                              textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 13,
                                 color: Colors.grey[500],
@@ -1433,16 +1486,19 @@ class _ViewWorkForceModalState extends State<ViewWorkForceModal> {
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              IconButton(
-                                tooltip: 'Remove worker',
-                                onPressed: () => _removeAssignedWorker(worker),
-                                icon: const Icon(
-                                  Icons.person_remove,
-                                  color: Colors.red,
-                                  size: 20,
+                              if (!widget.readOnly) ...[
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  tooltip: 'Remove worker',
+                                  onPressed: () =>
+                                      _removeAssignedWorker(worker),
+                                  icon: const Icon(
+                                    Icons.person_remove,
+                                    color: Colors.red,
+                                    size: 20,
+                                  ),
                                 ),
-                              ),
+                              ],
                             ],
                           ),
                         );
@@ -1459,7 +1515,11 @@ class _ViewWorkForceModalState extends State<ViewWorkForceModal> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Total: ${_assignedWorkers.length} worker${_assignedWorkers.length != 1 ? 's' : ''}',
+                    widget.readOnly
+                        ? '${_assignedWorkers.length} assigned worker'
+                            '${_assignedWorkers.length != 1 ? 's' : ''} (read-only)'
+                        : 'Total: ${_assignedWorkers.length} worker'
+                            '${_assignedWorkers.length != 1 ? 's' : ''}',
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,

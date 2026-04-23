@@ -29,6 +29,23 @@ class AppTimeService {
 
   static DateTime? get overrideNow => _overrideNow;
 
+  /// YYYY-MM-DD of the test "today", or null (real device time in API).
+  static String? get asOfParamForApi {
+    if (_overrideNow == null) return null;
+    final d = _overrideNow!;
+    return '${d.year.toString().padLeft(4, '0')}-'
+        '${d.month.toString().padLeft(2, '0')}-'
+        '${d.day.toString().padLeft(2, '0')}';
+  }
+
+  /// Appends [as_of=] so the backend can mark projects overdue in sync with Test Time.
+  static String withAsOfQuery(String path) {
+    final as = asOfParamForApi;
+    if (as == null) return path;
+    final sep = path.contains('?') ? '&' : '?';
+    return '$path${sep}as_of=${Uri.encodeQueryComponent(as)}';
+  }
+
   static Future<void> setOverride(DateTime value) async {
     final normalized = DateTime(
       value.year,

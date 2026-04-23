@@ -306,6 +306,15 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
     return subtask.completed != initiallyCompleted;
   }
 
+  /// Notes/photo row: after a checkbox change, or for already completed subtasks
+  /// (supervisors can add follow-up photos without un-submitting the task).
+  bool _showSubtaskDetailRow(Subtask subtask) {
+    if (subtask.status == 'Completed') {
+      return true;
+    }
+    return _hasStatusToggleChange(subtask);
+  }
+
   // compute phase progress as percent of subtasks completed
   int _phaseProgress(int pIndex) {
     final subs = _phases[pIndex].subtasks;
@@ -364,6 +373,35 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
     setModalState?.call(() {});
   }
 
+  /// Picked images often have empty names or `content://...` paths; Django needs a
+  /// real filename in Content-Disposition for FileField to save correctly.
+  String _safeUploadFilename(XFile photo, int index) {
+    var name = photo.name.trim();
+    if (name.isEmpty ||
+        name == 'null' ||
+        name.toLowerCase().contains('://')) {
+      return 'subtask_update_$index.jpg';
+    }
+    final norm = name.replaceAll(r'\', '/');
+    final slash = norm.lastIndexOf('/');
+    if (slash >= 0 && slash < norm.length - 1) {
+      name = norm.substring(slash + 1);
+    }
+    if (name.isEmpty) return 'subtask_update_$index.jpg';
+    if (!RegExp(
+      r'\.(jpe?g|png|gif|heic|webp)$',
+      caseSensitive: false,
+    ).hasMatch(name)) {
+      name = '$name.jpg';
+    }
+    // Avoid odd characters in multipart filename (some Android galleries).
+    var safe = name.replaceAll(RegExp(r'[^a-zA-Z0-9._\-]'), '_');
+    if (safe.isEmpty || safe == '.') {
+      safe = 'subtask_update_$index.jpg';
+    }
+    return safe;
+  }
+
   Future<http.Response> _submitSubtaskPhaseUpdate({
     required String subtaskId,
     required String status,
@@ -383,10 +421,13 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
           ..fields['status'] = status
           ..fields['progress_notes'] = notes;
 
+    var fileIndex = 0;
     for (final photo in phasePhotos.take(5)) {
       final bytes = await photo.readAsBytes();
+      final fname = _safeUploadFilename(photo, fileIndex);
+      fileIndex++;
       request.files.add(
-        http.MultipartFile.fromBytes('images', bytes, filename: photo.name),
+        http.MultipartFile.fromBytes('images', bytes, filename: fname),
       );
     }
 
@@ -394,9 +435,78 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
     return http.Response.fromStream(streamed);
   }
 
+  /// Supervisor must not uncheck a server-completed subtask without a reason.
+  Future<String?> _showSupervisorRevertCompletionDialog(
+    BuildContext hostContext, {
+    required String subtaskTitle,
+  }) {
+    var text = '';
+    return showDialog<String>(
+      context: hostContext,
+      builder: (dCtx) => StatefulBuilder(
+        builder: (sCtx, setS) {
+          return AlertDialog(
+            title: const Text('Uncheck completed subtask?'),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '“$subtaskTitle” is currently marked complete. To update it to not '
+                    'complete, provide a reason. This is saved with the subtask update.',
+                    style: TextStyle(color: Colors.grey[800], fontSize: 14),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    onChanged: (v) {
+                      text = v;
+                    },
+                    decoration: const InputDecoration(
+                      labelText: 'Reason for unchecking',
+                      border: OutlineInputBorder(),
+                      alignLabelWithHint: true,
+                    ),
+                    minLines: 2,
+                    maxLines: 5,
+                    autofocus: true,
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop<String>(dCtx, null),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  if (text.trim().isEmpty) {
+                    ScaffoldMessenger.of(hostContext).showSnackBar(
+                      const SnackBar(
+                        content: Text('Please enter a reason to continue.'),
+                      ),
+                    );
+                    return;
+                  }
+                  Navigator.pop<String>(dCtx, text.trim());
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: primary),
+                child: const Text('Update & uncheck'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   // Open phase-level update dialog
   void _openPhaseUpdateDialog(int phaseIndex) {
     final phase = _phases[phaseIndex];
+    // Bumps a TextFormField key only when a revert reason is applied (keeps type/focus for normal notes).
+    final noteKeyVersions = List<int>.filled(phase.subtasks.length, 0);
 
     // Draft values should be modal-scoped; opening the modal starts with fresh inputs.
     for (final subtask in phase.subtasks) {
@@ -457,15 +567,32 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                               children: [
                                 Checkbox(
                                   value: phase.subtasks[sIndex].completed,
-                                  onChanged: (val) {
+                                  onChanged: (val) async {
+                                    final st = phase.subtasks[sIndex];
+                                    if (val == false &&
+                                        st.status == 'Completed') {
+                                      final reason =
+                                          await _showSupervisorRevertCompletionDialog(
+                                        context,
+                                        subtaskTitle: st.title,
+                                      );
+                                      if (reason == null) {
+                                        return;
+                                      }
+                                      setModalState(() {
+                                        st.completed = false;
+                                        st.notes = reason;
+                                        if (sIndex < noteKeyVersions.length) {
+                                          noteKeyVersions[sIndex]++;
+                                        }
+                                      });
+                                      return;
+                                    }
                                     setModalState(() {
-                                      phase.subtasks[sIndex].completed =
-                                          val ?? false;
-                                      if (!_hasStatusToggleChange(
-                                        phase.subtasks[sIndex],
-                                      )) {
-                                        phase.subtasks[sIndex].notes = '';
-                                        phase.subtasks[sIndex].photos = [];
+                                      st.completed = val ?? false;
+                                      if (!_hasStatusToggleChange(st)) {
+                                        st.notes = '';
+                                        st.photos = [];
                                       }
                                     });
                                   },
@@ -519,7 +646,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                   ),
                   const SizedBox(height: 8),
                   for (var sIndex = 0; sIndex < phase.subtasks.length; sIndex++)
-                    if (_hasStatusToggleChange(phase.subtasks[sIndex])) ...[
+                    if (_showSubtaskDetailRow(phase.subtasks[sIndex])) ...[
                       Container(
                         margin: const EdgeInsets.only(bottom: 10),
                         padding: const EdgeInsets.all(10),
@@ -539,12 +666,19 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                               ),
                             ),
                             const SizedBox(height: 8),
-                            TextField(
+                            TextFormField(
+                              key: ValueKey('pm_note_${sIndex}_${noteKeyVersions[sIndex]}'),
+                              initialValue: phase.subtasks[sIndex].notes,
                               onChanged: (value) {
                                 phase.subtasks[sIndex].notes = value;
                               },
                               decoration: InputDecoration(
-                                hintText: 'Progress note for this subtask...',
+                                hintText:
+                                    phase.subtasks[sIndex].status ==
+                                        'Completed' &&
+                                        !phase.subtasks[sIndex].completed
+                                    ? 'Reason for unchecking (required)…'
+                                    : 'Progress note for this subtask...',
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
                                 ),
@@ -629,6 +763,21 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: primary),
                 onPressed: () async {
+                  for (var st in phase.subtasks) {
+                    if (!st.completed && st.status == 'Completed' &&
+                        st.notes.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'A reason is required to uncheck completed subtask: “${st.title}”.',
+                          ),
+                          backgroundColor: Colors.orange[800],
+                        ),
+                      );
+                      return;
+                    }
+                  }
+
                   Navigator.pop(ctx);
                   // Show loading
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -669,11 +818,15 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                       String? targetBackendStatus;
 
                       if (subtask.completed && currentStatus != 'Completed') {
+                        // Checkbox: mark as completed.
                         targetBackendStatus = 'completed';
                       } else if (!subtask.completed &&
                           currentStatus == 'Completed') {
+                        // Unsubmit completed subtask.
                         targetBackendStatus = 'pending';
-                      } else if (hasMediaOrNotes && subtask.completed) {
+                      } else if (hasMediaOrNotes) {
+                        // Notes/photos for current status (e.g. in_progress + photos
+                        // without checking "completed" — previously never submitted).
                         targetBackendStatus = _toBackendStatus(currentStatus);
                       }
 
@@ -711,7 +864,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
 
                       // Check if all succeeded
                       final allSuccess = responses.every(
-                        (r) => r.statusCode == 200,
+                        (r) => r.statusCode >= 200 && r.statusCode < 300,
                       );
 
                       if (allSuccess && responses.isNotEmpty) {
@@ -741,9 +894,15 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                           ),
                         );
                       } else {
+                        final firstErr = responses.isEmpty
+                            ? 'Unknown error'
+                            : 'HTTP ${responses.first.statusCode} ${responses.first.body}';
+                        final message = firstErr.length > 220
+                            ? 'Failed: ${firstErr.substring(0, 220)}…'
+                            : 'Failed: $firstErr';
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Failed to submit some updates'),
+                          SnackBar(
+                            content: Text(message),
                             backgroundColor: Colors.red,
                           ),
                         );

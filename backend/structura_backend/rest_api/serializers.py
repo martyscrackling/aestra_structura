@@ -13,6 +13,27 @@ from app.services.budget_validation import (
 _TWO_DP = Decimal('0.01')
 _STANDARD_HOURS_PER_WEEK = Decimal('48')
 
+_SCHEDULE_FULL_MSG = (
+    'All project days are already allocated. Increase the project duration '
+    'or adjust an existing phase first.'
+)
+_SCHEDULE_EXCEED_MSG = (
+    'The total of phase days would exceed the project duration.'
+)
+
+
+def _sum_phase_duration_days_excluding(
+    project, exclude_phase_id: int | None = None
+) -> int:
+    """Sum of days_duration for phases on this project, treating null as 0."""
+    qs = models.Phase.objects.filter(project=project)
+    if exclude_phase_id is not None:
+        qs = qs.exclude(phase_id=exclude_phase_id)
+    total = 0
+    for d in qs.values_list('days_duration', flat=True):
+        total += d if d is not None else 0
+    return total
+
 
 def _q(value):
     return value.quantize(_TWO_DP, rounding=ROUND_HALF_UP)
@@ -160,6 +181,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             'total_used_budget',
             'total_allocated_budget',
             'status',
+            'on_hold_reason',
             'created_at',
         ]
         extra_kwargs = {
@@ -1088,6 +1110,42 @@ class PhaseSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
+        # Project schedule: no new phase if no days left; updates must not exceed.
+        project = attrs.get('project')
+        if self.instance is not None and project is None:
+            project = self.instance.project
+        if project is not None:
+            pd = project.duration_days
+            if pd is not None:
+                exclude = self.instance.phase_id if self.instance is not None else None
+                others = _sum_phase_duration_days_excluding(project, exclude)
+                if self.instance is None:
+                    if pd - others <= 0:
+                        raise serializers.ValidationError(
+                            {'non_field_errors': [_SCHEDULE_FULL_MSG]}
+                        )
+                    new_days = attrs.get('days_duration')
+                    if new_days is None:
+                        new_days = 0
+                    if others + new_days > pd:
+                        raise serializers.ValidationError(
+                            {'days_duration': _SCHEDULE_EXCEED_MSG}
+                        )
+                else:
+                    if 'days_duration' in attrs:
+                        raw = attrs.get('days_duration')
+                        new_days = 0 if raw is None else raw
+                    else:
+                        new_days = self.instance.days_duration or 0
+                    if others + new_days > pd:
+                        field = 'days_duration' if 'days_duration' in attrs else 'non_field_errors'
+                        if field == 'non_field_errors':
+                            raise serializers.ValidationError(
+                                {'non_field_errors': [_SCHEDULE_EXCEED_MSG]}
+                            )
+                        raise serializers.ValidationError(
+                            {'days_duration': _SCHEDULE_EXCEED_MSG}
+                        )
         if 'allocated_budget' in attrs:
             # For updates, instance carries the project; for creates, it comes
             # from the incoming `project` field.
@@ -1174,6 +1232,35 @@ class SubtaskFieldWorkerSerializer(serializers.ModelSerializer):
 
         if worker is None or subtask is None:
             return attrs
+
+        phase_obj = getattr(subtask, 'phase', None)
+        if phase_obj is not None:
+            subtask_pk = getattr(subtask, 'pk', None) or getattr(subtask, 'subtask_id', None)
+            if subtask_pk is not None:
+                other_qs = (
+                    models.SubtaskFieldWorker.objects
+                    .filter(
+                        field_worker=worker,
+                        subtask__phase_id=phase_obj.phase_id,
+                    )
+                    .exclude(subtask_id=subtask_pk)
+                    .select_related('subtask')
+                )
+                if self.instance is not None:
+                    other_qs = other_qs.exclude(pk=self.instance.pk)
+                other = other_qs.first()
+                if other is not None:
+                    other_title = other.subtask.title
+                    raise serializers.ValidationError(
+                        {
+                            'non_field_errors': [
+                                (
+                                    f'This field worker is already assigned to the subtask '
+                                    f'"{other_title}" in this phase. Remove that assignment first.'
+                                )
+                            ],
+                        }
+                    )
 
         # Require complete shift boundaries when one side is provided.
         if (shift_start is None) != (shift_end is None):

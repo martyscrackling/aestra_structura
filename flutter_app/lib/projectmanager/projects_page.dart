@@ -10,6 +10,14 @@ import 'project_info.dart';
 import 'archived_projects.dart';
 import '../services/auth_service.dart';
 import '../services/app_config.dart';
+import '../services/app_time_service.dart';
+
+/// Matches archive behavior: completed projects cannot add phases or change allocations here.
+bool _projectPlanViewOnlyFromOverview(ProjectOverviewData data) {
+  if (data.progress >= 1.0) return true;
+  if (data.status.trim().toLowerCase() == 'completed') return true;
+  return false;
+}
 
 class ProjectsPage extends StatefulWidget {
   const ProjectsPage({super.key});
@@ -32,6 +40,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
   @override
   void initState() {
     super.initState();
+    AppTimeService.overrideNotifier.addListener(_onTestTimeChanged);
     _fetchProjects();
 
     _searchController.addListener(() {
@@ -45,8 +54,14 @@ class _ProjectsPageState extends State<ProjectsPage> {
 
   @override
   void dispose() {
+    AppTimeService.overrideNotifier.removeListener(_onTestTimeChanged);
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onTestTimeChanged() {
+    if (!mounted) return;
+    _fetchProjects();
   }
 
   List<ProjectOverviewData> get _visibleProjects {
@@ -187,7 +202,8 @@ class _ProjectsPageState extends State<ProjectsPage> {
         return;
       }
 
-      final url = AppConfig.apiUri('projects/?user_id=$userId');
+      final path = AppTimeService.withAsOfQuery('projects/?user_id=$userId');
+      final url = AppConfig.apiUri(path);
       print('🔍 Fetching from: $url');
 
       final response = await http.get(url);
@@ -225,6 +241,8 @@ class _ProjectsPageState extends State<ProjectsPage> {
             final String createdAt = (project['created_at'] as String?) ?? '';
             final String projectType =
                 (project['project_type'] as String?) ?? '';
+            final String onHoldReason =
+                (project['on_hold_reason'] as String?)?.trim() ?? '';
             final metrics = await _calculateProjectMetrics(projectId);
             final String computedStatus = metrics.progress >= 1.0
               ? 'Completed'
@@ -241,6 +259,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
                 projectId: projectId,
                 title: projectName,
                 status: computedStatus,
+                onHoldReason: computedStatus == 'On Hold' ? onHoldReason : '',
                 location: _buildLocation(project),
                 startDate: _formatDate(startDateStr),
                 endDate: _formatDate(endDateStr),
@@ -832,6 +851,7 @@ class _StatusFilterDropdown extends StatelessWidget {
 
   static const List<String> _statuses = [
     'Active',
+    'Overdue',
     'On Hold',
     'Completed',
     'Deactivated',
@@ -905,7 +925,8 @@ class _StatusFilterDropdown extends StatelessWidget {
           ),
         ],
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          width: 200,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
             border: Border.all(color: Colors.grey[300]!),
             borderRadius: BorderRadius.circular(8),
@@ -914,15 +935,19 @@ class _StatusFilterDropdown extends StatelessWidget {
             children: [
               const Icon(Icons.check_circle_outline, size: 16, color: Color(0xFF0C1935)),
               const SizedBox(width: 6),
-              Text(
-                displayText,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF0C1935),
+              Expanded(
+                child: Text(
+                  displayText,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF0C1935),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 2),
               const Icon(
                 Icons.arrow_drop_down,
                 size: 18,
@@ -1287,6 +1312,8 @@ class ProjectOverviewCard extends StatelessWidget {
       return isBackground ? const Color(0xFFE5F8ED) : const Color(0xFF10B981);
     } else if (lowerStatus == 'on hold') {
       return isBackground ? const Color(0xFFFFF2E8) : const Color(0xFFFF7A18);
+    } else if (lowerStatus == 'overdue') {
+      return isBackground ? const Color(0xFFFEE8E6) : const Color(0xFFEA580C);
     } else if (lowerStatus == 'deactivated') {
       return isBackground ? const Color(0xFFFEECEC) : const Color(0xFFDC2626);
     }
@@ -1384,6 +1411,32 @@ class ProjectOverviewCard extends StatelessWidget {
                     color: Color(0xFF6B7280),
                   ),
                 ),
+                if (data.status.toLowerCase() == 'on hold' &&
+                    data.onHoldReason.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.info_outline,
+                        size: 16,
+                        color: Color(0xFFFF7A18),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          data.onHoldReason,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            height: 1.3,
+                            color: Color(0xFF6B7280),
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 14),
                 Row(
                   children: [
@@ -1453,6 +1506,9 @@ class ProjectOverviewCard extends StatelessWidget {
                                     progress: data.progress,
                                     budget: data.budget,
                                     projectId: data.projectId,
+                                    viewOnly: _projectPlanViewOnlyFromOverview(
+                                      data,
+                                    ),
                                   ),
                           transitionDuration: Duration.zero,
                         ),
@@ -1589,6 +1645,7 @@ class ProjectOverviewData {
     required this.projectId,
     required this.title,
     required this.status,
+    this.onHoldReason = '',
     required this.location,
     required this.startDate,
     required this.endDate,
@@ -1603,6 +1660,7 @@ class ProjectOverviewData {
   final int projectId;
   final String title;
   final String status;
+  final String onHoldReason;
   final String location;
   final String startDate;
   final String endDate;

@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../services/budget_service.dart';
 import '../modals/edit_project_budget_modal.dart';
-import '../modals/allocate_phase_budget_modal.dart';
 import '../modals/phase_material_plan_modal.dart';
 
 /// Drop-in card that the PM sees on project details. It fetches
 /// `/projects/<id>/budget-summary/` and renders:
 ///   - total budget / allocated / used / remaining
 ///   - consumed progress bar + 50% warning banner
-///   - per-phase rows with allocate-budget editor
+///   - per-phase rows (used/allocated; material plan only — set allocation
+///     when adding a phase, or from the project phase ⋮ menu)
 class BudgetOverviewCard extends StatefulWidget {
   final int projectId;
   final String projectName;
@@ -19,11 +19,15 @@ class BudgetOverviewCard extends StatefulWidget {
   /// widgets). Optional.
   final ValueChanged<Map<String, dynamic>>? onSummaryLoaded;
 
+  /// Archived / completed project: show totals and per-phase usage only.
+  final bool viewOnly;
+
   const BudgetOverviewCard({
     super.key,
     required this.projectId,
     required this.projectName,
     this.onSummaryLoaded,
+    this.viewOnly = false,
   });
 
   @override
@@ -149,11 +153,12 @@ class BudgetOverviewCardState extends State<BudgetOverviewCard> {
                 ),
               ),
             ),
-            TextButton.icon(
-              onPressed: _editBudget,
-              icon: const Icon(Icons.edit_outlined, size: 16),
-              label: const Text('Edit'),
-            ),
+            if (!widget.viewOnly)
+              TextButton.icon(
+                onPressed: _editBudget,
+                icon: const Icon(Icons.edit_outlined, size: 16),
+                label: const Text('Edit'),
+              ),
           ],
         ),
         const SizedBox(height: 6),
@@ -205,13 +210,26 @@ class BudgetOverviewCardState extends State<BudgetOverviewCard> {
             color: Color(0xFF374151),
           ),
         ),
+        const SizedBox(height: 4),
+        Text(
+          widget.viewOnly
+              ? 'Used and allocated amounts per phase (read-only).'
+              : 'Set a budget when you add a phase. To change an existing phase, use the ⋮ menu on that phase.',
+          style: const TextStyle(
+            fontSize: 11,
+            color: Color(0xFF6B7280),
+            height: 1.3,
+          ),
+        ),
         const SizedBox(height: 8),
         if (phases.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
             child: Text(
-              'No phases yet. Add a phase to start allocating budget.',
-              style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+              widget.viewOnly
+                  ? 'No phases in this project.'
+                  : 'No phases yet. Add a phase to start allocating budget.',
+              style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
             ),
           )
         else
@@ -219,16 +237,8 @@ class BudgetOverviewCardState extends State<BudgetOverviewCard> {
               .whereType<Map>()
               .map((p) => _PhaseRow(
                     phase: Map<String, dynamic>.from(p),
-                    projectBudget: total,
-                    otherPhasesAllocated:
-                        allocated - _asDouble(p['allocated_budget']),
-                    onEdit: (phase) => _editPhaseAllocation(
-                      phase: phase,
-                      projectBudget: total,
-                      otherPhasesAllocated: allocated -
-                          _asDouble(phase['allocated_budget']),
-                    ),
                     onPlan: _openPlanModal,
+                    allowMaterialPlan: !widget.viewOnly,
                   )),
       ],
     );
@@ -270,27 +280,6 @@ class BudgetOverviewCardState extends State<BudgetOverviewCard> {
       ),
     );
     if (changed == true) {
-      await reload();
-    }
-  }
-
-  Future<void> _editPhaseAllocation({
-    required Map<String, dynamic> phase,
-    required double projectBudget,
-    required double otherPhasesAllocated,
-  }) async {
-    final updated = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (_) => AllocatePhaseBudgetModal(
-        phaseId: phase['phase_id'] as int,
-        phaseName: (phase['phase_name'] ?? '') as String,
-        currentAllocation: _asDouble(phase['allocated_budget']),
-        phaseUsedBudget: _asDouble(phase['used_budget']),
-        projectBudget: projectBudget,
-        otherPhasesAllocated: otherPhasesAllocated,
-      ),
-    );
-    if (updated != null) {
       await reload();
     }
   }
@@ -467,17 +456,13 @@ class _BudgetBanner extends StatelessWidget {
 
 class _PhaseRow extends StatelessWidget {
   final Map<String, dynamic> phase;
-  final double projectBudget;
-  final double otherPhasesAllocated;
-  final ValueChanged<Map<String, dynamic>> onEdit;
   final ValueChanged<Map<String, dynamic>> onPlan;
+  final bool allowMaterialPlan;
 
   const _PhaseRow({
     required this.phase,
-    required this.projectBudget,
-    required this.otherPhasesAllocated,
-    required this.onEdit,
     required this.onPlan,
+    this.allowMaterialPlan = true,
   });
 
   @override
@@ -520,20 +505,14 @@ class _PhaseRow extends StatelessWidget {
                       : const Color(0xFF374151),
                 ),
               ),
-              IconButton(
-                tooltip: 'Material plan',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                icon: const Icon(Icons.inventory_2_outlined, size: 16),
-                onPressed: () => onPlan(phase),
-              ),
-              IconButton(
-                tooltip: 'Edit allocation',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                icon: const Icon(Icons.tune, size: 16),
-                onPressed: () => onEdit(phase),
-              ),
+              if (allowMaterialPlan)
+                IconButton(
+                  tooltip: 'Material plan',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  icon: const Icon(Icons.inventory_2_outlined, size: 16),
+                  onPressed: () => onPlan(phase),
+                ),
             ],
           ),
           const SizedBox(height: 4),

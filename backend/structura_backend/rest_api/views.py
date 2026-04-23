@@ -841,6 +841,22 @@ from rest_framework.parsers import MultiPartParser, FormParser
 import os
 from django.conf import settings
 
+
+def _as_of_date_from_request(request):
+    """Optional calendar date for overdue (matches Flutter Test Time). Disabled unless ALLOW_TEST_AS_OF_DATE."""
+    if not getattr(settings, "ALLOW_TEST_AS_OF_DATE", False):
+        return None
+    raw = (request.query_params.get("as_of") or "").strip()[:10]
+    if not raw:
+        return None
+    from datetime import date
+
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
 class ProjectViewSet(viewsets.ModelViewSet):
     serializer_class = ProjectSerializer
 
@@ -937,30 +953,94 @@ class ProjectViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    def _apply_project_status_transition(self, project, new_status, on_hold_reason=''):
+        """
+        Mutates `project` fields when transition is valid.
+        Returns None on success, or a Response(400) on error.
+        """
+        new_status = (new_status or '').strip()
+        on_hold_reason = (on_hold_reason or '').strip()
+        if new_status not in ('Active', 'On Hold', 'Deactivated'):
+            return Response(
+                {'detail': 'status must be one of: Active, On Hold, Deactivated.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if new_status == 'On Hold':
+            if project.status not in ('Active', 'Overdue'):
+                return Response(
+                    {'detail': 'Can only place an Active or Overdue project on hold.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not on_hold_reason:
+                return Response(
+                    {'detail': 'on_hold_reason is required to place a project on hold.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            project.status = 'On Hold'
+            project.on_hold_reason = on_hold_reason[:2000]
+            return None
+        if new_status == 'Deactivated':
+            if project.status not in ('Active', 'On Hold', 'Overdue'):
+                return Response(
+                    {
+                        'detail': 'Can only deactivate an Active, Overdue, or On Hold project.',
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            project.status = 'Deactivated'
+            project.on_hold_reason = ''
+            return None
+        if new_status == 'Active':
+            if project.status not in ('Deactivated', 'On Hold'):
+                return Response(
+                    {'detail': 'Can only activate a Deactivated or On Hold project.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            project.status = 'Active'
+            project.on_hold_reason = ''
+            return None
+        return Response({'detail': 'Invalid status.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['post'], url_path='set-status')
+    def set_status(self, request, pk=None):
+        """
+        Set project status in one request. JSON body: {"status": "...", "on_hold_reason": "..."}
+        Placing a project On Hold (from Active) requires a non-empty on_hold_reason.
+        """
+        project = self.get_object()
+        new_status = (request.data.get('status') or '').strip()
+        reason = (request.data.get('on_hold_reason') or '').strip()
+        err = self._apply_project_status_transition(
+            project, new_status, on_hold_reason=reason
+        )
+        if err is not None:
+            return err
+        project.save()
+        return Response(ProjectSerializer(project).data, status=status.HTTP_200_OK)
+
     @action(detail=True, methods=['post'], url_path='deactivate')
     def deactivate(self, request, pk=None):
         """
-        Toggle project status through cycle: Active → On Hold → Deactivated → Active
+        Cycle: Active → On Hold → Deactivated → Active
+        The Active → On Hold step requires JSON `on_hold_reason` (use set-status for explicit control).
         """
         project = self.get_object()
-        
-        # Cycle through all three states
-        if project.status == 'Active':
-            project.status = 'On Hold'
+        if project.status in ('Active', 'Overdue'):
+            new_status = 'On Hold'
         elif project.status == 'On Hold':
-            project.status = 'Deactivated'
+            new_status = 'Deactivated'
         elif project.status == 'Deactivated':
-            project.status = 'Active'
+            new_status = 'Active'
         else:
-            # If status is unknown, default to On Hold
-            project.status = 'On Hold'
-        
+            new_status = 'On Hold'
+        reason = (request.data.get('on_hold_reason') or '').strip() if new_status == 'On Hold' else ''
+        err = self._apply_project_status_transition(
+            project, new_status, on_hold_reason=reason
+        )
+        if err is not None:
+            return err
         project.save()
-        
-        
-        # Return updated project data
-        serializer = ProjectSerializer(project)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(ProjectSerializer(project).data, status=status.HTTP_200_OK)
 
     def get_queryset(self):
         """
@@ -1022,7 +1102,33 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
         # If no user_id provided, return all projects (for individual project retrieval)
         return models.Project.objects.all()
-    
+
+    def list(self, request, *args, **kwargs):
+        to_refresh = self.filter_queryset(self.get_queryset()).prefetch_related(
+            'phases__subtasks',
+        )
+        as_of = _as_of_date_from_request(request)
+        for project in to_refresh:
+            project.refresh_overdue_status(as_of_date=as_of)
+        qs = self.filter_queryset(self.get_queryset())
+        st = (request.query_params.get('status') or '').strip()
+        if st:
+            qs = qs.filter(status__iexact=st)
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(qs, many=True)
+        return Response(serializer.data)
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        as_of = _as_of_date_from_request(request)
+        instance.refresh_overdue_status(as_of_date=as_of)
+        instance.refresh_from_db()
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
     def perform_create(self, serializer):
         """
         Automatically set the user_id when creating a project
@@ -1032,6 +1138,13 @@ class ProjectViewSet(viewsets.ModelViewSet):
             serializer.save(user_id=user_id)
         else:
             raise ValueError("user_id is required to create a project")
+        as_of = _as_of_date_from_request(self.request)
+        serializer.instance.refresh_overdue_status(as_of_date=as_of)
+
+    def perform_update(self, serializer):
+        super().perform_update(serializer)
+        as_of = _as_of_date_from_request(self.request)
+        serializer.instance.refresh_overdue_status(as_of_date=as_of)
 
     @action(detail=True, methods=['patch'], url_path='set-budget')
     def set_budget(self, request, pk=None):
@@ -2329,9 +2442,19 @@ class SubtaskFieldWorkerViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = models.SubtaskFieldWorker.objects.all()
         subtask_id = self.request.query_params.get('subtask_id')
+        phase_id = self.request.query_params.get('phase_id')
         if subtask_id:
             queryset = queryset.filter(subtask_id=subtask_id)
-        return queryset
+        if phase_id:
+            queryset = queryset.filter(subtask__phase_id=phase_id)
+        return queryset.select_related('subtask', 'subtask__phase', 'field_worker')
+
+    def list(self, request, *args, **kwargs):
+        """Avoid stale list data (e.g. after DELETE) in browser caches (Flutter web)."""
+        response = super().list(request, *args, **kwargs)
+        response['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response['Pragma'] = 'no-cache'
+        return response
 
     def create(self, request, *args, **kwargs):
         # Support bulk assignment

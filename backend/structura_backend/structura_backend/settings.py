@@ -33,6 +33,9 @@ else:
 
 DEBUG = os.getenv("DEBUG", "1") == "1"
 
+# When True, project overdue logic accepts ?as_of=YYYY-MM-DD (Flutter "Test Time"). Off in production unless set.
+ALLOW_TEST_AS_OF_DATE = os.getenv("STRUCTURA_ALLOW_AS_OF", "1" if DEBUG else "0") == "1"
+
 # In production, set SECRET_KEY as an env var.
 SECRET_KEY = os.getenv("SECRET_KEY", "unsafe-dev-secret-key")
 
@@ -58,7 +61,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'rest_framework',
     'rest_api',
-    'app'
+    'app.apps.AppConfig',
 ]
 
 MIDDLEWARE = [

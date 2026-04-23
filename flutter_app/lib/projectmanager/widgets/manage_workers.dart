@@ -7,6 +7,26 @@ import '../../services/subscription_helper.dart';
 import '../../services/auth_service.dart';
 import '../modals/add_fieldworker_modal.dart';
 
+/// FK-style JSON may be a bare id or a nested object; avoid treating [Map] as 0.
+int _idFromJsonField(dynamic v) {
+  if (v == null) return 0;
+  if (v is int) return v;
+  if (v is String) {
+    return int.tryParse(v) ?? 0;
+  }
+  if (v is Map) {
+    for (final key in <String>['subtask_id', 'id', 'fieldworker_id']) {
+      final inner = v[key];
+      if (inner is int) return inner;
+      if (inner is String) {
+        final p = int.tryParse(inner);
+        if (p != null) return p;
+      }
+    }
+  }
+  return 0;
+}
+
 class Worker {
   final int workerId;
   final String name;
@@ -14,6 +34,9 @@ class Worker {
   final String status;
   final bool isAssignedToOtherProject;
   final List<String> assignedProjectNames;
+  final bool isAssignedToOtherSubtaskInThisPhase;
+  /// Title of the other subtask in the same phase when [isAssignedToOtherSubtaskInThisPhase] is true.
+  final String? otherSubtaskTitle;
   final String? imageUrl;
 
   Worker({
@@ -23,8 +46,14 @@ class Worker {
     required this.status,
     this.isAssignedToOtherProject = false,
     this.assignedProjectNames = const [],
+    this.isAssignedToOtherSubtaskInThisPhase = false,
+    this.otherSubtaskTitle,
     this.imageUrl,
   });
+
+  /// Not selectable: busy on another project or on a different subtask in this phase.
+  bool get isSelectionBlocked =>
+      isAssignedToOtherProject || isAssignedToOtherSubtaskInThisPhase;
 }
 
 class ManageWorkersModal extends StatefulWidget {
@@ -85,27 +114,67 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
           : null;
       final int projectId = widget.phase.projectId;
 
-      // Fetch all field workers accessible to this user, including from other projects
-      // The assignment_status will be computed by the backend based on current project context
-      final endpoint =
-          'field-workers/?include_other_projects=true&project_id=$projectId';
+      // Fetch all field workers plus phase-wide subtask assignments so we can
+      // mark workers who are already on a different subtask in this phase.
+      // Unique `_cb` avoids browser caching stale phase lists after a removal (Flutter web).
+      final cacheBust = DateTime.now().millisecondsSinceEpoch;
+      final fieldWorkersUrl =
+          'field-workers/?include_other_projects=true&project_id=$projectId&_cb=$cacheBust';
+      final phaseAssignmentsUrl =
+          'subtask-assignments/?phase_id=${widget.phase.phaseId}&_cb=$cacheBust';
 
-      print('🔍 Fetching field workers from: $endpoint');
+      print('🔍 Fetching field workers from: $fieldWorkersUrl');
+      print('🔍 Fetching phase assignments: $phaseAssignmentsUrl');
 
       final headers = <String, String>{
         if (parsedUserId != null && parsedUserId > 0)
           'X-User-Id': parsedUserId.toString(),
       };
 
-      final response = await http.get(
-        AppConfig.apiUri(endpoint),
-        headers: headers,
-      );
+      final responses = await Future.wait([
+        http.get(AppConfig.apiUri(fieldWorkersUrl), headers: headers),
+        http.get(AppConfig.apiUri(phaseAssignmentsUrl), headers: headers),
+      ]);
+      final response = responses[0];
+      final assignResponse = responses[1];
 
-      print('✅ Response status: ${response.statusCode}');
-      print('✅ Response body: ${response.body}');
+      print('✅ Field workers status: ${response.statusCode}');
+      print('✅ Phase assignments status: ${assignResponse.statusCode}');
 
       if (response.statusCode == 200) {
+        final Map<int, String> otherSubtaskByWorker = {};
+        if (assignResponse.statusCode == 200) {
+          try {
+            final decodedA = jsonDecode(assignResponse.body);
+            final listA = decodedA is List
+                ? decodedA
+                : (decodedA is Map<String, dynamic> && decodedA['results'] is List
+                      ? decodedA['results'] as List<dynamic>
+                      : <dynamic>[]);
+            final currentSubId = widget.subtask.subtaskId;
+            for (final row in listA) {
+              if (row is! Map<String, dynamic>) continue;
+              final stId = _idFromJsonField(row['subtask']);
+              if (stId == 0 || stId == currentSubId) continue;
+              final fwId = _idFromJsonField(row['field_worker']);
+              if (fwId == 0) continue;
+              if (otherSubtaskByWorker.containsKey(fwId)) continue;
+              String title = 'Another subtask';
+              for (final s in widget.phase.subtasks) {
+                if (s.subtaskId == stId) {
+                  title = s.title;
+                  break;
+                }
+              }
+              otherSubtaskByWorker[fwId] = title;
+            }
+          } catch (e) {
+            print('⚠️ Could not parse phase assignments: $e');
+          }
+        } else {
+          print('⚠️ Phase assignments not loaded (${assignResponse.statusCode})');
+        }
+
         final decoded = jsonDecode(response.body);
         final parsed = decoded is List
             ? decoded
@@ -151,6 +220,8 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
                 final isAssignedToOtherProject =
                     assignmentStatus.toLowerCase() == 'assigned';
 
+                final onOtherSubtask = otherSubtaskByWorker[workerId];
+
                 return Worker(
                   workerId: workerId,
                   name: '${json['first_name']} ${json['last_name']}',
@@ -158,6 +229,8 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
                   status: assignmentStatus,
                   isAssignedToOtherProject: isAssignedToOtherProject,
                   assignedProjectNames: assignedProjectNames,
+                  isAssignedToOtherSubtaskInThisPhase: onOtherSubtask != null,
+                  otherSubtaskTitle: onOtherSubtask,
                 );
               })
               .where((worker) => worker.workerId > 0)
@@ -180,12 +253,15 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
     }
   }
 
-  void _toggleWorker(int workerId) {
+  void _toggleWorker(Worker worker) {
+    if (worker.isSelectionBlocked) {
+      return;
+    }
     setState(() {
-      if (_selectedWorkerIds.contains(workerId)) {
-        _selectedWorkerIds.remove(workerId);
+      if (_selectedWorkerIds.contains(worker.workerId)) {
+        _selectedWorkerIds.remove(worker.workerId);
       } else {
-        _selectedWorkerIds.add(workerId);
+        _selectedWorkerIds.add(worker.workerId);
       }
     });
   }
@@ -338,6 +414,23 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.phase.isWorkerAssignmentLocked) {
+      return AlertDialog(
+        title: const Text('Cannot assign workers'),
+        content: const Text(
+          'This phase is closed for new or changed subtask assignments (the phase is '
+          'completed, or every subtask is already completed). Use the people icon to '
+          'view who was assigned.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      );
+    }
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Container(
@@ -688,7 +781,7 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
                               worker.workerId,
                             ),
                             onChanged: (value) {
-                              _toggleWorker(worker.workerId);
+                              _toggleWorker(worker);
                             },
                           );
                         }).toList(),
@@ -786,17 +879,27 @@ class _WorkerChecklistItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final assignedProjectsText = worker.assignedProjectNames.join(' • ');
-      final hasAssignments = worker.isAssignedToOtherProject;
-      final statusLabel = hasAssignments
-      ? (assignedProjectsText.isNotEmpty
-        ? assignedProjectsText
-        : 'Assigned to another project')
-      : 'Available';
+    final blockedOtherSubtask = worker.isAssignedToOtherSubtaskInThisPhase;
+    final hasOtherProject = worker.isAssignedToOtherProject;
+    final isBusy = worker.isSelectionBlocked;
+    final String statusLabel;
+    if (blockedOtherSubtask) {
+      final t = worker.otherSubtaskTitle;
+      statusLabel = t != null && t.isNotEmpty
+          ? 'On subtask: $t'
+          : 'On another subtask in this phase';
+    } else if (hasOtherProject) {
+      statusLabel = assignedProjectsText.isNotEmpty
+          ? assignedProjectsText
+          : 'Assigned to another project';
+    } else {
+      statusLabel = 'Available';
+    }
 
     final statusBadge = Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: hasAssignments
+        color: isBusy
             ? const Color(0xFFFEE2E2)
             : const Color(0xFFE5F8ED),
         borderRadius: BorderRadius.circular(4),
@@ -808,16 +911,18 @@ class _WorkerChecklistItem extends StatelessWidget {
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
-          color: hasAssignments
+          color: isBusy
               ? const Color(0xFFDC2626)
               : const Color(0xFF10B981),
         ),
       ),
     );
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
+    return Opacity(
+      opacity: isBusy && !isSelected ? 0.6 : 1,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
         color: isSelected ? const Color(0xFFFFF2E8) : Colors.white,
         border: Border.all(
           color: isSelected ? const Color(0xFFFF7A18) : const Color(0xFFE5E7EB),
@@ -830,7 +935,7 @@ class _WorkerChecklistItem extends StatelessWidget {
           children: [
             Checkbox(
               value: isSelected,
-              onChanged: onChanged,
+              onChanged: isBusy ? null : onChanged,
               activeColor: const Color(0xFFFF7A18),
             ),
             const SizedBox(width: 8),
@@ -864,9 +969,14 @@ class _WorkerChecklistItem extends StatelessWidget {
                 alignment: Alignment.centerRight,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 260),
-                  child: hasAssignments
+                  child: hasOtherProject
                       ? Tooltip(
                           message: assignedProjectsText,
+                          child: statusBadge,
+                        )
+                      : blockedOtherSubtask
+                      ? Tooltip(
+                          message: statusLabel,
                           child: statusBadge,
                         )
                       : statusBadge,
@@ -876,6 +986,7 @@ class _WorkerChecklistItem extends StatelessWidget {
           ],
         ),
       ),
+    ),
     );
   }
 }

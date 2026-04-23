@@ -435,6 +435,9 @@ class ProjectCard extends StatelessWidget {
                         progress: progress,
                         budget: budget ?? '0',
                         projectId: projectId,
+                        viewOnly: progress >= 1.0 ||
+                            (totalTasks > 0 &&
+                                tasksCompleted == totalTasks),
                       ),
                       transitionDuration: Duration.zero,
                     ),
