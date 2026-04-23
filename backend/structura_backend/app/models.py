@@ -533,6 +533,33 @@ class BackJobReview(models.Model):
         return f"BackJobReview #{self.review_id} - {project_name}"
 
 
+class SupervisorReportSubmission(models.Model):
+    """Attendance / payroll report submitted by a supervisor for the project manager."""
+
+    submission_id = models.CharField(max_length=255, unique=True, db_index=True)
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='supervisor_report_submissions',
+    )
+    supervisor = models.ForeignKey(
+        'Supervisors',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='report_submissions',
+    )
+    report_data = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-updated_at']
+
+    def __str__(self):
+        return f"SupervisorReportSubmission {self.submission_id} (project {self.project_id_id})"
+
+
 # Phase Model
 class Phase(models.Model):
     PHASE_CHOICES = [

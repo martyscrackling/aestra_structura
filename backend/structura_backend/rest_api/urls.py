@@ -31,7 +31,8 @@ from .views import (
     pm_dashboard_summary,
     pm_audit_trail,
     debug_projects,
-    debug_all_data
+    debug_all_data,
+    SupervisorReportSubmissionViewSet,
 )
 
 router = DefaultRouter()
@@ -51,6 +52,11 @@ router.register(r'attendance', AttendanceViewSet, basename='attendance')
 router.register(r'inventory-items', InventoryItemViewSet, basename='inventory-item')
 router.register(r'inventory-usage', InventoryUsageViewSet, basename='inventory-usage')
 router.register(r'phase-material-plans', PhaseMaterialPlanViewSet, basename='phase-material-plan')
+router.register(
+    r'supervisor-reports',
+    SupervisorReportSubmissionViewSet,
+    basename='supervisor-report',
+)
 
 urlpatterns = [
     path('', include(router.urls)),

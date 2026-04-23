@@ -1797,6 +1797,157 @@ class BackJobReviewViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
 
+def _supervisor_assigned_to_project(project, supervisor_pk: int) -> bool:
+    if project.supervisor_id == supervisor_pk:
+        return True
+    sup = models.Supervisors.objects.filter(supervisor_id=supervisor_pk).first()
+    if sup is not None and sup.project_id_id == project.project_id:
+        return True
+    return False
+
+
+def _flatten_supervisor_report_for_client(instance: models.SupervisorReportSubmission) -> dict:
+    """Merge stored JSON with server id for mobile clients."""
+    payload = instance.report_data if isinstance(instance.report_data, dict) else {}
+    out = dict(payload)
+    out['id'] = instance.pk
+    out['submission_id'] = instance.submission_id
+    out['project_id'] = instance.project_id
+    if instance.supervisor_id:
+        out['supervisor_id'] = instance.supervisor_id
+    return out
+
+
+class SupervisorReportSubmissionViewSet(viewsets.ViewSet):
+    """Supervisor submits payroll reports; project manager lists and deletes (scoped by user_id)."""
+
+    def list(self, request):
+        pm_id = _get_request_pm_user_id(request)
+        if pm_id is None:
+            return Response(
+                {'detail': 'user_id is required to list report submissions.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if _get_pm_user_or_none(pm_id) is None:
+            return Response(
+                {'detail': 'Invalid project manager user_id.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        project_id = request.query_params.get('project_id')
+        try:
+            owned_ids = list(
+                models.Project.objects.filter(user_id=pm_id).values_list(
+                    'project_id', flat=True,
+                ),
+            )
+        except Exception:
+            owned_ids = []
+
+        qs = models.SupervisorReportSubmission.objects.filter(
+            project_id__in=owned_ids,
+        ).select_related('project', 'supervisor')
+        if project_id not in [None, '']:
+            try:
+                pid = int(project_id)
+            except (TypeError, ValueError):
+                return Response(
+                    {'detail': 'Invalid project_id.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if pid not in owned_ids:
+                return Response(
+                    {'detail': 'You do not have access to this project.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            qs = qs.filter(project_id=pid)
+
+        data = [_flatten_supervisor_report_for_client(row) for row in qs]
+        return Response(data)
+
+    def create(self, request):
+        data = request.data
+        if not isinstance(data, dict):
+            return Response(
+                {'detail': 'Expected a JSON object.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        submission_id = data.get('submission_id')
+        project_id = data.get('project_id')
+        supervisor_id = data.get('supervisor_id')
+        if not submission_id or not project_id:
+            return Response(
+                {'detail': 'submission_id and project_id are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            project = models.Project.objects.get(project_id=project_id)
+        except models.Project.DoesNotExist:
+            return Response(
+                {'detail': 'Project not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        try:
+            sup_id = int(supervisor_id)
+        except (TypeError, ValueError):
+            return Response(
+                {'detail': 'supervisor_id is required and must be an integer.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not _supervisor_assigned_to_project(project, sup_id):
+            return Response(
+                {'detail': 'Supervisor is not assigned to this project.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        sup = models.Supervisors.objects.filter(supervisor_id=sup_id).first()
+
+        obj, _created = models.SupervisorReportSubmission.objects.update_or_create(
+            submission_id=str(submission_id),
+            defaults={
+                'project': project,
+                'supervisor': sup,
+                'report_data': data,
+            },
+        )
+        return Response(
+            _flatten_supervisor_report_for_client(obj),
+            status=status.HTTP_201_CREATED,
+        )
+
+    def destroy(self, request, pk=None):
+        pm_id = _get_request_pm_user_id(request)
+        if pm_id is None:
+            return Response(
+                {'detail': 'user_id is required to delete a report.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if _get_pm_user_or_none(pm_id) is None:
+            return Response(
+                {'detail': 'Invalid project manager user_id.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        try:
+            pk_int = int(pk)
+        except (TypeError, ValueError):
+            return Response(
+                {'detail': 'Invalid id.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        inst = models.SupervisorReportSubmission.objects.filter(pk=pk_int).first()
+        if inst is None:
+            return Response(
+                {'detail': 'Not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if inst.project.user_id != pm_id:
+            return Response(
+                {'detail': 'You can only delete reports for your own projects.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        inst.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 # Phase ViewSet
 class PhaseViewSet(viewsets.ModelViewSet):
     queryset = models.Phase.objects.all()

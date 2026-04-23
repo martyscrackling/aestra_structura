@@ -43,11 +43,96 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
   String? _error;
   List<WorkerProject> _activeProjects = const [];
   List<WorkerProject> _finishedProjects = const [];
+  late WorkerInfo _displayWorker;
 
   @override
   void initState() {
     super.initState();
+    _displayWorker = widget.worker;
     _fetchWorkerProjects();
+  }
+
+  String? _resolveMediaUrl(dynamic raw) {
+    if (raw == null) return null;
+    final value = raw.toString().trim();
+    if (value.isEmpty) return null;
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return value;
+    }
+    final base = Uri.parse(AppConfig.apiBaseUrl);
+    final origin = Uri(
+      scheme: base.scheme,
+      host: base.host,
+      port: base.hasPort ? base.port : null,
+    );
+    if (value.startsWith('/')) return origin.resolve(value).toString();
+    if (value.startsWith('media/')) return origin.resolve('/$value').toString();
+    if (value.startsWith('fieldworker_images/') ||
+        value.startsWith('supervisor_images/')) {
+      return origin.resolve('/media/$value').toString();
+    }
+    return origin.resolve('/media/$value').toString();
+  }
+
+  Future<void> _reloadDisplayWorker() async {
+    final userId = _tryParseInt(AuthService().currentUser?['user_id']);
+    if (userId == null) return;
+    final w = _displayWorker;
+    try {
+      if (w.type == 'Supervisor' && w.supervisorId != null) {
+        final r = await http.get(
+          AppConfig.apiUri('supervisors/${w.supervisorId}/?user_id=$userId'),
+        );
+        if (r.statusCode != 200) return;
+        final m = Map<String, dynamic>.from(jsonDecode(r.body) as Map);
+        final mediaUrl = _resolveMediaUrl(m['photo']);
+        if (!mounted) return;
+        final combinedName =
+            '${(m['first_name'] ?? '').toString().trim()} ${(m['last_name'] ?? '').toString().trim()}'
+                .trim();
+        setState(() {
+          _displayWorker = WorkerInfo(
+            userId: _tryParseInt(m['user_id']) ?? w.userId,
+            supervisorId: w.supervisorId,
+            name: combinedName.isNotEmpty ? combinedName : w.name,
+            email: m['email']?.toString() ?? 'N/A',
+            phone: m['phone_number']?.toString() ?? w.phone,
+            role: m['role']?.toString() ?? w.role,
+            avatarUrl: (mediaUrl != null && mediaUrl.isNotEmpty)
+                ? mediaUrl
+                : w.avatarUrl,
+            type: w.type,
+          );
+        });
+      } else if (w.type == 'Field Worker' && w.fieldWorkerId != null) {
+        final r = await http.get(
+          AppConfig.apiUri('field-workers/${w.fieldWorkerId}/?user_id=$userId'),
+        );
+        if (r.statusCode != 200) return;
+        final m = Map<String, dynamic>.from(jsonDecode(r.body) as Map);
+        final mediaUrl = _resolveMediaUrl(m['photo']);
+        if (!mounted) return;
+        final combinedName =
+            '${(m['first_name'] ?? '').toString().trim()} ${(m['last_name'] ?? '').toString().trim()}'
+                .trim();
+        setState(() {
+          _displayWorker = WorkerInfo(
+            userId: _tryParseInt(m['user_id']) ?? w.userId,
+            fieldWorkerId: w.fieldWorkerId,
+            name: combinedName.isNotEmpty ? combinedName : w.name,
+            email: w.email,
+            phone: m['phone_number']?.toString() ?? w.phone,
+            role: m['role']?.toString() ?? w.role,
+            avatarUrl: (mediaUrl != null && mediaUrl.isNotEmpty)
+                ? mediaUrl
+                : w.avatarUrl,
+            type: w.type,
+          );
+        });
+      }
+    } catch (_) {
+      // ignore
+    }
   }
 
   int? _tryParseInt(dynamic value) {
@@ -218,7 +303,7 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
     try {
       final currentUserId = _tryParseInt(AuthService().currentUser?['user_id']);
 
-      final worker = widget.worker;
+      final worker = _displayWorker;
       List<Map<String, dynamic>> projects = [];
 
       if (worker.type == 'Supervisor' && worker.supervisorId != null) {
@@ -400,7 +485,7 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '${widget.worker.role} Profile',
+                        '${_displayWorker.role} Profile',
                         style: TextStyle(
                           fontSize: isMobile ? 20 : 24,
                           fontWeight: FontWeight.w700,
@@ -455,16 +540,26 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
                             // Profile Image
                             CircleAvatar(
                               radius: 40,
-                              backgroundImage: NetworkImage(
-                                widget.worker.avatarUrl,
-                              ),
+                              backgroundImage: _displayWorker.avatarUrl
+                                      .trim()
+                                      .isNotEmpty
+                                  ? NetworkImage(
+                                      _displayWorker.avatarUrl,
+                                    )
+                                  : null,
+                              child: _displayWorker.avatarUrl.trim().isNotEmpty
+                                  ? null
+                                  : const Icon(
+                                      Icons.person_outline,
+                                      color: Color(0xFF6B7280),
+                                    ),
                             ),
                             const SizedBox(height: 16),
                             // Profile Info
                             Column(
                               children: [
                                 Text(
-                                  widget.worker.name,
+                                  _displayWorker.name,
                                   style: const TextStyle(
                                     fontSize: 20,
                                     fontWeight: FontWeight.w700,
@@ -483,7 +578,7 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Text(
-                                    widget.worker.role,
+                                    _displayWorker.role,
                                     style: const TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
@@ -503,7 +598,7 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
                                     const SizedBox(width: 8),
                                     Flexible(
                                       child: Text(
-                                        widget.worker.email,
+                                        _displayWorker.email,
                                         style: const TextStyle(
                                           fontSize: 14,
                                           color: Color(0xFF6B7280),
@@ -524,7 +619,7 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
                                     ),
                                     const SizedBox(width: 8),
                                     Text(
-                                      widget.worker.phone,
+                                      _displayWorker.phone,
                                       style: const TextStyle(
                                         fontSize: 14,
                                         color: Color(0xFF6B7280),
@@ -539,13 +634,16 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton.icon(
-                                onPressed: () {
-                                  showDialog(
+                                onPressed: () async {
+                                  final saved = await showDialog<bool>(
                                     context: context,
                                     builder: (context) => ViewEditWorkerModal(
-                                      worker: widget.worker,
+                                      worker: _displayWorker,
                                     ),
                                   );
+                                  if (saved == true && mounted) {
+                                    await _reloadDisplayWorker();
+                                  }
                                 },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFFFF7A18),
@@ -579,9 +677,20 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
                             // Profile Image
                             CircleAvatar(
                               radius: 50,
-                              backgroundImage: NetworkImage(
-                                widget.worker.avatarUrl,
-                              ),
+                              backgroundImage: _displayWorker.avatarUrl
+                                      .trim()
+                                      .isNotEmpty
+                                  ? NetworkImage(
+                                      _displayWorker.avatarUrl,
+                                    )
+                                  : null,
+                              child: _displayWorker.avatarUrl.trim().isNotEmpty
+                                  ? null
+                                  : const Icon(
+                                      Icons.person_outline,
+                                      size: 40,
+                                      color: Color(0xFF6B7280),
+                                    ),
                             ),
                             const SizedBox(width: 24),
                             // Profile Info
@@ -590,7 +699,7 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    widget.worker.name,
+                                    _displayWorker.name,
                                     style: const TextStyle(
                                       fontSize: 22,
                                       fontWeight: FontWeight.w700,
@@ -608,7 +717,7 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Text(
-                                      widget.worker.role,
+                                      _displayWorker.role,
                                       style: const TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.w600,
@@ -626,7 +735,7 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
                                       ),
                                       const SizedBox(width: 8),
                                       Text(
-                                        widget.worker.email,
+                                        _displayWorker.email,
                                         style: const TextStyle(
                                           fontSize: 14,
                                           color: Color(0xFF6B7280),
@@ -644,7 +753,7 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
                                       ),
                                       const SizedBox(width: 8),
                                       Text(
-                                        widget.worker.phone,
+                                        _displayWorker.phone,
                                         style: const TextStyle(
                                           fontSize: 14,
                                           color: Color(0xFF6B7280),
@@ -657,13 +766,16 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
                             ),
                             // Edit Button
                             ElevatedButton.icon(
-                              onPressed: () {
-                                showDialog(
+                              onPressed: () async {
+                                final saved = await showDialog<bool>(
                                   context: context,
                                   builder: (context) => ViewEditWorkerModal(
-                                    worker: widget.worker,
+                                    worker: _displayWorker,
                                   ),
                                 );
+                                if (saved == true && mounted) {
+                                  await _reloadDisplayWorker();
+                                }
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFFFF7A18),

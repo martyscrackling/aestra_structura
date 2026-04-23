@@ -5,6 +5,7 @@ import 'widgets/responsive_page_layout.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
 import '../services/app_config.dart';
+import '../services/auth_service.dart';
 
 class AttendanceReport {
   AttendanceReport({
@@ -312,6 +313,29 @@ class _ReportsPageState extends State<ReportsPage> {
 
     try {
       final prefs = await SharedPreferences.getInstance();
+      final userId = _getCurrentUserIdFromPrefs(prefs) ??
+          _toInt(AuthService().currentUser?['user_id']);
+      final serverId = _toInt(report['id']);
+
+      if (userId != null && serverId != null) {
+        final res = await http.delete(
+          AppConfig.apiUri(
+            'supervisor-reports/$serverId/?user_id=$userId',
+          ),
+        );
+        if (res.statusCode != 204 && res.statusCode != 200) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Server delete failed (${res.statusCode}).',
+              ),
+            ),
+          );
+          return;
+        }
+      }
+
       final targetKey = _reportStorageKey(report);
 
       final latestRaw = prefs.getString('pm_latest_report_v1');
@@ -413,47 +437,83 @@ class _ReportsPageState extends State<ReportsPage> {
   }
 
   Future<void> _loadSubmittedSupervisorReports() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final collected = <Map<String, dynamic>>[];
+    final prefs = await SharedPreferences.getInstance();
+    var userId = _getCurrentUserIdFromPrefs(prefs) ??
+        _toInt(AuthService().currentUser?['user_id']);
 
-      final latestRaw = prefs.getString('pm_latest_report_v1');
-      if (latestRaw != null && latestRaw.isNotEmpty) {
-        final decodedLatest = jsonDecode(latestRaw);
-        if (decodedLatest is Map) {
-          collected.add(Map<String, dynamic>.from(decodedLatest));
-        }
-      }
+    final collected = <Map<String, dynamic>>[];
+    final seenSubmissionIds = <String>{};
 
-      final raw = prefs.getString('supervisor_submitted_reports_v1');
-      final decoded = (raw == null || raw.isEmpty) ? const [] : jsonDecode(raw);
-      if (decoded is List) {
-        for (final item in decoded) {
-          if (item is Map) {
-            collected.add(Map<String, dynamic>.from(item));
+    if (userId != null) {
+      try {
+        final response = await http.get(
+          AppConfig.apiUri('supervisor-reports/?user_id=$userId'),
+        );
+        if (response.statusCode == 200) {
+          final decoded = jsonDecode(response.body);
+          if (decoded is List) {
+            for (final item in decoded) {
+              if (item is Map) {
+                final m = Map<String, dynamic>.from(item);
+                collected.add(m);
+                final sid = '${m['submission_id'] ?? ''}';
+                if (sid.isNotEmpty) seenSubmissionIds.add(sid);
+              }
+            }
           }
         }
+      } catch (_) {
+        // Fall through to local prefs
       }
+    }
 
-      final seen = <String>{};
-      final unique = <Map<String, dynamic>>[];
-      for (final report in collected) {
-        final key =
-            '${report['submission_id'] ?? ''}|${report['submitted_at'] ?? ''}';
-        if (seen.contains(key)) continue;
-        seen.add(key);
-        unique.add(report);
+    void addLocalIfMissing(Map<String, dynamic> m) {
+      final sid = '${m['submission_id'] ?? ''}';
+      if (sid.isNotEmpty) {
+        if (seenSubmissionIds.contains(sid)) return;
+        seenSubmissionIds.add(sid);
       }
+      collected.add(m);
+    }
 
-      unique.sort((a, b) {
-        final da = _parseSubmittedAt(a);
-        final db = _parseSubmittedAt(b);
-        if (da == null && db == null) return 0;
-        if (da == null) return 1;
-        if (db == null) return -1;
-        return db.compareTo(da);
-      });
+    final latestRaw = prefs.getString('pm_latest_report_v1');
+    if (latestRaw != null && latestRaw.isNotEmpty) {
+      final decodedLatest = jsonDecode(latestRaw);
+      if (decodedLatest is Map) {
+        addLocalIfMissing(Map<String, dynamic>.from(decodedLatest));
+      }
+    }
 
+    final raw = prefs.getString('supervisor_submitted_reports_v1');
+    final decoded = (raw == null || raw.isEmpty) ? const [] : jsonDecode(raw);
+    if (decoded is List) {
+      for (final item in decoded) {
+        if (item is Map) {
+          addLocalIfMissing(Map<String, dynamic>.from(item));
+        }
+      }
+    }
+
+    final seen = <String>{};
+    final unique = <Map<String, dynamic>>[];
+    for (final report in collected) {
+      final key =
+          '${report['submission_id'] ?? ''}|${report['submitted_at'] ?? ''}';
+      if (seen.contains(key)) continue;
+      seen.add(key);
+      unique.add(report);
+    }
+
+    unique.sort((a, b) {
+      final da = _parseSubmittedAt(a);
+      final db = _parseSubmittedAt(b);
+      if (da == null && db == null) return 0;
+      if (da == null) return 1;
+      if (db == null) return -1;
+      return db.compareTo(da);
+    });
+
+    try {
       final enriched = await _enrichReportsWithRealNames(unique, prefs);
 
       if (!mounted) return;
