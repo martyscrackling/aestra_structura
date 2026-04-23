@@ -41,6 +41,7 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
   Map<String, dynamic>? _clientInfo;
   Map<String, dynamic>? _projectInfo;
   List<dynamic>? _phases;
+  List<dynamic> _backJobReviews = const [];
   bool _isLoading = true;
   String? _error;
   bool _showDaysLeftReminder = true;
@@ -300,11 +301,27 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
           scopeSuffix: scopeSuffix,
         ),
         _fetchPhases(userId: userId),
+        _fetchBackJobReviews(),
       ]);
 
       final resolvedClient = futures[0] as Map<String, dynamic>?;
       final resolvedPhases =
           (futures[1] as List<dynamic>?) ?? const <dynamic>[];
+      var reviewRows = (futures[2] as List<dynamic>?) ?? const <dynamic>[];
+      reviewRows = List<dynamic>.from(reviewRows);
+      reviewRows.sort((a, b) {
+        DateTime? parseCreated(dynamic x) {
+          if (x is! Map) return null;
+          return DateTime.tryParse('${x['created_at'] ?? ''}');
+        }
+
+        final da = parseCreated(a);
+        final db = parseCreated(b);
+        if (da == null && db == null) return 0;
+        if (da == null) return 1;
+        if (db == null) return -1;
+        return db.compareTo(da);
+      });
 
       if (!mounted) return;
       setState(() {
@@ -321,6 +338,7 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
           return cmp;
         });
         _phases = resolvedPhases;
+        _backJobReviews = reviewRows;
         _isLoading = false;
       });
       for (final p in resolvedPhases) {
@@ -375,6 +393,25 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
     }
 
     return null;
+  }
+
+  Future<List<dynamic>> _fetchBackJobReviews() async {
+    try {
+      final r = await http.get(
+        AppConfig.apiUri('back-job-reviews/?project_id=${widget.projectId}'),
+      );
+      if (r.statusCode != 200) return const <dynamic>[];
+      final decoded = jsonDecode(r.body);
+      if (decoded is List<dynamic>) return decoded;
+      if (decoded is Map<String, dynamic>) {
+        final inner =
+            decoded['results'] ?? decoded['data'] ?? decoded['items'];
+        if (inner is List<dynamic>) return inner;
+      }
+    } catch (_) {
+      // same as other fetches: fail soft
+    }
+    return const <dynamic>[];
   }
 
   Future<List<dynamic>> _fetchPhases({required dynamic userId}) async {
@@ -738,6 +775,145 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
           ),
         ],
       ),
+    );
+  }
+
+  String _formatBackJobDate(dynamic raw) {
+    final dt = DateTime.tryParse('${raw ?? ''}');
+    if (dt == null) return '';
+    return '${dt.month}/${dt.day}/${dt.year}';
+  }
+
+  Widget _buildClientBackJobSection({required bool isMobile}) {
+    if (_backJobReviews.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Client feedback',
+          style: TextStyle(
+            fontSize: isMobile ? 20 : 23,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Notes from the client, including feedback tied to a project phase when applicable.',
+          style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+        ),
+        const SizedBox(height: 12),
+        ..._backJobReviews.map((raw) {
+          final m = raw is Map
+              ? Map<String, dynamic>.from(raw)
+              : <String, dynamic>{};
+          final name = (m['client_name'] ?? 'Client').toString();
+          final text = (m['review_text'] ?? '').toString();
+          if (text.isEmpty) return const SizedBox.shrink();
+          final phaseName = m['phase_name'] as String?;
+          final hasPhase = phaseName != null && phaseName.isNotEmpty;
+          final isResolved = m['is_resolved'] == true;
+          return Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        name,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF0C1935),
+                        ),
+                      ),
+                    ),
+                    Text(
+                      _formatBackJobDate(m['created_at']),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF6B7280),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (hasPhase)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEEEFF2),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      phaseName,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF0C1935),
+                      ),
+                    ),
+                  )
+                else
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEEEFF2),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text(
+                      'Project-wide',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF6B7280),
+                      ),
+                    ),
+                  ),
+                Text(
+                  text,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Color(0xFF374151),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isResolved
+                        ? const Color(0xFFE5F8ED)
+                        : const Color(0xFFFFF2E8),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    isResolved ? 'Resolved' : 'Open',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: isResolved
+                          ? const Color(0xFF10B981)
+                          : const Color(0xFFFF6F00),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
     );
   }
 
@@ -1443,6 +1619,8 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
                 ),
                 const SizedBox(height: 8),
                 _clientCard(isMobile: isMobile),
+                const SizedBox(height: 20),
+                _buildClientBackJobSection(isMobile: isMobile),
                 const SizedBox(height: 20),
                 const Divider(),
                 const SizedBox(height: 24),

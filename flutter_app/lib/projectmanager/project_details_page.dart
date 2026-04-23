@@ -106,6 +106,8 @@ class Subtask {
 
 class BackJobReview {
   final int reviewId;
+  final int? phaseId;
+  final String? phaseName;
   final String clientName;
   final String reviewText;
   final DateTime? createdAt;
@@ -113,6 +115,8 @@ class BackJobReview {
 
   BackJobReview({
     required this.reviewId,
+    this.phaseId,
+    this.phaseName,
     required this.clientName,
     required this.reviewText,
     required this.createdAt,
@@ -159,10 +163,25 @@ class BackJobReview {
       fallback: 'No review details provided.',
     );
 
+    int? phaseId;
+    final rawPhase = json['phase'];
+    if (rawPhase is int) {
+      phaseId = rawPhase;
+    } else if (rawPhase is num) {
+      phaseId = rawPhase.toInt();
+    } else {
+      phaseId = int.tryParse('${rawPhase ?? ''}');
+    }
+    if (phaseId == 0) phaseId = null;
+
+    final rawPhaseName = _stringValue(json['phase_name'], fallback: '');
+
     return BackJobReview(
       reviewId: _intValue(
         json['review_id'] ?? json['id'] ?? json['back_job_review_id'],
       ),
+      phaseId: phaseId,
+      phaseName: rawPhaseName.isEmpty ? null : rawPhaseName,
       clientName: client,
       reviewText: text,
       createdAt: _parseDate(
@@ -516,6 +535,41 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
                 ],
               ),
               const SizedBox(height: 6),
+              if (review.phaseName != null && review.phaseName!.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEEEFF2),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    review.phaseName!,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF0C1935),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ] else if (review.phaseId == null) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEEEFF2),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text(
+                    'Project-wide',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF6B7280),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
               Text(
                 review.reviewText,
                 style: const TextStyle(fontSize: 13, color: Color(0xFF374151)),

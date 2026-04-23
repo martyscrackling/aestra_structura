@@ -1681,19 +1681,27 @@ class ClientViewSet(viewsets.ModelViewSet):
 
 
 class BackJobReviewViewSet(viewsets.ModelViewSet):
-    queryset = models.BackJobReview.objects.select_related('project', 'client').all()
+    queryset = models.BackJobReview.objects.select_related(
+        'project', 'client', 'phase',
+    ).all()
     serializer_class = BackJobReviewSerializer
 
     def get_queryset(self):
         queryset = self.queryset
         project_id = self.request.query_params.get('project_id')
         client_id = self.request.query_params.get('client_id')
+        phase_id = self.request.query_params.get('phase_id')
         is_resolved = self.request.query_params.get('is_resolved')
 
         if project_id:
             queryset = queryset.filter(project_id=project_id)
         if client_id:
             queryset = queryset.filter(client_id=client_id)
+        if phase_id not in [None, '']:
+            if phase_id in ['null', 'none']:
+                queryset = queryset.filter(phase_id__isnull=True)
+            else:
+                queryset = queryset.filter(phase_id=phase_id)
         if is_resolved in ['true', 'false']:
             queryset = queryset.filter(is_resolved=(is_resolved == 'true'))
         return queryset
@@ -1754,6 +1762,30 @@ class BackJobReviewViewSet(viewsets.ModelViewSet):
                 {'detail': 'Client is not assigned to this project.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        phase_id = mutable_data.get('phase')
+        if phase_id not in [None, '', 'null', 'none']:
+            try:
+                phase_pk = int(phase_id)
+            except (TypeError, ValueError):
+                return Response(
+                    {'detail': 'Invalid phase id.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            phase_obj = models.Phase.objects.filter(phase_id=phase_pk).first()
+            if phase_obj is None:
+                return Response(
+                    {'detail': 'Phase not found.'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            if phase_obj.project_id != project.project_id:
+                return Response(
+                    {'detail': 'Phase does not belong to this project.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            mutable_data['phase'] = phase_obj.phase_id
+        else:
+            mutable_data['phase'] = None
 
         mutable_data['project'] = project.project_id
         mutable_data['client'] = client.client_id

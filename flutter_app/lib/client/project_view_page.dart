@@ -18,23 +18,45 @@ class ProjectViewPage extends StatefulWidget {
 
 class _ProjectViewPageState extends State<ProjectViewPage> {
   late Future<List<_PhaseSection>> _future;
-  final TextEditingController _reviewController = TextEditingController();
+  final Map<int, TextEditingController> _phaseReviewControllers = {};
   List<_BackJobReviewItem> _reviews = [];
   bool _isLoadingReviews = true;
-  bool _isSubmittingReview = false;
+  int? _submittingPhaseId;
   String? _reviewsError;
 
   @override
   void initState() {
     super.initState();
-    _future = _load();
+    _future = _load().then((sections) {
+      if (mounted) {
+        setState(() => _syncPhaseReviewControllers(sections));
+      }
+      return sections;
+    });
     _loadBackJobReviews();
   }
 
   @override
   void dispose() {
-    _reviewController.dispose();
+    for (final c in _phaseReviewControllers.values) {
+      c.dispose();
+    }
     super.dispose();
+  }
+
+  void _syncPhaseReviewControllers(List<_PhaseSection> sections) {
+    final ids = sections.map((s) => s.phaseId).toSet();
+    for (final id in _phaseReviewControllers.keys.toList()) {
+      if (!ids.contains(id)) {
+        _phaseReviewControllers.remove(id)?.dispose();
+      }
+    }
+    for (final s in sections) {
+      _phaseReviewControllers.putIfAbsent(
+        s.phaseId,
+        () => TextEditingController(),
+      );
+    }
   }
 
   Future<List<_PhaseSection>> _load() async {
@@ -110,8 +132,11 @@ class _ProjectViewPageState extends State<ProjectViewPage> {
           })
           .toList(growable: false);
 
+      final phaseId = (p['phase_id'] as num?)?.toInt() ?? 0;
+
       sections.add(
         _PhaseSection(
+          phaseId: phaseId,
           title: title,
           date: _formatDateLabel(updatedAt),
           tasks: tasks,
@@ -184,12 +209,13 @@ class _ProjectViewPageState extends State<ProjectViewPage> {
     }
   }
 
-  Future<void> _submitBackJobReview() async {
-    final reviewText = _reviewController.text.trim();
+  Future<void> _submitBackJobReviewForPhase(int phaseId) async {
+    final controller = _phaseReviewControllers[phaseId];
+    final reviewText = (controller?.text ?? '').trim();
     if (reviewText.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please enter a review before submitting.'),
+          content: Text('Please enter feedback for this phase before submitting.'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -202,10 +228,10 @@ class _ProjectViewPageState extends State<ProjectViewPage> {
     final userId = int.tryParse('${currentUser?['user_id']}');
     final projectId = widget.project.projectId;
 
-    if (clientId == null || projectId == 0) {
+    if (clientId == null || projectId == 0 || phaseId == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Unable to submit review: missing client or project.'),
+          content: Text('Unable to submit feedback: missing client, project, or phase.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -213,7 +239,7 @@ class _ProjectViewPageState extends State<ProjectViewPage> {
     }
 
     setState(() {
-      _isSubmittingReview = true;
+      _submittingPhaseId = phaseId;
     });
 
     try {
@@ -225,21 +251,22 @@ class _ProjectViewPageState extends State<ProjectViewPage> {
           'client': clientId,
           'client_user_id': userId,
           'review_text': reviewText,
+          'phase': phaseId,
         }),
       );
 
       if (response.statusCode == 201) {
-        _reviewController.clear();
+        controller?.clear();
         await _loadBackJobReviews();
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Back job review submitted.'),
+            content: Text('Feedback for this phase was sent to your project team.'),
             backgroundColor: Colors.green,
           ),
         );
       } else {
-        String detail = 'Failed to submit review (${response.statusCode}).';
+        String detail = 'Failed to submit feedback (${response.statusCode}).';
         try {
           final decoded = jsonDecode(response.body);
           if (decoded is Map && decoded['detail'] != null) {
@@ -256,14 +283,14 @@ class _ProjectViewPageState extends State<ProjectViewPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Error submitting review.'),
+          content: Text('Error submitting feedback.'),
           backgroundColor: Colors.red,
         ),
       );
     } finally {
       if (mounted) {
         setState(() {
-          _isSubmittingReview = false;
+          _submittingPhaseId = null;
         });
       }
     }
@@ -714,10 +741,16 @@ class _ProjectViewPageState extends State<ProjectViewPage> {
 
           return RefreshIndicator(
             onRefresh: () async {
+              final f = _load();
               setState(() {
-                _future = _load();
+                _future = f;
               });
-              await _future;
+              final sections = await f;
+              await _loadBackJobReviews();
+              if (!mounted) return;
+              setState(() {
+                _syncPhaseReviewControllers(sections);
+              });
             },
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -793,140 +826,88 @@ class _ProjectViewPageState extends State<ProjectViewPage> {
                       Expanded(child: Text(project.location)),
                     ],
                   ),
-                  const SizedBox(height: 20),
-                  Text(
-                    'Back Job Reviews',
-                    style: TextStyle(
-                      fontSize: isMobile ? 16 : 18,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withAlpha(8),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Tell us what needs to be fixed:',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF374151),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _reviewController,
-                          minLines: 2,
-                          maxLines: 4,
-                          decoration: InputDecoration(
-                            hintText:
-                                'Example: Paint finish in bedroom has uneven texture...',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: ElevatedButton(
-                            onPressed: _isSubmittingReview
-                                ? null
-                                : _submitBackJobReview,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFFF7A18),
-                            ),
-                            child: _isSubmittingReview
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Text(
-                                    'Submit Review',
-                                    style: TextStyle(color: Colors.white),
-                                  ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
                   if (_isLoadingReviews)
-                    const Center(child: CircularProgressIndicator())
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 16),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
                   else if (_reviewsError != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: Text(
+                        _reviewsError!,
+                        style: const TextStyle(color: Color(0xFF6B7280)),
+                      ),
+                    )
+                  else if (_reviews.where((r) => r.phaseId == null).isNotEmpty) ...[
                     Text(
-                      _reviewsError!,
-                      style: const TextStyle(color: Color(0xFF6B7280)),
-                    )
-                  else if (_reviews.isEmpty)
+                      'General project feedback',
+                      style: TextStyle(
+                        fontSize: isMobile ? 16 : 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     const Text(
-                      'No back job reviews yet.',
-                      style: TextStyle(color: Color(0xFF6B7280)),
-                    )
-                  else
-                    ..._reviews.map(
-                      (r) => Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFFE5E7EB)),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
+                      'Earlier messages not tied to a specific phase',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF6B7280),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ..._reviews
+                        .where((r) => r.phaseId == null)
+                        .map(
+                          (r) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: const Color(0xFFE5E7EB),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Expanded(
-                                    child: Text(
-                                      r.clientName,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w700,
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          r.clientName,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
                                       ),
-                                    ),
+                                      Text(
+                                        _formatReviewDate(r.createdAt),
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Color(0xFF6B7280),
+                                        ),
+                                      ),
+                                    ],
                                   ),
+                                  const SizedBox(height: 6),
                                   Text(
-                                    _formatReviewDate(r.createdAt),
+                                    r.reviewText,
                                     style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Color(0xFF6B7280),
+                                      fontSize: 13,
+                                      color: Color(0xFF374151),
                                     ),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 6),
-                              Text(
-                                r.reviewText,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: Color(0xFF374151),
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                  const SizedBox(height: 20),
+                    const SizedBox(height: 20),
+                  ],
                   Text(
                     'To Do',
                     style: TextStyle(
@@ -1027,6 +1008,124 @@ class _ProjectViewPageState extends State<ProjectViewPage> {
                                     ),
                                   ],
                                 ),
+                                const SizedBox(height: 14),
+                                const Divider(),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Feedback for this phase',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF374151),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Your supervisor and project manager can read this.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFF6B7280),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                TextField(
+                                  controller: _phaseReviewControllers[w
+                                      .phaseId],
+                                  minLines: 2,
+                                  maxLines: 4,
+                                  decoration: InputDecoration(
+                                    hintText:
+                                        'What should we know about this phase?',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    isDense: true,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: ElevatedButton(
+                                    onPressed: _submittingPhaseId != null
+                                        ? null
+                                        : () => _submitBackJobReviewForPhase(
+                                            w.phaseId,
+                                          ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(
+                                        0xFFFF7A18,
+                                      ),
+                                    ),
+                                    child: _submittingPhaseId == w.phaseId
+                                        ? const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Colors.white,
+                                            ),
+                                          )
+                                        : const Text(
+                                            'Send feedback',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                  ),
+                                ),
+                                if (_reviews
+                                    .any((r) => r.phaseId == w.phaseId)) ...[
+                                  const SizedBox(height: 10),
+                                  ..._reviews
+                                      .where((r) => r.phaseId == w.phaseId)
+                                      .map(
+                                        (r) => Padding(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 8,
+                                          ),
+                                          child: Container(
+                                            width: double.infinity,
+                                            padding: const EdgeInsets.all(10),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFF9FAFB),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              border: Border.all(
+                                                color: const Color(0xFFE5E7EB),
+                                              ),
+                                            ),
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Row(
+                                                  children: [
+                                                    Text(
+                                                      _formatReviewDate(
+                                                        r.createdAt,
+                                                      ),
+                                                      style: const TextStyle(
+                                                        fontSize: 12,
+                                                        color: Color(
+                                                          0xFF6B7280,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  r.reviewText,
+                                                  style: const TextStyle(
+                                                    fontSize: 13,
+                                                    color: Color(0xFF374151),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                ],
                               ],
                             ),
                           ),
@@ -1045,11 +1144,13 @@ class _ProjectViewPageState extends State<ProjectViewPage> {
 
 class _PhaseSection {
   _PhaseSection({
+    required this.phaseId,
     required this.title,
     required this.date,
     required this.tasks,
     required this.isLatestUpdatedPhase,
   });
+  final int phaseId;
   final String title;
   final String date;
   final List<_TaskItem> tasks;
@@ -1074,6 +1175,8 @@ class _TaskItem {
 class _BackJobReviewItem {
   _BackJobReviewItem({
     required this.reviewId,
+    this.phaseId,
+    this.phaseName,
     required this.clientName,
     required this.reviewText,
     required this.createdAt,
@@ -1081,14 +1184,28 @@ class _BackJobReviewItem {
   });
 
   final int reviewId;
+  final int? phaseId;
+  final String? phaseName;
   final String clientName;
   final String reviewText;
   final DateTime createdAt;
   final bool isResolved;
 
   factory _BackJobReviewItem.fromJson(Map<String, dynamic> json) {
+    final rawPhase = json['phase'];
+    int? phaseId;
+    if (rawPhase is int) {
+      phaseId = rawPhase;
+    } else if (rawPhase is num) {
+      phaseId = rawPhase.toInt();
+    } else {
+      phaseId = int.tryParse('${rawPhase ?? ''}');
+    }
+    if (phaseId == 0) phaseId = null;
     return _BackJobReviewItem(
       reviewId: (json['review_id'] as num?)?.toInt() ?? 0,
+      phaseId: phaseId,
+      phaseName: json['phase_name'] as String?,
       clientName: (json['client_name'] as String?) ?? 'Client',
       reviewText: (json['review_text'] as String?) ?? '',
       createdAt:

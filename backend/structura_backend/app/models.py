@@ -506,6 +506,13 @@ class BackJobReview(models.Model):
         on_delete=models.CASCADE,
         related_name='back_job_reviews',
     )
+    phase = models.ForeignKey(
+        'Phase',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='back_job_reviews',
+    )
     client = models.ForeignKey(
         Client,
         on_delete=models.SET_NULL,

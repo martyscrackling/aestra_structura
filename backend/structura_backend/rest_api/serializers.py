@@ -959,6 +959,9 @@ class ClientSerializer(serializers.ModelSerializer):
 class BackJobReviewSerializer(serializers.ModelSerializer):
     client_name = serializers.SerializerMethodField()
     project_name = serializers.CharField(source='project.project_name', read_only=True)
+    phase_name = serializers.CharField(
+        source='phase.phase_name', read_only=True, allow_null=True
+    )
 
     class Meta:
         model = models.BackJobReview
@@ -966,6 +969,8 @@ class BackJobReviewSerializer(serializers.ModelSerializer):
             'review_id',
             'project',
             'project_name',
+            'phase',
+            'phase_name',
             'client',
             'client_name',
             'review_text',
