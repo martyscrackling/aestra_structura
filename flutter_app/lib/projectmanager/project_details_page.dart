@@ -72,14 +72,34 @@ class Subtask {
   final int subtaskId;
   final String title;
   final String status;
+  final String? progressNotes;
+  final List<Map<String, dynamic>> updatePhotos;
+  final DateTime? updatedAt;
 
-  Subtask({required this.subtaskId, required this.title, required this.status});
+  Subtask({
+    required this.subtaskId,
+    required this.title,
+    required this.status,
+    this.progressNotes,
+    this.updatePhotos = const [],
+    this.updatedAt,
+  });
 
   factory Subtask.fromJson(Map<String, dynamic> json) {
+    final updatePhotosRaw = (json['update_photos'] is List)
+        ? (json['update_photos'] as List)
+        : const [];
+    final updatePhotos = updatePhotosRaw
+        .whereType<Map<String, dynamic>>()
+        .toList(growable: false);
+    final updatedAtStr = json['updated_at'] as String?;
     return Subtask(
       subtaskId: json['subtask_id'],
       title: json['title'],
       status: json['status'],
+      progressNotes: json['progress_notes'] as String?,
+      updatePhotos: updatePhotos,
+      updatedAt: updatedAtStr != null ? DateTime.tryParse(updatedAtStr) : null,
     );
   }
 }
@@ -119,7 +139,10 @@ class BackJobReview {
   static bool _parseResolved(dynamic value) {
     if (value is bool) return value;
     final text = (value ?? '').toString().trim().toLowerCase();
-    return text == 'true' || text == '1' || text == 'resolved' || text == 'completed';
+    return text == 'true' ||
+        text == '1' ||
+        text == 'resolved' ||
+        text == 'completed';
   }
 
   factory BackJobReview.fromJson(Map<String, dynamic> json) {
@@ -137,11 +160,17 @@ class BackJobReview {
     );
 
     return BackJobReview(
-      reviewId: _intValue(json['review_id'] ?? json['id'] ?? json['back_job_review_id']),
+      reviewId: _intValue(
+        json['review_id'] ?? json['id'] ?? json['back_job_review_id'],
+      ),
       clientName: client,
       reviewText: text,
-      createdAt: _parseDate(json['created_at'] ?? json['createdAt'] ?? json['date']),
-      isResolved: _parseResolved(json['is_resolved'] ?? json['resolved'] ?? json['status']),
+      createdAt: _parseDate(
+        json['created_at'] ?? json['createdAt'] ?? json['date'],
+      ),
+      isResolved: _parseResolved(
+        json['is_resolved'] ?? json['resolved'] ?? json['status'],
+      ),
     );
   }
 }
@@ -294,7 +323,9 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
 
         final reviews = data
             .whereType<Map>()
-            .map((json) => BackJobReview.fromJson(Map<String, dynamic>.from(json)))
+            .map(
+              (json) => BackJobReview.fromJson(Map<String, dynamic>.from(json)),
+            )
             .toList();
 
         reviews.sort((a, b) {
@@ -336,9 +367,7 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
         title: const Text('Edit Phase Name'),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(
-            hintText: 'Enter phase name',
-          ),
+          decoration: const InputDecoration(hintText: 'Enter phase name'),
           autofocus: true,
         ),
         actions: [
@@ -367,9 +396,9 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
         if (response.statusCode == 200) {
           _fetchPhases();
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Phase updated')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('Phase updated')));
           }
         }
       } catch (e) {
@@ -406,9 +435,9 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
         if (response.statusCode == 204) {
           _fetchPhases();
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Phase removed')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('Phase removed')));
           }
         }
       } catch (e) {
@@ -489,10 +518,7 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
               const SizedBox(height: 6),
               Text(
                 review.reviewText,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: Color(0xFF374151),
-                ),
+                style: const TextStyle(fontSize: 13, color: Color(0xFF374151)),
               ),
               const SizedBox(height: 8),
               Container(
@@ -1249,10 +1275,16 @@ class _PhaseSection extends StatelessWidget {
               // To accurately check if the PREVIOUS phase in the project is done,
               // we find this phase's position in the master _phases list.
               // This ensures we aren't fooled by the 'To Do' vs 'Finished' filtering.
-              final masterPhases = (context.findAncestorStateOfType<_ProjectTaskDetailsPageState>()?._phases) ?? phases;
+              final masterPhases =
+                  (context
+                      .findAncestorStateOfType<_ProjectTaskDetailsPageState>()
+                      ?._phases) ??
+                  phases;
               final masterIndex = masterPhases.indexOf(phase);
-              final bool isLocked = masterIndex > 0 && masterPhases[masterIndex - 1].calculateProgress() < 1.0;
-              
+              final bool isLocked =
+                  masterIndex > 0 &&
+                  masterPhases[masterIndex - 1].calculateProgress() < 1.0;
+
               return _PhaseCard(phase: phase, isLocked: isLocked);
             }),
         ],
@@ -1335,7 +1367,10 @@ class _PhaseCard extends StatelessWidget {
               const SizedBox(width: 16),
               if (phase.status != 'not_started')
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: _getStatusBgColor(phase.status),
                     borderRadius: BorderRadius.circular(4),
@@ -1435,16 +1470,21 @@ class _PhaseCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton(
-                  onPressed: isLocked ? null : () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => SubtaskManagePage(phase: phase),
-                      ),
-                    );
-                  },
+                  onPressed: isLocked
+                      ? null
+                      : () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  SubtaskManagePage(phase: phase),
+                            ),
+                          );
+                        },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: isLocked ? Colors.grey : const Color(0xFFFF7A18),
+                    backgroundColor: isLocked
+                        ? Colors.grey
+                        : const Color(0xFFFF7A18),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -1455,18 +1495,27 @@ class _PhaseCard extends StatelessWidget {
                     ),
                   ),
                   child: Text(
-                    isLocked ? 'Complete Previous Phase to Unlock' : 'Manage Subtask',
+                    isLocked
+                        ? 'Complete Previous Phase to Unlock'
+                        : 'Manage Subtask',
                     style: const TextStyle(fontSize: 13),
                   ),
                 ),
                 if (isLocked) ...[
                   const SizedBox(width: 8),
                   PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert, size: 20, color: Color(0xFF6B7280)),
+                    icon: const Icon(
+                      Icons.more_vert,
+                      size: 20,
+                      color: Color(0xFF6B7280),
+                    ),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                     onSelected: (value) {
-                      final state = context.findAncestorStateOfType<_ProjectTaskDetailsPageState>();
+                      final state = context
+                          .findAncestorStateOfType<
+                            _ProjectTaskDetailsPageState
+                          >();
                       if (state == null) return;
                       if (value == 'edit') {
                         state._editPhase(phase);
@@ -1489,9 +1538,16 @@ class _PhaseCard extends StatelessWidget {
                         value: 'remove',
                         child: Row(
                           children: [
-                            Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                            Icon(
+                              Icons.delete_outline,
+                              size: 18,
+                              color: Colors.red,
+                            ),
                             SizedBox(width: 8),
-                            Text('Remove Phase', style: TextStyle(color: Colors.red)),
+                            Text(
+                              'Remove Phase',
+                              style: TextStyle(color: Colors.red),
+                            ),
                           ],
                         ),
                       ),

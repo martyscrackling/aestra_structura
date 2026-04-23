@@ -3,8 +3,7 @@ from rest_framework import generics, status, viewsets
 from rest_framework.decorators import api_view, action, parser_classes
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
-from django.contrib.auth.hashers import check_password
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import check_password, identify_hasher, make_password
 from django.views.decorators.csrf import csrf_exempt
 from django.db.models import Count, Q, Prefetch
 from django.db import transaction
@@ -21,6 +20,40 @@ from datetime import timedelta
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _is_django_encoded_password(encoded):
+    if not encoded:
+        return False
+    try:
+        identify_hasher(encoded)
+        return True
+    except ValueError:
+        return False
+
+
+def _verify_password(raw_password, encoded):
+    """Match Django hashed passwords; also accept legacy plaintext rows in the DB."""
+    if raw_password is None or encoded is None:
+        return False
+    if check_password(raw_password, encoded):
+        return True
+    if _is_django_encoded_password(encoded):
+        return False
+    try:
+        return secrets.compare_digest(str(encoded), str(raw_password))
+    except TypeError:
+        return str(encoded) == str(raw_password)
+
+
+def _rehash_password_if_plaintext(model_obj, field_name, raw_password):
+    """Upgrade legacy plaintext passwords to Django hashes on successful login."""
+    encoded = getattr(model_obj, field_name, None)
+    if not encoded or _is_django_encoded_password(encoded):
+        return
+    setattr(model_obj, field_name, raw_password)
+    model_obj.save(update_fields=[field_name])
+
 
 from app.image_verification import verify_image_has_human_face
 from .email_utils import (
@@ -395,33 +428,67 @@ def verify_signup_otp(request):
 def login_user(request):
     """
     Authenticate user with email and password.
-    Can login as either a User (ProjectManager), Worker, or Client.
+    Can log in as a Supervisor, User (ProjectManager, etc.), or Client.
     """
     try:
         data = json.loads(request.body)
-        email = data.get('email')
+        email = (data.get('email') or '').strip()
         password = data.get('password')
-        
+
         if not email or not password:
             return Response(
                 {'success': False, 'message': 'Email and password required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         account_found = False
 
-        # First, try to find user as a regular User (ProjectManager, etc.)
-        try:
-            user = models.User.objects.get(email=email)
+        # Supervisors first: the same email can exist on `User` and `Supervisors`;
+        # supervisor credentials must authenticate against the supervisor row.
+        supervisor = models.Supervisors.objects.filter(email__iexact=email).first()
+        if supervisor is not None:
             account_found = True
-            # Check password
-            if check_password(password, user.password_hash):
-                # If this is a Client user, also resolve the corresponding Client profile.
-                # Many parts of the mobile/web clients rely on `client_id` / `project_id`.
+            if _verify_password(password, supervisor.password_hash):
+                _rehash_password_if_plaintext(supervisor, 'password_hash', password)
+                project_obj = supervisor.project_id
+                if project_obj is None:
+                    project_obj = (
+                        models.Project.objects.filter(supervisor=supervisor)
+                        .order_by('-created_at')
+                        .first()
+                    )
+                    if project_obj is not None:
+                        supervisor.project_id = project_obj
+                        supervisor.save(update_fields=['project_id'])
+
+                return Response({
+                    'success': True,
+                    'message': 'Login successful',
+                    'user': {
+                        'supervisor_id': supervisor.supervisor_id,
+                        'user_id': supervisor.supervisor_id,
+                        'project_id': project_obj.project_id if project_obj else None,
+                        'email': supervisor.email,
+                        'first_name': supervisor.first_name,
+                        'middle_name': supervisor.middle_name,
+                        'last_name': supervisor.last_name,
+                        'phone': supervisor.phone_number,
+                        'phone_number': supervisor.phone_number,
+                        'role': 'Supervisor',
+                        'type': 'Supervisor',
+                        'force_password_change': password == 'PASSWORD',
+                    }
+                }, status=status.HTTP_200_OK)
+
+        user = models.User.objects.filter(email__iexact=email).first()
+        if user is not None:
+            account_found = True
+            if _verify_password(password, user.password_hash):
+                _rehash_password_if_plaintext(user, 'password_hash', password)
                 if user.role == 'Client':
                     client = (
                         models.Client.objects.filter(user_id=user).select_related('project_id').first()
-                        or models.Client.objects.filter(email=email).select_related('project_id').first()
+                        or models.Client.objects.filter(email__iexact=email).select_related('project_id').first()
                     )
                     return Response({
                         'success': True,
@@ -454,65 +521,21 @@ def login_user(request):
                         'phone': user.phone,
                         'phone_number': user.phone,
                         'role': user.role,
-                        'type': 'user',  # Indicate this is a regular user/project manager
+                        'type': 'user',
                     }
                 }, status=status.HTTP_200_OK)
-        except models.User.DoesNotExist:
-            pass  # Not a User, check if it's a Worker or Client
-        
-        # If not a regular user, check if they're a Supervisor
-        try:
-            supervisor = models.Supervisors.objects.get(email=email)
-            account_found = True
-            # Check password
-            if check_password(password, supervisor.password_hash):
-                # Prefer the explicit FK on the supervisor row, but fall back to
-                # resolving the project through Project.supervisor.
-                project_obj = supervisor.project_id
-                if project_obj is None:
-                    project_obj = (
-                        models.Project.objects.filter(supervisor=supervisor)
-                        .order_by('-created_at')
-                        .first()
-                    )
-                    if project_obj is not None:
-                        # Backfill for future logins
-                        supervisor.project_id = project_obj
-                        supervisor.save(update_fields=['project_id'])
 
-                return Response({
-                    'success': True,
-                    'message': 'Login successful',
-                    'user': {
-                        'supervisor_id': supervisor.supervisor_id,
-                        'user_id': supervisor.supervisor_id,  # Use supervisor_id as user_id
-                        'project_id': project_obj.project_id if project_obj else None,
-                        'email': supervisor.email,
-                        'first_name': supervisor.first_name,
-                        'middle_name': supervisor.middle_name,
-                        'last_name': supervisor.last_name,
-                        'phone': supervisor.phone_number,
-                        'phone_number': supervisor.phone_number,
-                        'role': 'Supervisor',
-                        'type': 'Supervisor',  # Indicate this is a supervisor
-                        'force_password_change': password == 'PASSWORD',
-                    }
-                }, status=status.HTTP_200_OK)
-        except models.Supervisors.DoesNotExist:
-            pass  # Not a Supervisor, check if it's a Client
-        
-        # If not a supervisor, check if they're a Client
-        try:
-            client = models.Client.objects.get(email=email)
+        client = models.Client.objects.filter(email__iexact=email).first()
+        if client is not None:
             account_found = True
-            # Check password
-            if check_password(password, client.password_hash):
+            if _verify_password(password, client.password_hash):
+                _rehash_password_if_plaintext(client, 'password_hash', password)
                 return Response({
                     'success': True,
                     'message': 'Login successful',
                     'user': {
                         'client_id': client.client_id,
-                        'user_id': client.client_id,  # Use client_id as user_id
+                        'user_id': client.client_id,
                         'project_id': client.project_id.project_id if client.project_id else None,
                         'email': client.email,
                         'first_name': client.first_name,
@@ -521,13 +544,10 @@ def login_user(request):
                         'phone': client.phone_number,
                         'phone_number': client.phone_number,
                         'role': 'Client',
-                        'type': 'Client',  # Indicate this is a client
+                        'type': 'Client',
                         'force_password_change': password == 'PASSWORD',
                     }
                 }, status=status.HTTP_200_OK)
-        except models.Client.DoesNotExist:
-
-            pass
 
         if account_found:
             return Response(
@@ -539,7 +559,7 @@ def login_user(request):
             {'success': False, 'message': 'Email not found in system'},
             status=status.HTTP_404_NOT_FOUND
         )
-        
+
     except Exception as e:
         return Response(
             {'success': False, 'message': str(e)},
@@ -584,9 +604,9 @@ def change_password(request):
             )
 
         # Supervisors table
-        supervisor = models.Supervisors.objects.filter(email=email).first()
+        supervisor = models.Supervisors.objects.filter(email__iexact=email).first()
         if supervisor is not None:
-            if not check_password(current_password, supervisor.password_hash):
+            if not _verify_password(current_password, supervisor.password_hash):
                 return Response(
                     {'success': False, 'message': 'Current password is incorrect'},
                     status=status.HTTP_401_UNAUTHORIZED,
@@ -596,9 +616,9 @@ def change_password(request):
             return Response({'success': True, 'message': 'Password updated'}, status=status.HTTP_200_OK)
 
         # Clients table
-        client = models.Client.objects.filter(email=email).first()
+        client = models.Client.objects.filter(email__iexact=email).first()
         if client is not None:
-            if not check_password(current_password, client.password_hash):
+            if not _verify_password(current_password, client.password_hash):
                 return Response(
                     {'success': False, 'message': 'Current password is incorrect'},
                     status=status.HTTP_401_UNAUTHORIZED,
@@ -608,9 +628,9 @@ def change_password(request):
             return Response({'success': True, 'message': 'Password updated'}, status=status.HTTP_200_OK)
 
         # Regular User accounts (ProjectManager, Client, etc.)
-        user = models.User.objects.filter(email=email).first()
+        user = models.User.objects.filter(email__iexact=email).first()
         if user is not None:
-            if not check_password(current_password, user.password_hash):
+            if not _verify_password(current_password, user.password_hash):
                 return Response(
                     {'success': False, 'message': 'Current password is incorrect'},
                     status=status.HTTP_401_UNAUTHORIZED,

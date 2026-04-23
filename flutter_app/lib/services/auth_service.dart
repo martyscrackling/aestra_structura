@@ -65,6 +65,7 @@ class AuthService extends ChangeNotifier {
 
   /// Login user (can be ProjectManager or Supervisor)
   Future<bool> login(String email, String password) async {
+    email = email.trim();
     try {
       print('Attempting login with email: $email');
       print('API_BASE_URL: ${AppConfig.apiBaseUrl}');

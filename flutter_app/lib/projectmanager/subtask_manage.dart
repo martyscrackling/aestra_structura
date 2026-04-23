@@ -53,9 +53,7 @@ class _SubtaskManagePageState extends State<SubtaskManagePage> {
         title: const Text('Edit Subtask Name'),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(
-            hintText: 'Enter subtask name',
-          ),
+          decoration: const InputDecoration(hintText: 'Enter subtask name'),
           autofocus: true,
         ),
         actions: [
@@ -65,7 +63,9 @@ class _SubtaskManagePageState extends State<SubtaskManagePage> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, controller.text.trim()),
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF7A18)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF7A18),
+            ),
             child: const Text('Save', style: TextStyle(color: Colors.white)),
           ),
         ],
@@ -82,9 +82,9 @@ class _SubtaskManagePageState extends State<SubtaskManagePage> {
         if (response.statusCode == 200) {
           _refreshPhase();
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Subtask updated')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('Subtask updated')));
           }
         }
       } catch (e) {
@@ -121,9 +121,9 @@ class _SubtaskManagePageState extends State<SubtaskManagePage> {
         if (response.statusCode == 204) {
           _refreshPhase();
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Subtask removed')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('Subtask removed')));
           }
         }
       } catch (e) {
@@ -144,118 +144,54 @@ class _SubtaskManagePageState extends State<SubtaskManagePage> {
               children: [
                 const DashboardHeader(title: 'Subtasks'),
                 Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Back button and phase header
-                        Row(
-                          children: [
-                            IconButton(
-                              onPressed: () => Navigator.pop(context),
-                              icon: const Icon(Icons.arrow_back),
-                              color: const Color(0xFF0C1935),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _phase.phaseName,
-                                    style: const TextStyle(
-                                      fontSize: 28,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF0C1935),
-                                    ),
-                                  ),
-                                  if (_phase.description != null &&
-                                      _phase.description!.isNotEmpty)
-                                    Text(
-                                      _phase.description!,
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        color: Color(0xFF6B7280),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Phase info
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.04),
-                                blurRadius: 10,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Row(
+                  child: RefreshIndicator(
+                    onRefresh: _refreshPhase,
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Back button and phase header
+                          Row(
                             children: [
-                              Icon(
-                                Icons.timer_outlined,
-                                size: 18,
-                                color: Colors.grey[600],
+                              IconButton(
+                                onPressed: () => Navigator.pop(context),
+                                icon: const Icon(Icons.arrow_back),
+                                color: const Color(0xFF0C1935),
                               ),
                               const SizedBox(width: 8),
-                              Text(
-                                'Duration: ${_phase.daysDuration != null ? '${_phase.daysDuration} days' : 'Not set'}',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[600],
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _phase.phaseName,
+                                      style: const TextStyle(
+                                        fontSize: 28,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF0C1935),
+                                      ),
+                                    ),
+                                    if (_phase.description != null &&
+                                        _phase.description!.isNotEmpty)
+                                      Text(
+                                        _phase.description!,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          color: Color(0xFF6B7280),
+                                        ),
+                                      ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(width: 16),
-                              if (_phase.status != 'not_started')
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: _getStatusBgColor(_phase.status),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    _phase.status
-                                        .replaceAll('_', ' ')
-                                        .toUpperCase(),
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: _getStatusColor(_phase.status),
-                                    ),
-                                  ),
-                                ),
                             ],
                           ),
-                        ),
-                        const SizedBox(height: 24),
+                          const SizedBox(height: 24),
 
-                        // Subtasks section
-                        Text(
-                          'Subtasks / ${_phase.subtasks.length}',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF0C1935),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-
-                        if (_phase.subtasks.isEmpty)
+                          // Phase info
                           Container(
-                            padding: const EdgeInsets.all(24),
+                            padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(12),
@@ -267,69 +203,134 @@ class _SubtaskManagePageState extends State<SubtaskManagePage> {
                                 ),
                               ],
                             ),
-                            child: Center(
-                              child: Column(
-                                children: [
-                                  Icon(
-                                    Icons.checklist_outlined,
-                                    size: 48,
-                                    color: const Color(0xFFCBD5E1),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.timer_outlined,
+                                  size: 18,
+                                  color: Colors.grey[600],
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Duration: ${_phase.daysDuration != null ? '${_phase.daysDuration} days' : 'Not set'}',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey[600],
                                   ),
-                                  const SizedBox(height: 12),
-                                  const Text(
-                                    'No subtasks yet',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color: Color(0xFF94A3B8),
+                                ),
+                                const SizedBox(width: 16),
+                                if (_phase.status != 'not_started')
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
                                     ),
+                                    decoration: BoxDecoration(
+                                      color: _getStatusBgColor(_phase.status),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      _phase.status
+                                          .replaceAll('_', ' ')
+                                          .toUpperCase(),
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: _getStatusColor(_phase.status),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+
+                          // Subtasks section
+                          Text(
+                            'Subtasks / ${_phase.subtasks.length}',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF0C1935),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+
+                          if (_phase.subtasks.isEmpty)
+                            Container(
+                              padding: const EdgeInsets.all(24),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.04),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 2),
                                   ),
                                 ],
                               ),
-                            ),
-                          )
-                        else
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.04),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 2),
+                              child: Center(
+                                child: Column(
+                                  children: [
+                                    Icon(
+                                      Icons.checklist_outlined,
+                                      size: 48,
+                                      color: const Color(0xFFCBD5E1),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    const Text(
+                                      'No subtasks yet',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        color: Color(0xFF94A3B8),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                            child: Column(
-                              children: _phase.subtasks
-                                  .asMap()
-                                  .entries
-                                  .map((entry) {
-                                    final index = entry.key;
-                                    final subtask = entry.value;
-                                    final isLast =
-                                        index ==
-                                        _phase.subtasks.length - 1;
-                                    return Column(
-                                      children: [
-                                        _SubtaskTile(
-                                          subtask: subtask,
-                                          phase: _phase,
-                                          onEdit: () => _editSubtask(subtask),
-                                          onRemove: () => _removeSubtask(subtask),
+                              ),
+                            )
+                          else
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.04),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Column(
+                                children: _phase.subtasks.asMap().entries.map((
+                                  entry,
+                                ) {
+                                  final index = entry.key;
+                                  final subtask = entry.value;
+                                  final isLast =
+                                      index == _phase.subtasks.length - 1;
+                                  return Column(
+                                    children: [
+                                      _SubtaskTile(
+                                        subtask: subtask,
+                                        phase: _phase,
+                                        onEdit: () => _editSubtask(subtask),
+                                        onRemove: () => _removeSubtask(subtask),
+                                      ),
+                                      if (!isLast)
+                                        const Divider(
+                                          height: 1,
+                                          color: Color(0xFFF3F4F6),
                                         ),
-                                        if (!isLast)
-                                          const Divider(
-                                            height: 1,
-                                            color: Color(0xFFF3F4F6),
-                                          ),
-                                      ],
-                                    );
-                                  })
-                                  .toList(),
+                                    ],
+                                  );
+                                }).toList(),
+                              ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -366,6 +367,492 @@ class _SubtaskManagePageState extends State<SubtaskManagePage> {
   }
 }
 
+String _subtaskManagerImageUrl(String path) {
+  if (path.startsWith('http')) return path;
+  final baseUri = Uri.parse(AppConfig.apiBaseUrl);
+  return '${baseUri.scheme}://${baseUri.host}${baseUri.hasPort ? ':${baseUri.port}' : ''}$path';
+}
+
+List<Map<String, dynamic>> _subtaskManagerLatestUpdatePhotos(Subtask t) {
+  if (t.updatePhotos.isEmpty || t.updatedAt == null) return const [];
+  final firstPhotoRaw = t.updatePhotos.first['created_at'] as String?;
+  final firstPhotoDt = firstPhotoRaw != null
+      ? DateTime.tryParse(firstPhotoRaw)
+      : null;
+  if (firstPhotoDt == null) return t.updatePhotos;
+
+  final diff = t.updatedAt!.difference(firstPhotoDt).inMinutes.abs();
+  if (diff >= 2) return t.updatePhotos;
+
+  String? getGroupKey(DateTime? dt) {
+    if (dt == null) return null;
+    final localDt = dt.toLocal();
+    final dateStr = '${localDt.day}/${localDt.month}/${localDt.year}';
+    String hour = localDt.hour > 12
+        ? '${localDt.hour - 12}'
+        : '${localDt.hour}';
+    if (hour == '0') hour = '12';
+    final minute = localDt.minute.toString().padLeft(2, '0');
+    final ampm = localDt.hour >= 12 ? 'PM' : 'AM';
+    return '$dateStr at $hour:$minute $ampm';
+  }
+
+  final firstKey = getGroupKey(firstPhotoDt);
+  return t.updatePhotos.where((p) {
+    final pRaw = p['created_at'] as String?;
+    final pDt = pRaw != null ? DateTime.tryParse(pRaw) : null;
+    return getGroupKey(pDt) == firstKey;
+  }).toList();
+}
+
+/// True when the supervisor/field has left something to show (not [updatedAt] alone).
+bool _subtaskHasMeaningfulFieldContent(Subtask t) {
+  if ((t.progressNotes ?? '').trim().isNotEmpty) {
+    return true;
+  }
+  for (final p in t.updatePhotos) {
+    final path = p['photo'];
+    if (path != null && path.toString().trim().isNotEmpty) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void _subtaskManagerShowFullImage(BuildContext context, String imageUrl) {
+  showDialog(
+    context: context,
+    builder: (context) {
+      return Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              constraints: const BoxConstraints(maxWidth: 800, maxHeight: 800),
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: InteractiveViewer(
+                  child: Image.network(
+                    imageUrl,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Center(
+                      child: Icon(
+                        Icons.broken_image,
+                        color: Colors.white,
+                        size: 50,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+void _subtaskManagerShowUpdateHistory(BuildContext context, Subtask t) {
+  showDialog(
+    context: context,
+    builder: (context) {
+      return Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Update History',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+                const Divider(),
+                Expanded(
+                  child: Builder(
+                    builder: (context) {
+                      final Map<String, List<Map<String, dynamic>>>
+                      groupedUpdates = {};
+                      for (final photoItem in t.updatePhotos) {
+                        final rawDate = photoItem['created_at'] as String?;
+                        DateTime? dt;
+                        if (rawDate != null) dt = DateTime.tryParse(rawDate);
+
+                        String dateStr = '';
+                        String timeStr = '';
+                        if (dt != null) {
+                          final localDt = dt.toLocal();
+                          dateStr =
+                              '${localDt.day}/${localDt.month}/${localDt.year}';
+                          String hour = localDt.hour > 12
+                              ? '${localDt.hour - 12}'
+                              : '${localDt.hour}';
+                          if (hour == '0') hour = '12';
+                          final minute = localDt.minute.toString().padLeft(
+                            2,
+                            '0',
+                          );
+                          final ampm = localDt.hour >= 12 ? 'PM' : 'AM';
+                          timeStr = '$hour:$minute $ampm';
+                        }
+
+                        final key = dateStr.isNotEmpty
+                            ? '$dateStr at $timeStr'
+                            : 'Unknown Date';
+                        groupedUpdates
+                            .putIfAbsent(key, () => [])
+                            .add(photoItem);
+                      }
+
+                      if (t.updatedAt != null) {
+                        final localDt = t.updatedAt!.toLocal();
+                        final dateStr =
+                            '${localDt.day}/${localDt.month}/${localDt.year}';
+                        String hour = localDt.hour > 12
+                            ? '${localDt.hour - 12}'
+                            : '${localDt.hour}';
+                        if (hour == '0') hour = '12';
+                        final minute = localDt.minute.toString().padLeft(
+                          2,
+                          '0',
+                        );
+                        final ampm = localDt.hour >= 12 ? 'PM' : 'AM';
+                        final timeStr = '$hour:$minute $ampm';
+                        final key = '$dateStr at $timeStr';
+
+                        if (!groupedUpdates.containsKey(key)) {
+                          final newMap = <String, List<Map<String, dynamic>>>{};
+                          newMap[key] = [];
+                          newMap.addAll(groupedUpdates);
+                          groupedUpdates.clear();
+                          groupedUpdates.addAll(newMap);
+                        }
+                      }
+
+                      if (groupedUpdates.isEmpty) {
+                        return const Center(
+                          child: Text(
+                            'No history available.',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        );
+                      }
+
+                      return ListView.separated(
+                        itemCount: groupedUpdates.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 16),
+                        itemBuilder: (context, index) {
+                          final key = groupedUpdates.keys.elementAt(index);
+                          final photos = groupedUpdates[key]!;
+
+                          String? notes;
+                          for (final p in photos) {
+                            if (p['progress_notes'] != null &&
+                                p['progress_notes'].toString().isNotEmpty) {
+                              notes = p['progress_notes'].toString();
+                              break;
+                            }
+                          }
+                          if (notes == null &&
+                              index == 0 &&
+                              t.progressNotes != null &&
+                              t.progressNotes!.isNotEmpty) {
+                            notes = t.progressNotes;
+                          }
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                key,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: Colors.black,
+                                ),
+                              ),
+                              if (notes != null) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Notes: $notes',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ],
+                              if (photos.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: photos.map((photoItem) {
+                                    final photoPath =
+                                        photoItem['photo'] as String?;
+                                    if (photoPath == null)
+                                      return const SizedBox.shrink();
+                                    final photoUrl = _subtaskManagerImageUrl(
+                                      photoPath,
+                                    );
+
+                                    return GestureDetector(
+                                      onTap: () => _subtaskManagerShowFullImage(
+                                        context,
+                                        photoUrl,
+                                      ),
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          border: Border.all(
+                                            color: Colors.grey[300]!,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            7,
+                                          ),
+                                          child: Image.network(
+                                            photoUrl,
+                                            height: 80,
+                                            width: 80,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) =>
+                                                Container(
+                                                  height: 80,
+                                                  width: 80,
+                                                  color: Colors.grey[200],
+                                                  child: const Icon(
+                                                    Icons.broken_image,
+                                                    color: Colors.grey,
+                                                  ),
+                                                ),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ],
+                            ],
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+class _SubtaskProgressPanel extends StatelessWidget {
+  const _SubtaskProgressPanel({
+    required this.subtask,
+    required this.latestPhotos,
+  });
+
+  final Subtask subtask;
+  final List<Map<String, dynamic>> latestPhotos;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.assignment_outlined,
+                size: 16,
+                color: Color(0xFF64748B),
+              ),
+              const SizedBox(width: 6),
+              const Text(
+                'Field progress',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF64748B),
+                  letterSpacing: 0.2,
+                ),
+              ),
+              const Spacer(),
+              TextButton(
+                onPressed: () =>
+                    _subtaskManagerShowUpdateHistory(context, subtask),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  foregroundColor: const Color(0xFFFF7A18),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.history, size: 16),
+                    SizedBox(width: 4),
+                    Text('Full history', style: TextStyle(fontSize: 12)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (subtask.updatedAt != null) ...[
+            const SizedBox(height: 6),
+            Builder(
+              builder: (context) {
+                final localDt = subtask.updatedAt!.toLocal();
+                final dateStr =
+                    '${localDt.day}/${localDt.month}/${localDt.year}';
+                String hour = localDt.hour > 12
+                    ? '${localDt.hour - 12}'
+                    : '${localDt.hour}';
+                if (hour == '0') {
+                  hour = '12';
+                }
+                final minute = localDt.minute.toString().padLeft(2, '0');
+                final ampm = localDt.hour >= 12 ? 'PM' : 'AM';
+                return Row(
+                  children: [
+                    Icon(Icons.schedule, size: 12, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        'Last updated $dateStr at $hour:$minute $ampm',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
+          if (subtask.progressNotes != null &&
+              subtask.progressNotes!.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Notes',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 11,
+                color: Colors.grey[700],
+                letterSpacing: 0.3,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtask.progressNotes!,
+              style: const TextStyle(
+                fontSize: 13,
+                height: 1.35,
+                color: Color(0xFF1E293B),
+              ),
+            ),
+          ],
+          if (latestPhotos.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: latestPhotos.map((photoItem) {
+                final photoPath = photoItem['photo'] as String?;
+                if (photoPath == null) {
+                  return const SizedBox.shrink();
+                }
+                final photoUrl = _subtaskManagerImageUrl(photoPath);
+
+                return Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () =>
+                        _subtaskManagerShowFullImage(context, photoUrl),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Ink(
+                      height: 80,
+                      width: 80,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: const Color(0xFFCBD5E1)),
+                        borderRadius: BorderRadius.circular(8),
+                        color: Colors.white,
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(7),
+                        child: Image.network(
+                          photoUrl,
+                          height: 80,
+                          width: 80,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => ColoredBox(
+                            color: Colors.grey[200]!,
+                            child: const Icon(
+                              Icons.broken_image_outlined,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _SubtaskTile extends StatelessWidget {
   final Subtask subtask;
   final Phase phase;
@@ -378,6 +865,14 @@ class _SubtaskTile extends StatelessWidget {
     required this.onEdit,
     required this.onRemove,
   });
+
+  static ButtonStyle _iconActionStyle() {
+    return IconButton.styleFrom(
+      padding: const EdgeInsets.all(6),
+      minimumSize: const Size(40, 40),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
+  }
 
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
@@ -405,100 +900,128 @@ class _SubtaskTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final latestUpdatePhotos = _subtaskManagerLatestUpdatePhotos(subtask);
+    final hasProgress = _subtaskHasMeaningfulFieldContent(subtask);
+
     return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Row(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: _getStatusBgColor(subtask.status),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              subtask.status.replaceAll('_', ' ').toUpperCase(),
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: _getStatusColor(subtask.status),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  subtask.title,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF0C1935),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _getStatusBgColor(subtask.status),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  subtask.status.replaceAll('_', ' ').toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: _getStatusColor(subtask.status),
+                    letterSpacing: 0.3,
                   ),
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          IconButton(
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (context) => ViewWorkForceModal(subtask: subtask),
-              );
-            },
-            icon: const Icon(Icons.groups_outlined),
-            tooltip: 'View Work Force',
-            color: const Color(0xFF0C1935),
-          ),
-          const SizedBox(width: 4),
-          IconButton(
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (context) =>
-                    ManageWorkersModal(subtask: subtask, phase: phase),
-              );
-            },
-            icon: const Icon(Icons.person_add_outlined),
-            tooltip: 'Manage workers',
-            color: const Color(0xFFFF7A18),
-          ),
-          const SizedBox(width: 4),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: Color(0xFF6B7280)),
-            tooltip: 'Options',
-            onSelected: (value) {
-              if (value == 'edit') {
-                onEdit();
-              } else if (value == 'remove') {
-                onRemove();
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'edit',
-                child: Row(
-                  children: [
-                    Icon(Icons.edit_outlined, size: 20, color: Color(0xFF0C1935)),
-                    SizedBox(width: 12),
-                    Text('Edit'),
-                  ],
-                ),
               ),
-              const PopupMenuItem(
-                value: 'remove',
-                child: Row(
-                  children: [
-                    Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                    SizedBox(width: 12),
-                    Text('Remove', style: TextStyle(color: Colors.red)),
-                  ],
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  subtask.title,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF0C1935),
+                    height: 1.3,
+                  ),
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              IconButton(
+                style: _iconActionStyle(),
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => ViewWorkForceModal(subtask: subtask),
+                  );
+                },
+                icon: const Icon(Icons.groups_outlined, size: 22),
+                tooltip: 'View Work Force',
+                color: const Color(0xFF0C1935),
+              ),
+              IconButton(
+                style: _iconActionStyle(),
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) =>
+                        ManageWorkersModal(subtask: subtask, phase: phase),
+                  );
+                },
+                icon: const Icon(Icons.person_add_outlined, size: 22),
+                tooltip: 'Manage workers',
+                color: const Color(0xFFFF7A18),
+              ),
+              PopupMenuButton<String>(
+                tooltip: 'Options',
+                padding: EdgeInsets.zero,
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'edit',
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.edit_outlined,
+                          size: 20,
+                          color: Color(0xFF0C1935),
+                        ),
+                        SizedBox(width: 12),
+                        Text('Edit'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'remove',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                        SizedBox(width: 12),
+                        Text('Remove', style: TextStyle(color: Colors.red)),
+                      ],
+                    ),
+                  ),
+                ],
+                onSelected: (value) {
+                  if (value == 'edit') {
+                    onEdit();
+                  } else if (value == 'remove') {
+                    onRemove();
+                  }
+                },
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                  child: Icon(Icons.more_vert, color: Color(0xFF6B7280)),
+                ),
+              ),
+            ],
+          ),
+          if (hasProgress) ...[
+            const SizedBox(height: 4),
+            _SubtaskProgressPanel(
+              subtask: subtask,
+              latestPhotos: latestUpdatePhotos,
+            ),
+          ],
         ],
       ),
     );
@@ -616,9 +1139,9 @@ class _ViewWorkForceModalState extends State<ViewWorkForceModal> {
   Future<void> _removeAssignedWorker(Map<String, dynamic> worker) async {
     final assignmentId = worker['assignment_id'];
     if (assignmentId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Missing assignment id.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Missing assignment id.')));
       return;
     }
 
@@ -669,9 +1192,9 @@ class _ViewWorkForceModalState extends State<ViewWorkForceModal> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error removing worker: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error removing worker: $e')));
     }
   }
 

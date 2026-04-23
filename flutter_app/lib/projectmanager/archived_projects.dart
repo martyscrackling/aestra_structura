@@ -20,7 +20,7 @@ class _ArchivedProjectsPageState extends State<ArchivedProjectsPage> {
 
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
-  _ArchivedSortOrder _sortOrder = _ArchivedSortOrder.oldestToNewest;
+  _ArchivedSortOrder _sortOrder = _ArchivedSortOrder.newestToOldest;
 
   @override
   void initState() {
@@ -57,21 +57,27 @@ class _ArchivedProjectsPageState extends State<ArchivedProjectsPage> {
                 project.projectType.toLowerCase().contains(query);
           }).toList();
 
-    int compareCreatedAt(ProjectOverviewData a, ProjectOverviewData b) {
+    DateTime? parseDate(String value) {
+      if (value.isEmpty) return null;
       try {
-        if (a.createdAt.isEmpty && b.createdAt.isEmpty) return 0;
-        if (a.createdAt.isEmpty) return 1;
-        if (b.createdAt.isEmpty) return -1;
-        final dateA = DateTime.parse(a.createdAt);
-        final dateB = DateTime.parse(b.createdAt);
-        return dateA.compareTo(dateB);
+        return DateTime.parse(value);
       } catch (_) {
-        return 0;
+        return null;
       }
     }
 
+    // Use end date (completion date) first, fall back to created_at.
+    int compareCompletion(ProjectOverviewData a, ProjectOverviewData b) {
+      final dateA = parseDate(a.endDateRaw) ?? parseDate(a.createdAt);
+      final dateB = parseDate(b.endDateRaw) ?? parseDate(b.createdAt);
+      if (dateA == null && dateB == null) return 0;
+      if (dateA == null) return 1;
+      if (dateB == null) return -1;
+      return dateA.compareTo(dateB);
+    }
+
     int comparator(ProjectOverviewData a, ProjectOverviewData b) {
-      int result = compareCreatedAt(a, b);
+      int result = compareCompletion(a, b);
 
       if (_sortOrder == _ArchivedSortOrder.newestToOldest) {
         result = -result;
@@ -244,6 +250,7 @@ class _ArchivedProjectsPageState extends State<ArchivedProjectsPage> {
                 location: _buildLocation(project),
                 startDate: _formatDate(startDateStr),
                 endDate: _formatDate(endDateStr),
+                endDateRaw: endDateStr,
                 progress: metrics.progress,
                 crewCount: metrics.assignedCrewCount > 0
                     ? metrics.assignedCrewCount
@@ -1100,6 +1107,7 @@ class ProjectOverviewData {
     required this.projectType,
     this.budget,
     this.createdAt = '',
+    this.endDateRaw = '',
   });
 
   final int projectId;
@@ -1114,6 +1122,7 @@ class ProjectOverviewData {
   final String projectType;
   final String? budget;
   final String createdAt;
+  final String endDateRaw;
 }
 
 class _ProjectMetrics {
