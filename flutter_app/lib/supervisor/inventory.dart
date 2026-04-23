@@ -12,35 +12,49 @@ class ToolItem {
   final String id;
   final String name;
   final String category;
+  final String itemType;
+  final String unitOfMeasure;
   final String status;
   final String? photoUrl;
   final String? serialNumber;
   final int quantity;
   final String? location;
   final String? notes;
+  final String projectName;
   final List<Map<String, dynamic>> activeUsages;
   final List<Map<String, dynamic>> units;
   final List<String> unitStatuses;
+  final List<Map<String, dynamic>> assignedProjects;
 
   ToolItem({
     required this.id,
     required this.name,
     required this.category,
+    this.itemType = 'Tool',
+    this.unitOfMeasure = 'pcs',
     required this.status,
     this.photoUrl,
     this.serialNumber,
     this.quantity = 1,
     this.location,
     this.notes,
+    this.projectName = '',
     this.activeUsages = const [],
     this.units = const [],
     this.unitStatuses = const [],
+    this.assignedProjects = const [],
   });
 
-  int get totalUnits =>
-      unitStatuses.isNotEmpty ? unitStatuses.length : quantity;
+  bool get isMaterial => itemType.toLowerCase() == 'material';
+
+  int get totalUnits => isMaterial
+      ? quantity
+      : (unitStatuses.isNotEmpty ? unitStatuses.length : quantity);
 
   int get availableUnitsCount {
+    if (isMaterial) {
+      return quantity;
+    }
     if (unitStatuses.isEmpty) {
       return status == 'Available' ? quantity : 0;
     }
@@ -50,7 +64,9 @@ class ToolItem {
   }
 
   bool get hasCheckoutableUnits {
-    // Prefer unit-level availability when unit data is present.
+    if (isMaterial) {
+      return quantity > 0;
+    }
     if (unitStatuses.isNotEmpty) {
       return unitStatuses.any((s) => s == 'Available' || s == 'Returned');
     }
@@ -62,12 +78,15 @@ class ToolItem {
       id: json['item_id'].toString(),
       name: json['name'] ?? '',
       category: json['category'] ?? '',
+      itemType: (json['item_type'] ?? '').toString(),
+      unitOfMeasure: (json['unit_of_measure'] ?? 'pcs').toString(),
       status: json['status'] ?? 'Available',
       photoUrl: json['photo_url'],
       serialNumber: json['serial_number'],
       quantity: json['quantity'] ?? 1,
       location: json['location'],
       notes: json['notes'],
+      projectName: (json['project_name'] ?? '').toString(),
       activeUsages:
           (json['active_usages'] as List<dynamic>?)
               ?.map((e) => e as Map<String, dynamic>)
@@ -84,6 +103,11 @@ class ToolItem {
                 (u) => (u as Map<String, dynamic>)['status']?.toString() ?? '',
               )
               .where((s) => s.isNotEmpty)
+              .toList() ??
+          [],
+      assignedProjects:
+          (json['assigned_projects'] as List<dynamic>?)
+              ?.map((p) => Map<String, dynamic>.from(p as Map))
               .toList() ??
           [],
     );
@@ -1109,21 +1133,38 @@ class _InventoryPageState extends State<InventoryPage> {
   }
 
   String _projectsSummary(ToolItem item) {
-    final projectNames = item.units
-        .map((u) => (u['current_project_name'] ?? '').toString().trim())
-        .where((name) => name.isNotEmpty)
-        .toSet();
+    final names = <String>{};
 
-    return projectNames.isEmpty
-        ? 'Unassigned'
-        : projectNames.length == 1
-        ? projectNames.first
-        : '${projectNames.length} projects';
+    for (final u in item.units) {
+      final name = (u['current_project_name'] ?? '').toString().trim();
+      if (name.isNotEmpty) names.add(name);
+    }
+
+    for (final p in item.assignedProjects) {
+      final name = (p['project_name'] ?? '').toString().trim();
+      if (name.isNotEmpty) names.add(name);
+    }
+
+    if (names.isEmpty && item.projectName.trim().isNotEmpty) {
+      names.add(item.projectName.trim());
+    }
+
+    if (names.isEmpty) return 'Unassigned';
+    if (names.length == 1) return names.first;
+    return '${names.length} projects';
   }
 
   String _availabilitySummary(ToolItem item) {
     final total = item.totalUnits;
     final available = item.availableUnitsCount;
+
+    if (item.isMaterial) {
+      if (available <= 0) return 'Out of stock';
+      final unit = item.unitOfMeasure.trim().isEmpty
+          ? 'pcs'
+          : item.unitOfMeasure.trim();
+      return '$available $unit';
+    }
 
     if (available <= 0) {
       return 'Unavailable';

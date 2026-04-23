@@ -4,6 +4,10 @@ from decimal import Decimal, ROUND_HALF_UP
 from .email_utils import send_invitation_email, send_project_assignment_email
 from app import models
 from app.image_verification import verify_image_has_human_face
+from app.services.budget_validation import (
+    check_project_budget,
+    check_phase_allocation,
+)
 
 
 _TWO_DP = Decimal('0.01')
@@ -119,6 +123,9 @@ class ProjectSerializer(serializers.ModelSerializer):
     client_email = serializers.CharField(source='client.email', read_only=True)
     client_phone_number = serializers.CharField(source='client.phone_number', read_only=True)
     client_photo = serializers.CharField(source='client.photo', read_only=True)
+    remaining_budget = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    total_used_budget = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    total_allocated_budget = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     
     class Meta:
         model = models.Project
@@ -149,6 +156,9 @@ class ProjectSerializer(serializers.ModelSerializer):
             'client_photo',
             'supervisor',
             'budget',
+            'remaining_budget',
+            'total_used_budget',
+            'total_allocated_budget',
             'status',
             'created_at',
         ]
@@ -157,6 +167,14 @@ class ProjectSerializer(serializers.ModelSerializer):
             'project_id': {'read_only': True},
             'created_at': {'read_only': True},
         }
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if 'budget' in attrs:
+            err = check_project_budget(self.instance, attrs['budget'])
+            if err:
+                raise serializers.ValidationError({'budget': err})
+        return attrs
     
     def create(self, validated_data):
         # Create the project first
@@ -1035,6 +1053,8 @@ class SubtaskSerializer(serializers.ModelSerializer):
 class PhaseSerializer(serializers.ModelSerializer):
     subtasks = SubtaskSerializer(many=True, required=False)
     project_id = serializers.IntegerField(source='project.project_id', read_only=True)
+    remaining_phase_budget = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    is_over_budget = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = models.Phase
@@ -1046,15 +1066,37 @@ class PhaseSerializer(serializers.ModelSerializer):
             'description',
             'days_duration',
             'status',
+            'allocated_budget',
+            'used_budget',
+            'remaining_phase_budget',
+            'is_over_budget',
             'created_at',
             'updated_at',
             'subtasks',
         ]
         extra_kwargs = {
             'phase_id': {'read_only': True},
+            'used_budget': {'read_only': True},
             'created_at': {'read_only': True},
             'updated_at': {'read_only': True},
         }
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if 'allocated_budget' in attrs:
+            # For updates, instance carries the project; for creates, it comes
+            # from the incoming `project` field.
+            project = None
+            if self.instance is not None:
+                project = self.instance.project
+            elif attrs.get('project') is not None:
+                project = attrs['project']
+            err = check_phase_allocation(
+                self.instance, attrs['allocated_budget'], project=project
+            )
+            if err:
+                raise serializers.ValidationError({'allocated_budget': err})
+        return attrs
 
     def create(self, validated_data):
         subtasks_data = validated_data.pop('subtasks', [])
@@ -1279,12 +1321,15 @@ class InventoryUsageSerializer(serializers.ModelSerializer):
     field_worker_name = serializers.SerializerMethodField()
     project_name = serializers.SerializerMethodField()
     unit_code = serializers.SerializerMethodField()
+    phase_name = serializers.CharField(source='phase.phase_name', read_only=True)
+    inventory_item_name = serializers.CharField(source='inventory_item.name', read_only=True)
 
     class Meta:
         model = models.InventoryUsage
         fields = [
             'usage_id',
             'inventory_item',
+            'inventory_item_name',
             'inventory_unit',
             'unit_code',
             'checked_out_by',
@@ -1293,6 +1338,11 @@ class InventoryUsageSerializer(serializers.ModelSerializer):
             'field_worker_name',
             'project',
             'project_name',
+            'phase',
+            'phase_name',
+            'quantity_used',
+            'unit_price_at_use',
+            'total_cost',
             'checkout_date',
             'expected_return_date',
             'actual_return_date',
@@ -1304,6 +1354,8 @@ class InventoryUsageSerializer(serializers.ModelSerializer):
             'usage_id': {'read_only': True},
             'checkout_date': {'read_only': True},
             'actual_return_date': {'read_only': True},
+            'unit_price_at_use': {'read_only': True},
+            'total_cost': {'read_only': True},
         }
 
     def get_supervisor_name(self, obj):
@@ -1319,6 +1371,58 @@ class InventoryUsageSerializer(serializers.ModelSerializer):
 
     def get_unit_code(self, obj):
         return obj.inventory_unit.unit_code if obj.inventory_unit else ''
+
+
+class PhaseMaterialPlanSerializer(serializers.ModelSerializer):
+    inventory_item_name = serializers.CharField(source='inventory_item.name', read_only=True)
+    inventory_item_unit_price = serializers.DecimalField(
+        source='inventory_item.price', max_digits=12, decimal_places=2, read_only=True
+    )
+    planned_cost = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+
+    class Meta:
+        model = models.PhaseMaterialPlan
+        fields = [
+            'plan_id',
+            'phase',
+            'inventory_item',
+            'inventory_item_name',
+            'inventory_item_unit_price',
+            'planned_quantity',
+            'planned_cost',
+            'status',
+            'leftover_quantity',
+            'closed_at',
+            'created_at',
+            'updated_at',
+        ]
+        extra_kwargs = {
+            'plan_id': {'read_only': True},
+            'created_at': {'read_only': True},
+            'updated_at': {'read_only': True},
+        }
+
+    def validate_planned_quantity(self, value):
+        if value is None or int(value) <= 0:
+            raise serializers.ValidationError("planned_quantity must be a positive integer.")
+        return value
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        phase = attrs.get('phase') or (self.instance.phase if self.instance else None)
+        item = attrs.get('inventory_item') or (self.instance.inventory_item if self.instance else None)
+        if phase is None or item is None:
+            return attrs
+        # Prevent duplicate (phase, item) via a nicer error than the DB IntegrityError.
+        existing = models.PhaseMaterialPlan.objects.filter(phase=phase, inventory_item=item)
+        if self.instance is not None:
+            existing = existing.exclude(pk=self.instance.pk)
+        if existing.exists():
+            raise serializers.ValidationError(
+                "A material plan for this phase/item already exists. "
+                "Update the existing plan instead."
+            )
+        return attrs
 
 
 class InventoryUnitMovementSerializer(serializers.ModelSerializer):
@@ -1388,6 +1492,7 @@ class InventoryItemSerializer(serializers.ModelSerializer):
     active_usages = serializers.SerializerMethodField()
     photo_url = serializers.SerializerMethodField()
     project_name = serializers.SerializerMethodField()
+    assigned_projects = serializers.SerializerMethodField()
     units = serializers.SerializerMethodField()
     assigned_projects_count = serializers.SerializerMethodField()
 
@@ -1397,6 +1502,8 @@ class InventoryItemSerializer(serializers.ModelSerializer):
             'item_id',
             'name',
             'category',
+            'item_type',
+            'unit_of_measure',
             'serial_number',
             'quantity',
             'price',
@@ -1409,6 +1516,7 @@ class InventoryItemSerializer(serializers.ModelSerializer):
             'created_by_name',
             'project',
             'project_name',
+            'assigned_projects',
             'assigned_projects_count',
             'units',
             'active_usages',
@@ -1437,9 +1545,14 @@ class InventoryItemSerializer(serializers.ModelSerializer):
             sv = models.Supervisors.objects.get(supervisor_id=int(supervisor_id))
         except (models.Supervisors.DoesNotExist, ValueError, TypeError):
             return []
+        from django.db.models import Q
         return list(
             models.Project.objects
-            .filter(supervisor_id=sv.supervisor_id)
+            .filter(
+                Q(supervisor_id=sv.supervisor_id)
+                | Q(supervisors__supervisor_id=sv.supervisor_id)
+            )
+            .distinct()
             .values_list('project_id', flat=True)
         )
 
@@ -1450,10 +1563,121 @@ class InventoryItemSerializer(serializers.ModelSerializer):
             return units_qs
         return units_qs.filter(current_project_id__in=project_ids)
 
+    def _is_material(self, obj):
+        # `item_type` is the canonical column; fall back to `category` only
+        # for ancient rows that haven't been classified yet.
+        if (obj.item_type or '').strip().lower() == 'material':
+            return True
+        cat = (obj.category or '').strip().lower().rstrip('s')
+        return cat == 'material'
+
+    def _get_material_plans_qs(self, obj, project_ids=None, active_only=True):
+        """
+        All PhaseMaterialPlan rows for this material, optionally
+        restricted to a set of projects (e.g. the supervisor's).
+        Closed plans are excluded by default — once a phase wraps up its
+        leftovers are returned to inventory and shouldn't keep inflating
+        the supervisor's visible count.
+        """
+        qs = models.PhaseMaterialPlan.objects.filter(inventory_item=obj)
+        if active_only:
+            qs = qs.filter(status=models.PhaseMaterialPlan.STATUS_ACTIVE)
+        if project_ids is not None:
+            qs = qs.filter(phase__project_id__in=project_ids)
+        return qs.select_related('phase__project')
+
+    def _get_material_project_breakdown(self, obj, project_ids=None):
+        """
+        For a Material, collapse the phase plans into per-project
+        rows with planned / used / remaining counts so the UI can
+        render "Plywood – swimming pool (8 pcs left)".
+        """
+        plans = self._get_material_plans_qs(obj, project_ids)
+        by_project = {}
+        phase_ids_by_project = {}
+        for plan in plans:
+            phase = plan.phase
+            if not phase or not phase.project_id:
+                continue
+            pid = phase.project_id
+            row = by_project.setdefault(
+                pid,
+                {
+                    'project_id': pid,
+                    'project_name': phase.project.project_name if phase.project else '',
+                    'planned_quantity': 0,
+                    'used_quantity': 0,
+                },
+            )
+            row['planned_quantity'] += int(plan.planned_quantity or 0)
+            phase_ids_by_project.setdefault(pid, []).append(phase.phase_id)
+
+        if phase_ids_by_project:
+            from django.db.models import Sum
+            all_phase_ids = [
+                pid for ids in phase_ids_by_project.values() for pid in ids
+            ]
+            usage_rows = (
+                models.InventoryUsage.objects
+                .filter(inventory_item=obj, phase_id__in=all_phase_ids)
+                .values('phase__project_id')
+                .annotate(total=Sum('quantity_used'))
+            )
+            for u in usage_rows:
+                pid = u['phase__project_id']
+                if pid in by_project:
+                    by_project[pid]['used_quantity'] = int(u['total'] or 0)
+
+        breakdown = []
+        for row in by_project.values():
+            remaining = max(0, row['planned_quantity'] - row['used_quantity'])
+            row['remaining_quantity'] = remaining
+            row['quantity'] = remaining
+            breakdown.append(row)
+        breakdown.sort(key=lambda r: (r['project_name'] or '').lower())
+        return breakdown
+
+    def _get_material_assigned_quantity(self, obj, project_ids):
+        """
+        Quantity of `obj` (a Material) that has been assigned to the
+        requesting supervisor via PhaseMaterialPlan rows, net of any
+        usage already recorded against those plans.
+
+        Returns `None` if no plans exist for this supervisor on this
+        material (so callers can distinguish "nothing assigned" from
+        "assigned 0 left").
+        """
+        from django.db.models import Sum
+        plans = self._get_material_plans_qs(obj, project_ids)
+        total_planned = plans.aggregate(s=Sum('planned_quantity'))['s']
+        if total_planned is None:
+            return None
+        phase_ids = list(plans.values_list('phase_id', flat=True))
+        total_used = (
+            models.InventoryUsage.objects.filter(
+                inventory_item=obj,
+                phase_id__in=phase_ids,
+            ).aggregate(s=Sum('quantity_used'))['s']
+            or 0
+        )
+        return max(0, int(total_planned) - int(total_used))
+
     def get_quantity(self, obj):
+        # Materials are bulk stock — the scalar column is authoritative
+        # for PMs. Supervisors, though, should only see what's been
+        # assigned to their phases via PhaseMaterialPlan rows, net of
+        # whatever has already been consumed.
+        if self._is_material(obj):
+            project_ids = self._get_supervisor_project_ids()
+            if project_ids is not None:
+                assigned = self._get_material_assigned_quantity(obj, project_ids)
+                return assigned if assigned is not None else 0
+            return obj.quantity or 0
         return self._get_visible_units_queryset(obj).count()
 
     def get_units(self, obj):
+        if self._is_material(obj):
+            return []
         units_qs = self._get_visible_units_queryset(obj)
         return InventoryUnitSerializer(units_qs, many=True).data
 
@@ -1465,6 +1689,15 @@ class InventoryItemSerializer(serializers.ModelSerializer):
         return InventoryUsageSerializer(active, many=True).data
 
     def get_project_name(self, obj):
+        if self._is_material(obj):
+            project_ids = self._get_supervisor_project_ids()
+            breakdown = self._get_material_project_breakdown(obj, project_ids)
+            names = [b['project_name'] for b in breakdown if b['project_name']]
+            if len(names) == 1:
+                return names[0]
+            if len(names) > 1:
+                return 'Multiple Projects'
+            return ''
         project_names = {
             u.current_project.project_name
             for u in self._get_visible_units_queryset(obj)
@@ -1476,7 +1709,37 @@ class InventoryItemSerializer(serializers.ModelSerializer):
             return 'Multiple Projects'
         return ''
 
+    def get_assigned_projects(self, obj):
+        """
+        Rich per-project breakdown so the UI can show which project(s)
+        each material is assigned to, along with remaining quantity.
+        Tools / machines stay unit-driven for backward compatibility.
+        """
+        if self._is_material(obj):
+            project_ids = self._get_supervisor_project_ids()
+            return self._get_material_project_breakdown(obj, project_ids)
+        units_qs = self._get_visible_units_queryset(obj).exclude(
+            current_project__isnull=True
+        )
+        seen = {}
+        for u in units_qs:
+            pid = u.current_project_id
+            row = seen.setdefault(
+                pid,
+                {
+                    'project_id': pid,
+                    'project_name': u.current_project.project_name if u.current_project else '',
+                    'quantity': 0,
+                },
+            )
+            row['quantity'] += 1
+        return sorted(
+            seen.values(), key=lambda r: (r['project_name'] or '').lower()
+        )
+
     def get_assigned_projects_count(self, obj):
+        if self._is_material(obj):
+            return len(self.get_assigned_projects(obj))
         return (
             self._get_visible_units_queryset(obj)
             .exclude(current_project__isnull=True)

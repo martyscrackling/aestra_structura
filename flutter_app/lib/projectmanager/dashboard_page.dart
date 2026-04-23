@@ -14,6 +14,7 @@ import 'widgets/activity_widget.dart';
 import 'widgets/task_summary_widget.dart';
 import 'widgets/audit_trail_widget.dart';
 import 'widgets/active_workers_widget.dart';
+import 'widgets/budget_alerts_widget.dart';
 import 'modals/upgrade_plan_modal.dart';
 
 void main() {
@@ -508,11 +509,20 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
         ? 20.0
         : 24.0;
 
+    final userIdRaw = AuthService().currentUser?['user_id'];
+    final userId = userIdRaw is int
+        ? userIdRaw
+        : int.tryParse(userIdRaw?.toString() ?? '');
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Trial Banner (if applicable)
         _buildTrialBanner(),
+
+        // Budget alerts (warns PM about 50%-consumed projects and
+        // over-budget phases). Renders nothing if no budgets configured.
+        if (userId != null) BudgetAlertsWidget(userId: userId),
 
         // Recent Projects
         RecentProjects(projects: summary.recentProjects),

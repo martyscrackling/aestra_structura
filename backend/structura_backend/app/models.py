@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.hashers import make_password
 from django.utils import timezone
 from datetime import timedelta
+from decimal import Decimal
 
 
 # Address Models (defined first so User can reference them)
@@ -298,6 +299,25 @@ class Project(models.Model):
             return True
         return False
 
+    @property
+    def total_used_budget(self):
+        """Sum of used_budget across all phases of this project."""
+        from django.db.models import Sum
+        total = self.phases.aggregate(s=Sum('used_budget'))['s']
+        return total or Decimal('0')
+
+    @property
+    def remaining_budget(self):
+        """Project budget minus total used_budget across phases."""
+        return (self.budget or Decimal('0')) - self.total_used_budget
+
+    @property
+    def total_allocated_budget(self):
+        """Sum of allocated_budget across all phases of this project."""
+        from django.db.models import Sum
+        total = self.phases.aggregate(s=Sum('allocated_budget'))['s']
+        return total or Decimal('0')
+
     def __str__(self):
         return self.project_name
 
@@ -530,11 +550,22 @@ class Phase(models.Model):
     description = models.TextField(null=True, blank=True)
     days_duration = models.IntegerField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='not_started')
+    allocated_budget = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0'))
+    used_budget = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0'))
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['created_at']
+
+    @property
+    def remaining_phase_budget(self):
+        """Allocated minus used for this phase."""
+        return (self.allocated_budget or Decimal('0')) - (self.used_budget or Decimal('0'))
+
+    @property
+    def is_over_budget(self):
+        return (self.used_budget or Decimal('0')) > (self.allocated_budget or Decimal('0'))
 
     def __str__(self):
         return f"{self.phase_name} - {self.project.project_name}"
@@ -639,9 +670,24 @@ class InventoryItem(models.Model):
         ('Unavailable', 'Unavailable'),
     ]
 
+    ITEM_TYPE_CHOICES = [
+        ('Material', 'Material'),
+        ('Tool', 'Tool'),
+        ('Machine', 'Machine'),
+    ]
+
     item_id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=200)
     category = models.CharField(max_length=100)
+    # Canonical classification used by the budget / usage flow. Stored
+    # separately from `category` because `category` is a free-text display
+    # label that has drifted over time (e.g. "Materials" vs "Material").
+    item_type = models.CharField(
+        max_length=30, choices=ITEM_TYPE_CHOICES, default='Tool'
+    )
+    # Unit in which the item's quantity is measured: 'pc', 'bag', 'kg',
+    # 'sheet', 'cu.m', 'liter', 'set', ...
+    unit_of_measure = models.CharField(max_length=30, default='pcs')
     serial_number = models.CharField(max_length=100, null=True, blank=True)
     quantity = models.PositiveIntegerField(default=1)
     location = models.CharField(max_length=200, null=True, blank=True)
@@ -790,8 +836,72 @@ class InventoryUsage(models.Model):
     notes = models.TextField(null=True, blank=True)
     project = models.ForeignKey('Project', on_delete=models.SET_NULL, null=True, blank=True, related_name='inventory_usages', db_column='project_id')
 
+    # Phase-level cost tracking (planned vs actual budget system)
+    phase = models.ForeignKey(
+        'Phase',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='usages',
+    )
+    quantity_used = models.PositiveIntegerField(default=0)
+    unit_price_at_use = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0'))
+    total_cost = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0'))
+
     class Meta:
         ordering = ['-checkout_date']
 
     def __str__(self):
         return f"{self.inventory_item.name} → {self.checked_out_by.first_name} ({self.status})"
+
+
+# Planned materials per phase (used for Planned-vs-Actual reporting)
+class PhaseMaterialPlan(models.Model):
+    STATUS_ACTIVE = 'active'
+    STATUS_CLOSED = 'closed'
+    STATUS_CHOICES = [
+        (STATUS_ACTIVE, 'Active'),
+        (STATUS_CLOSED, 'Closed'),
+    ]
+
+    plan_id = models.AutoField(primary_key=True)
+    phase = models.ForeignKey(
+        'Phase',
+        on_delete=models.CASCADE,
+        related_name='material_plans',
+    )
+    inventory_item = models.ForeignKey(
+        InventoryItem,
+        on_delete=models.CASCADE,
+        related_name='phase_plans',
+    )
+    planned_quantity = models.PositiveIntegerField(default=0)
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_ACTIVE,
+    )
+    # Captured at close time so we can show "3 pcs returned" reports
+    # without recomputing historical state.
+    leftover_quantity = models.PositiveIntegerField(default=0)
+    closed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('phase', 'inventory_item')
+        ordering = ['phase_id', 'inventory_item_id']
+
+    @property
+    def is_active(self):
+        return self.status == self.STATUS_ACTIVE
+
+    @property
+    def is_closed(self):
+        return self.status == self.STATUS_CLOSED
+
+    @property
+    def planned_cost(self):
+        price = self.inventory_item.price or Decimal('0')
+        return price * self.planned_quantity
+
+    def __str__(self):
+        return f"{self.phase.phase_name} plan: {self.inventory_item.name} x{self.planned_quantity}"

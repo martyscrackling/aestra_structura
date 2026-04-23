@@ -33,6 +33,11 @@ echo.
 echo Press Ctrl+C to stop the server
 echo.
 
+REM Force UTF-8 so any stray emoji in print() calls won't crash the
+REM dev server on Windows (default cp1252 can't encode e.g. U+1F50D).
+set PYTHONIOENCODING=utf-8
+set PYTHONUTF8=1
+
 python manage.py runserver
 
 pause

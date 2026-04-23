@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'widgets/sidebar.dart';
 import 'widgets/dashboard_header.dart';
 import 'widgets/responsive_page_layout.dart';
+import 'widgets/budget_overview_card.dart';
 import 'modals/task_details_modal.dart';
 import 'modals/phase_modal.dart';
 import 'subtask_manage.dart';
@@ -193,6 +194,8 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
   String? _error;
   String? _reviewsError;
   bool _isGanttView = false; // View mode: false = list view, true = gantt chart
+  final GlobalKey<BudgetOverviewCardState> _budgetCardKey =
+      GlobalKey<BudgetOverviewCardState>();
 
   // Calculate overall project progress based on phases (matching task_progress.dart)
   double _calculateProjectProgress() {
@@ -260,6 +263,9 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
       setState(() {
         _isLoading = false;
       });
+      // Phases may have changed; refresh the budget card so per-phase rows
+      // stay in sync with the phases list above.
+      _budgetCardKey.currentState?.reload();
     }
   }
 
@@ -688,6 +694,13 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
               ],
             ),
             const SizedBox(height: 24),
+
+            BudgetOverviewCard(
+              key: _budgetCardKey,
+              projectId: widget.projectId,
+              projectName: widget.projectTitle,
+            ),
+            const SizedBox(height: 20),
 
             Container(
               width: double.infinity,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:go_router/go_router.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'widgets/sidebar.dart';
@@ -11,6 +12,8 @@ import '../services/auth_service.dart';
 import '../services/app_time_service.dart';
 import 'task_update.dart';
 import 'all_workforce.dart';
+import 'modals/record_usage_modal.dart';
+import '../services/budget_service.dart';
 
 class ProjectInfosPage extends StatefulWidget {
   final String projectTitle;
@@ -41,6 +44,12 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
   bool _isLoading = true;
   String? _error;
   bool _showDaysLeftReminder = true;
+
+  /// Per-phase planned-vs-actual material breakdown, keyed by phase id.
+  /// Budget figures are intentionally NOT kept here — supervisors only
+  /// see quantities (pcs, bags, etc.), never monetary amounts.
+  final Map<int, List<Map<String, dynamic>>> _phaseMaterials = {};
+  final Set<int> _loadingPhaseMaterials = <int>{};
 
   @override
   void initState() {
@@ -314,6 +323,10 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
         _phases = resolvedPhases;
         _isLoading = false;
       });
+      for (final p in resolvedPhases) {
+        final pid = p['phase_id'];
+        if (pid is int) unawaited(_fetchPhaseMaterials(pid));
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -387,6 +400,212 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
     }
 
     return const <dynamic>[];
+  }
+
+  /// Loads the per-phase planned-vs-actual material breakdown for the
+  /// supervisor. Only quantities are consumed here — any cost / budget
+  /// figures returned by the backend are intentionally ignored so the
+  /// supervisor never sees money.
+  Future<void> _fetchPhaseMaterials(int phaseId) async {
+    if (_loadingPhaseMaterials.contains(phaseId)) return;
+    _loadingPhaseMaterials.add(phaseId);
+    try {
+      final data = await BudgetService.getPlannedVsActual(phaseId: phaseId);
+      if (!mounted) return;
+      final raw = (data['items'] as List?) ?? const [];
+      final materials = raw
+          .whereType<Map>()
+          .map((m) => Map<String, dynamic>.from(m))
+          .toList();
+      setState(() {
+        _phaseMaterials[phaseId] = materials;
+      });
+    } catch (_) {
+      // Silent — the phase panel just won't render materials.
+    } finally {
+      _loadingPhaseMaterials.remove(phaseId);
+    }
+  }
+
+  static int _asInt(Object? v) {
+    if (v == null) return 0;
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString()) ?? 0;
+  }
+
+  /// Renders a compact panel inside each phase's expansion tile listing
+  /// every material assigned to that phase, with planned / used / left
+  /// quantities. No peso / budget info.
+  Widget _buildPhaseMaterialsPanel(int phaseId) {
+    final isLoading = _loadingPhaseMaterials.contains(phaseId);
+    final materials = _phaseMaterials[phaseId];
+
+    if (materials == null) {
+      if (isLoading) {
+        return const Padding(
+          padding: EdgeInsets.fromLTRB(12, 0, 12, 12),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              SizedBox(width: 8),
+              Text(
+                'Loading materials…',
+                style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+              ),
+            ],
+          ),
+        );
+      }
+      return const SizedBox.shrink();
+    }
+
+    if (materials.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: const Text(
+            'No materials assigned to this phase yet.',
+            style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFE5E7EB)),
+        ),
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.inventory_2_outlined, size: 16, color: Color(0xFF0C1935)),
+                SizedBox(width: 6),
+                Text(
+                  'Materials for this phase',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    color: Color(0xFF0C1935),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ...materials.map((m) {
+              final name = (m['inventory_item_name'] ?? 'Item').toString();
+              final unit = ((m['unit_of_measure'] ?? 'pcs').toString().trim().isEmpty)
+                  ? 'pcs'
+                  : (m['unit_of_measure']).toString().trim();
+              final assigned = _asInt(m['planned_quantity']);
+              final used = _asInt(m['actual_quantity']);
+              final remaining = _asInt(m['remaining_quantity']);
+              final hasAssignment = m['has_plan'] != false;
+              final isClosed = (m['plan_status']?.toString() ?? '') == 'closed';
+              final leftover = _asInt(m['leftover_quantity']);
+
+              final isDepleted = hasAssignment && remaining <= 0 && assigned > 0;
+              final isOverUsed = hasAssignment && used > assigned;
+
+              final Color pillBg;
+              final Color pillFg;
+              if (isClosed) {
+                pillBg = const Color(0xFFE5E7EB);
+                pillFg = const Color(0xFF374151);
+              } else if (isOverUsed) {
+                pillBg = const Color(0xFFFEE2E2);
+                pillFg = const Color(0xFF991B1B);
+              } else if (isDepleted) {
+                pillBg = const Color(0xFFFEF3C7);
+                pillFg = const Color(0xFF92400E);
+              } else {
+                pillBg = const Color(0xFFE0F2FE);
+                pillFg = const Color(0xFF0C4A6E);
+              }
+
+              final String pillLabel;
+              if (isClosed) {
+                pillLabel = leftover > 0
+                    ? 'Closed • $leftover $unit returned'
+                    : 'Closed';
+              } else if (hasAssignment) {
+                pillLabel = '$remaining $unit remaining';
+              } else {
+                pillLabel = 'Not assigned';
+              }
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF111827),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            hasAssignment
+                                ? 'Assigned $assigned $unit  •  Used $used $unit'
+                                : 'Used $used $unit (not assigned to this phase)',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF6B7280),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: pillBg,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        pillLabel,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: pillFg,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildProfileAvatar({
@@ -859,11 +1078,86 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
                           }).toList(),
                         ),
                 ),
+                if (phaseMap['phase_id'] is int)
+                  _buildPhaseMaterialsPanel(phaseMap['phase_id'] as int),
+                _buildRecordUsageAction(phaseMap),
               ],
             ),
           ),
         );
       }).toList(),
+    );
+  }
+
+  Widget _buildRecordUsageAction(Map<String, dynamic> phaseMap) {
+    final phaseId = phaseMap['phase_id'] as int?;
+    if (phaseId == null) return const SizedBox.shrink();
+
+    final supervisorId = AuthService().currentUser?['user_id'] as int?;
+    final phaseStatus = (phaseMap['status'] ?? '').toString().toLowerCase();
+    final isCompleted = phaseStatus == 'completed';
+
+    if (isCompleted) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE5E7EB),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.lock_outline, size: 14, color: Color(0xFF374151)),
+                  SizedBox(width: 6),
+                  Text(
+                    'Phase completed — usage locked',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF374151),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          OutlinedButton.icon(
+            onPressed: supervisorId == null
+                ? null
+                : () async {
+                    final recorded = await showDialog<bool>(
+                      context: context,
+                      builder: (_) => RecordUsageModal(
+                        phaseId: phaseId,
+                        phaseName:
+                            (phaseMap['phase_name'] ?? '') as String,
+                        supervisorId: supervisorId,
+                      ),
+                    );
+                    if (recorded == true && mounted) {
+                      await _fetchPhaseMaterials(phaseId);
+                      if (mounted) setState(() {});
+                    }
+                  },
+            icon: const Icon(Icons.inventory_2_outlined, size: 16),
+            label: const Text('Record material usage'),
+          ),
+        ],
+      ),
     );
   }
 
