@@ -146,6 +146,37 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
     return AppConfig.apiUri('field-workers/$fieldWorkerId/');
   }
 
+  /// Same access rules as [_fieldWorkerDetailUri] but for `POST .../add-damage/`.
+  Uri _fieldWorkerAddDamageUri(int fieldWorkerId) {
+    final u = _fieldWorkerDetailUri(fieldWorkerId);
+    var path = u.path;
+    if (path.endsWith('/')) {
+      path = '${path}add-damage/';
+    } else {
+      path = '$path/add-damage/';
+    }
+    return u.replace(path: path);
+  }
+
+  /// Merges the latest worker JSON (including `damage_entries`) from the API.
+  Future<void> _refreshFieldWorkerInPlace(
+    int fieldWorkerId,
+    Map<String, dynamic> worker,
+  ) async {
+    try {
+      final r = await http.get(_fieldWorkerDetailUri(fieldWorkerId));
+      if (r.statusCode != 200) return;
+      final decoded = jsonDecode(r.body);
+      if (decoded is Map) {
+        decoded.forEach((k, v) {
+          worker[k.toString()] = v;
+        });
+      }
+    } catch (_) {
+      // keep existing map on failure
+    }
+  }
+
   Future<void> _ensureProjectNamesLoaded({dynamic supervisorId}) async {
     final resolvedSupervisorId = _toInt(supervisorId);
 
@@ -232,6 +263,16 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
     return null;
   }
 
+  bool _toBool(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) {
+      final s = value.trim().toLowerCase();
+      return s == 'true' || s == '1' || s == 'yes';
+    }
+    return false;
+  }
+
   /// The backend serializer returns the deduction under
   /// `damages_deduction_per_salary`. The UI sometimes mirrors it to
   /// `damages_deduction` after a save. Read both so the summary is accurate
@@ -244,13 +285,33 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
     return s;
   }
 
+  String _entryDeductionDisplay(Map<String, dynamic> entry) {
+    final raw = entry['deduction_per_salary'];
+    if (raw == null) return '';
+    return raw.toString().trim();
+  }
+
+  /// Line items from the API; older payloads use flat `damages_*` only.
+  List<Map<String, dynamic>> _damageEntriesList(Map<String, dynamic> worker) {
+    final raw = worker['damage_entries'];
+    if (raw is! List) return [];
+    return raw
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
   /// Only treat a worker as having a saved damage report when there is at
   /// least a damaged item recorded AND either a price or a deduction.
   /// This avoids showing the "View Existing Damage Summary" button when the
   /// backend returns partial / empty strings.
   bool _hasSavedDamageReport(Map<String, dynamic> worker) {
+    if (_damageEntriesList(worker).isNotEmpty) return true;
+
     final item = (worker['damages_item'] ?? '').toString().trim();
     if (item.isEmpty) return false;
+
+    if (_toBool(worker['damages_pm_covers'])) return true;
 
     final priceStr = (worker['damages_price'] ?? '').toString().trim();
     final price = double.tryParse(priceStr) ?? 0.0;
@@ -529,6 +590,13 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
     if (shiftSchedule == null) return 'Not set';
     final schedule = shiftSchedule.toString().trim();
     if (schedule.isEmpty) return 'Not set';
+    final prefixed = RegExp(
+      r'^[^:]+:\s*(\d{1,2}:\d{2}\s*[AP]M\s*-\s*\d{1,2}:\d{2}\s*[AP]M)$',
+      caseSensitive: false,
+    ).firstMatch(schedule);
+    if (prefixed != null) {
+      return prefixed.group(1)!.trim();
+    }
     return schedule;
   }
 
@@ -905,6 +973,7 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
         String price = '';
         const paymentEverySalary = 'Payment every Salary';
         String deductionAmount = '';
+        bool pmCovers = false;
         final TextEditingController priceController = TextEditingController();
         final TextEditingController itemSearchController = TextEditingController();
         final TextEditingController deductionController = TextEditingController();
@@ -969,7 +1038,8 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
 
             final priceVal = double.tryParse(price) ?? 0.0;
             final deductionVal = double.tryParse(deductionAmount) ?? 0.0;
-            final hasEstimate = priceVal > 0 && deductionVal > 0;
+            final hasEstimate =
+                !pmCovers && priceVal > 0 && deductionVal > 0;
             final estimatedPeriods =
                 hasEstimate ? (priceVal / deductionVal).ceil() : 0;
 
@@ -1060,7 +1130,164 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (_hasSavedDamageReport(worker))
+                            if (_damageEntriesList(worker).isNotEmpty) ...[
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 4,
+                                    height: 16,
+                                    decoration: BoxDecoration(
+                                      color: accent,
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Damages on record (${_damageEntriesList(worker).length})',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                      color: Color(0xFF1F2937),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              ..._damageEntriesList(worker).map(
+                                (Map<String, dynamic> entry) {
+                                  final name =
+                                      (entry['item'] ?? 'Item').toString();
+                                  final p = entry['price'];
+                                  final priceLabel = p == null
+                                      ? '—'
+                                      : '\u20B1${(p is num ? p : double.tryParse(p.toString()) ?? 0.0).toStringAsFixed(2)}';
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 8),
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(12),
+                                      onTap: () {
+                                        _showDamagesSummaryModal(
+                                          context,
+                                          workerName: workerName,
+                                          category: entry['category']?.toString() ?? '',
+                                          item: name,
+                                          price: entry['price']?.toString() ?? '',
+                                          deduction: _entryDeductionDisplay(entry),
+                                          pmCovers: _toBool(entry['pm_covers']),
+                                        );
+                                      },
+                                      child: Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: accentSoftBg,
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                              color: accentSoftBorder),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Container(
+                                              width: 34,
+                                              height: 34,
+                                              decoration: BoxDecoration(
+                                                color: accent.withOpacity(0.14),
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                              child: const Icon(
+                                                Icons.receipt_long,
+                                                color: accent,
+                                                size: 18,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(
+                                                    name,
+                                                    maxLines: 2,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: const TextStyle(
+                                                      color: accentDeep,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                      fontSize: 13,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 2),
+                                                  Row(
+                                                    children: [
+                                                      Text(
+                                                        priceLabel,
+                                                        style: const TextStyle(
+                                                          color: Color(0xFF9A6438),
+                                                          fontSize: 12,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                        ),
+                                                      ),
+                                                      if (_toBool(
+                                                          entry['pm_covers'])) ...[
+                                                        const SizedBox(
+                                                            width: 6),
+                                                        Container(
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .symmetric(
+                                                            horizontal: 6,
+                                                            vertical: 1,
+                                                          ),
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color: const Color(
+                                                                0xFFECFDF5),
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        4),
+                                                            border: Border.all(
+                                                              color: const Color(
+                                                                  0xFFBBF7D0),
+                                                            ),
+                                                          ),
+                                                          child: const Text(
+                                                            'PM',
+                                                            style: TextStyle(
+                                                              fontSize: 9.5,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w800,
+                                                              color: Color(
+                                                                  0xFF0F766E),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ],
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            const Icon(
+                                              Icons.chevron_right,
+                                              color: accentDark,
+                                              size: 20,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 8),
+                            ] else if (_hasSavedDamageReport(worker))
                               InkWell(
                                 borderRadius: BorderRadius.circular(12),
                                 onTap: () {
@@ -1078,6 +1305,8 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                                             '',
                                     deduction:
                                         _damageDeductionDisplay(worker),
+                                    pmCovers:
+                                        _toBool(worker['damages_pm_covers']),
                                   );
                                 },
                                 child: Container(
@@ -1371,6 +1600,62 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                             const SizedBox(height: 16),
 
                             Container(
+                              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF0FDF4),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                    color: const Color(0xFFBBF7D0)),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Switch(
+                                    value: pmCovers,
+                                    activeColor: const Color(0xFF0F766E),
+                                    onChanged: (v) {
+                                      setModalState(() {
+                                        pmCovers = v;
+                                        if (v) {
+                                          deductionController.clear();
+                                          deductionAmount = '';
+                                        }
+                                      });
+                                    },
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Project manager shoulders the cost',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 13,
+                                            color: Color(0xFF14532D),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'No deduction from this worker’s salary. The damage is still recorded as caused by this worker.',
+                                          style: TextStyle(
+                                            fontSize: 11.5,
+                                            color: Colors.grey.shade700,
+                                            height: 1.35,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+
+                            if (!pmCovers) ...[
+                            Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 color: fieldBg,
@@ -1434,6 +1719,19 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                                 ),
                               ),
                             ),
+                            ],
+                            if (pmCovers)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: Text(
+                                  'Repayment from salary is disabled while the project covers the cost.',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    color: Colors.grey.shade600,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ),
                             if (hasEstimate)
                               Padding(
                                 padding: const EdgeInsets.only(top: 8),
@@ -1510,6 +1808,31 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                                   return;
                                 }
 
+                                final itemLabel = isCustom
+                                    ? 'Custom Item'
+                                    : selectedItem.trim();
+                                if (itemLabel.isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Select the damaged item from the list, or choose Custom.',
+                                      ),
+                                    ),
+                                  );
+                                  return;
+                                }
+                                if (isCustom &&
+                                    price.trim().isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Enter a price for the custom damaged item.',
+                                      ),
+                                    ),
+                                  );
+                                  return;
+                                }
+
                                 showDialog(
                                   context: context,
                                   barrierDismissible: false,
@@ -1517,57 +1840,84 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                                       child: CircularProgressIndicator()),
                                 );
 
-                                final url =
+                                final addUrl =
+                                    _fieldWorkerAddDamageUri(fieldWorkerId);
+                                final detailUrl =
                                     _fieldWorkerDetailUri(fieldWorkerId);
-                                try {
-                                  final headers = {
-                                    'Content-Type': 'application/json',
-                                  };
-                                  final response = await http.patch(
-                                    url,
-                                    headers: headers,
-                                    body: jsonEncode({
-                                      'damages_category': selectedCategory,
-                                      'damages_item': isCustom
-                                          ? 'Custom Item'
-                                          : selectedItem,
-                                      'damages_price': price.isEmpty
+                                const headers = {
+                                  'Content-Type': 'application/json',
+                                };
+                                final bodyMap = {
+                                  'damages_category': selectedCategory,
+                                  'damages_item': itemLabel,
+                                  'damages_price': price.isEmpty
+                                      ? null
+                                      : (double.tryParse(price) ?? 0.0),
+                                  'damages_schedule': paymentEverySalary,
+                                  'damages_pm_covers': pmCovers,
+                                  'damages_deduction_per_salary': pmCovers
+                                      ? 0.0
+                                      : (deductionAmount.isEmpty
                                           ? null
-                                          : (double.tryParse(price) ?? 0.0),
-                                      'damages_schedule': paymentEverySalary,
-                                      'damages_deduction_per_salary':
-                                          deductionAmount.isEmpty
-                                              ? null
-                                              : (double.tryParse(
-                                                      deductionAmount) ??
-                                                  0.0),
-                                    }),
+                                          : (double.tryParse(
+                                                  deductionAmount) ??
+                                              0.0)),
+                                };
+                                final encoded = jsonEncode(bodyMap);
+
+                                try {
+                                  var response = await http.post(
+                                    addUrl,
+                                    headers: headers,
+                                    body: encoded,
                                   );
+                                  if (response.statusCode == 404) {
+                                    response = await http.patch(
+                                      detailUrl,
+                                      headers: headers,
+                                      body: encoded,
+                                    );
+                                  }
 
                                   if (!context.mounted) return;
                                   Navigator.pop(context);
 
-                                  if (response.statusCode == 200 ||
-                                      response.statusCode == 201) {
-                                    worker['damages_category'] =
-                                        selectedCategory;
-                                    worker['damages_item'] = isCustom
-                                        ? 'Custom Item'
-                                        : selectedItem;
-                                    worker['damages_price'] = price;
-                                    worker['damages_schedule'] =
-                                        paymentEverySalary;
-                                    worker['damages_deduction'] =
-                                        deductionAmount;
-                                    worker['damages_deduction_per_salary'] =
-                                        deductionAmount;
+                                  final ok = response.statusCode == 200 ||
+                                      response.statusCode == 201;
+                                  if (ok) {
+                                    try {
+                                      final decoded =
+                                          jsonDecode(response.body);
+                                      if (decoded is Map) {
+                                        decoded.forEach((k, v) {
+                                          worker[k.toString()] = v;
+                                        });
+                                      }
+                                    } catch (_) {
+                                      worker['damages_category'] =
+                                          selectedCategory;
+                                      worker['damages_item'] = itemLabel;
+                                      worker['damages_price'] = price;
+                                      worker['damages_schedule'] =
+                                          paymentEverySalary;
+                                      worker['damages_pm_covers'] = pmCovers;
+                                      worker['damages_deduction'] =
+                                          pmCovers ? '0' : deductionAmount;
+                                      worker['damages_deduction_per_salary'] =
+                                          pmCovers ? '0' : deductionAmount;
+                                    }
+                                    await _refreshFieldWorkerInPlace(
+                                      fieldWorkerId,
+                                      worker,
+                                    );
+                                    if (!context.mounted) return;
                                     setState(() {});
 
                                     ScaffoldMessenger.of(context)
                                         .showSnackBar(
                                       SnackBar(
                                         content: Text(
-                                            'Successfully recorded damage for $workerName.'),
+                                            "Added damage to $workerName's record."),
                                       ),
                                     );
 
@@ -1576,18 +1926,22 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                                       context,
                                       workerName: workerName,
                                       category: selectedCategory,
-                                      item: isCustom
-                                          ? 'Custom Item'
-                                          : selectedItem,
+                                      item: itemLabel,
                                       price: price,
                                       deduction: deductionAmount,
+                                      pmCovers: pmCovers,
                                     );
                                   } else {
+                                    final err = response.body;
+                                    final short = err.length > 200
+                                        ? '${err.substring(0, 200)}…'
+                                        : err;
                                     ScaffoldMessenger.of(context)
                                         .showSnackBar(
                                       SnackBar(
                                         content: Text(
-                                            'Failed to save damage report. ${response.body}'),
+                                          'Could not save (${response.statusCode}): $short',
+                                        ),
                                       ),
                                     );
                                   }
@@ -1637,6 +1991,7 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
     required String item,
     required String price,
     required String deduction,
+    bool pmCovers = false,
   }) {
     const accent = Color(0xFFFF7A18);
     const accentDark = Color(0xFFD85F00);
@@ -1824,9 +2179,14 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                           _buildDamageSummaryRow(
                             icon: Icons.payments_outlined,
                             iconColor: accent,
-                            label: 'Per-salary Deduction',
-                            value: '\u20B1$deductionDisplay',
-                            valueColor: accentDark,
+                            label: pmCovers
+                                ? 'Worker salary deduction'
+                                : 'Per-salary Deduction',
+                            value: pmCovers
+                                ? 'None (PM covers)'
+                                : '\u20B1$deductionDisplay',
+                            valueColor:
+                                pmCovers ? const Color(0xFF0F766E) : accentDark,
                           ),
                         ],
                       ),
@@ -2853,6 +3213,11 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                     _getProjectName(worker),
                     maxLines: 2,
                   ),
+                  const SizedBox(height: 6),
+                  _buildMobileDetailRow(
+                    Icons.access_time,
+                    _formatShiftSchedule(worker['shift_schedule']),
+                  ),
                   const SizedBox(height: 10),
                   // Action buttons
                   Row(
@@ -2905,33 +3270,40 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
     bool isTablet,
     List<Map<String, dynamic>> filteredWorkers,
   ) {
-    return Card(
-      color: Colors.white,
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
+    return Align(
+      alignment: Alignment.topLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1120),
+        child: Card(
+          color: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: const BorderSide(color: Color(0xFFE5E7EB)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
           // Table header
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: const Color(0xFFF8FAFC),
               borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(12),
+                top: Radius.circular(14),
               ),
             ),
             padding: EdgeInsets.symmetric(
-              horizontal: isTablet ? 12 : 16,
-              vertical: isTablet ? 12 : 14,
+              horizontal: isTablet ? 14 : 18,
+              vertical: isTablet ? 12 : 13,
             ),
             child: Row(
               children: [
                 _buildHeaderCell('Name', flex: 3),
                 _buildHeaderCell('Role', flex: 2),
-                _buildHeaderCell('Project', flex: isTablet ? 3 : 4),
+                _buildHeaderCell('Project', flex: isTablet ? 2 : 3),
+                _buildHeaderCell('Shift', flex: 2),
                 _buildHeaderCell('Status', flex: 2),
-                _buildHeaderCell('Damages', flex: 2),
-                _buildHeaderCell('Actions', flex: 1),
+                _buildHeaderCell('Damages', flex: 1),
               ],
             ),
           ),
@@ -2941,17 +3313,23 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: filteredWorkers.length,
-            separatorBuilder: (context, index) => const Divider(height: 1),
+            separatorBuilder: (context, index) =>
+                const Divider(height: 1, color: Color(0xFFF1F5F9)),
             itemBuilder: (context, index) {
               final worker = filteredWorkers[index];
               final roleColor = _roleColor(worker['role']);
               return InkWell(
                 onTap: () => _showWorkerDetailModal(context, worker),
-                hoverColor: const Color(0xFFFF6F00).withOpacity(0.03),
+                hoverColor: const Color(0xFF0EA5E9).withOpacity(0.04),
                 child: Container(
+                  decoration: BoxDecoration(
+                    color: index.isEven
+                        ? Colors.white
+                        : const Color(0xFFFCFDFE),
+                  ),
                   padding: EdgeInsets.symmetric(
-                    horizontal: isTablet ? 12 : 16,
-                    vertical: isTablet ? 10 : 12,
+                    horizontal: isTablet ? 12 : 14,
+                    vertical: isTablet ? 11 : 13,
                   ),
                   child: Row(
                     children: [
@@ -2999,12 +3377,11 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                         child: Container(
                           padding: EdgeInsets.symmetric(
                             horizontal: isTablet ? 8 : 10,
-                            vertical: isTablet ? 4 : 6,
+                            vertical: isTablet ? 5 : 6,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.white,
-                            border: Border.all(color: const Color(0xFFE5E7EB)),
-                            borderRadius: BorderRadius.circular(8),
+                            color: roleColor.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(999),
                           ),
                           child: Text(
                             worker['role'] ?? 'Worker',
@@ -3019,7 +3396,7 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                       ),
                       // Project column
                       Expanded(
-                        flex: isTablet ? 3 : 4,
+                        flex: isTablet ? 2 : 3,
                         child: Wrap(
                           spacing: 6,
                           runSpacing: 6,
@@ -3032,11 +3409,8 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFF4F8FC),
+                                color: const Color(0xFFF1F5F9),
                                 borderRadius: BorderRadius.circular(999),
-                                border: Border.all(
-                                  color: const Color(0xFFDCE7F3),
-                                ),
                               ),
                               child: Text(
                                 projectName,
@@ -3050,18 +3424,30 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                           }).toList(),
                         ),
                       ),
+                      // Shift column
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          _formatShiftSchedule(worker['shift_schedule']),
+                          style: TextStyle(
+                            color: Colors.grey[700],
+                            fontSize: isTablet ? 11 : 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                       // Status column
                       Expanded(
                         flex: 2,
                         child: Container(
                           padding: EdgeInsets.symmetric(
                             horizontal: isTablet ? 8 : 10,
-                            vertical: isTablet ? 4 : 6,
+                            vertical: isTablet ? 5 : 6,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.white,
-                            border: Border.all(color: const Color(0xFFE5E7EB)),
-                            borderRadius: BorderRadius.circular(8),
+                            color: getStatusColor('Active').withOpacity(0.10),
+                            borderRadius: BorderRadius.circular(999),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -3092,84 +3478,19 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
                       ),
                       // Damages column
                       Expanded(
-                        flex: 2,
+                        flex: 1,
                         child: Align(
                           alignment: Alignment.centerLeft,
-                          child: OutlinedButton.icon(
+                          child: TextButton.icon(
                             onPressed: () => _showWorkerDamagesModal(context, worker),
                             icon: const Icon(Icons.broken_image_outlined, size: 16),
                             label: const Text('View', style: TextStyle(fontSize: 12)),
-                            style: OutlinedButton.styleFrom(
+                            style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xFF0F766E),
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               minimumSize: const Size(0, 32),
                             ),
                           ),
-                        ),
-                      ),
-                      // Actions column
-                      Expanded(
-                        flex: 1,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            IconButton(
-                              icon: Icon(
-                                Icons.remove_red_eye_outlined,
-                                size: isTablet ? 18 : 20,
-                              ),
-                              color: const Color(0xFF1396E9),
-                              onPressed: () =>
-                                  _showWorkerDetailModal(context, worker),
-                              tooltip: 'View Details',
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                            if (!isTablet) const SizedBox(width: 8),
-                            if (!isTablet)
-                              PopupMenuButton<String>(
-                                color: Colors.white,
-                                onSelected: (v) {
-                                  if (v == 'toggle') {
-                                    setState(() {
-                                      worker['status'] =
-                                          worker['status'] == 'Active'
-                                          ? 'Inactive'
-                                          : 'Active';
-                                    });
-                                  } else if (v == 'view_damage_summary') {
-                                    _showDamagesSummaryModal(
-                                      context,
-                                      workerName: _getWorkerName(worker),
-                                      category: worker['damages_category']?.toString() ?? '',
-                                      item: worker['damages_item']?.toString() ?? '',
-                                      price: worker['damages_price']?.toString() ?? '',
-                                      deduction: _damageDeductionDisplay(worker),
-                                    );
-                                  }
-                                },
-                                itemBuilder: (_) => [
-                                  PopupMenuItem(
-                                    value: 'toggle',
-                                    child: Text(
-                                      worker['status'] == 'Active'
-                                          ? 'Set Inactive'
-                                          : 'Set Active',
-                                    ),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: 'remove',
-                                    child: Text('Remove (demo)'),
-                                  ),
-                                  if (_hasSavedDamageReport(worker))
-                                    const PopupMenuItem(
-                                      value: 'view_damage_summary',
-                                      child: Text('Damage Summary'),
-                                    ),
-                                ],
-                                icon: const Icon(Icons.more_vert, size: 20),
-                                padding: EdgeInsets.zero,
-                              ),
-                          ],
                         ),
                       ),
                     ],
@@ -3178,7 +3499,9 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
               );
             },
           ),
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }

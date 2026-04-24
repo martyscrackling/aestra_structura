@@ -279,6 +279,29 @@ class InventoryService {
     throw Exception('Failed to update status (${response.statusCode})');
   }
 
+  /// Materials use scalar warehouse stock (not [InventoryUnit] rows). PM-only.
+  static Future<Map<String, dynamic>> updateMaterialStockQuantity({
+    required int itemId,
+    required dynamic userId,
+    required int quantity,
+  }) async {
+    final uri = AppConfig.apiUri('inventory-items/$itemId/?user_id=$userId');
+    final response = await http
+        .patch(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'quantity': quantity}),
+        )
+        .timeout(const Duration(seconds: 30));
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+    throw Exception(
+      'Failed to update material quantity (${response.statusCode}): ${response.body}',
+    );
+  }
+
   // ── Checkout an item to a supervisor ────────────────────────────────────
   static Future<Map<String, dynamic>> checkoutItem({
     required int itemId,
@@ -455,6 +478,31 @@ class InventoryService {
       return jsonDecode(response.body) as Map<String, dynamic>;
     }
     throw Exception('Return failed (${response.statusCode}): ${response.body}');
+  }
+
+  /// Return an assigned (not checked-out) on-site unit to the PM pool.
+  static Future<Map<String, dynamic>> releaseAssignedUnitToPm({
+    required int itemId,
+    required dynamic supervisorId,
+    required int unitId,
+  }) async {
+    final uri = AppConfig.apiUri(
+      'inventory-items/$itemId/release_assigned_unit/?supervisor_id=$supervisorId',
+    );
+    final response = await http
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'unit_id': unitId}),
+        )
+        .timeout(const Duration(seconds: 30));
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+    throw Exception(
+      'Release failed (${response.statusCode}): ${response.body}',
+    );
   }
 
   // ── Get active usages (currently checked out) ──────────────────────────

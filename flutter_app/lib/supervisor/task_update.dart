@@ -24,6 +24,8 @@ class Subtask {
     this.photos = const [],
     this.notes = '',
     this.completed = false,
+    this.pendingRevertRequestId,
+    this.pendingRevertReason,
   });
 
   final String id;
@@ -33,6 +35,11 @@ class Subtask {
   List<XFile> photos;
   String notes;
   bool completed; // Checkbox flag for completion
+  int? pendingRevertRequestId;
+  String? pendingRevertReason;
+
+  bool get hasPendingRevert =>
+      pendingRevertRequestId != null && pendingRevertRequestId! > 0;
 }
 
 class Phase {
@@ -168,6 +175,18 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                     })
                     .cast<String>()
                     .toList();
+            int? pRevId;
+            String? pRevReason;
+            final pr = subtaskMap['pending_revert_request'];
+            if (pr is Map) {
+              final rid = pr['revert_request_id'];
+              if (rid is int) {
+                pRevId = rid;
+              } else {
+                pRevId = int.tryParse(rid?.toString() ?? '');
+              }
+              pRevReason = pr['reason']?.toString();
+            }
             return Subtask(
               id: (subtaskMap['subtask_id'] ?? '').toString(),
               title: subtaskMap['title'] as String? ?? 'Untitled Subtask',
@@ -177,6 +196,8 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
               completed:
                   _mapBackendStatus(subtaskMap['status'] as String?) ==
                   'Completed',
+              pendingRevertRequestId: pRevId,
+              pendingRevertReason: pRevReason,
             );
           }).toList();
 
@@ -281,6 +302,44 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
       default:
         return 'pending';
     }
+  }
+
+  int? _toInt(dynamic v) {
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v?.toString() ?? '');
+  }
+
+  int? _currentSupervisorId() {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final u = auth.currentUser ?? <String, dynamic>{};
+    final t = (u['type'] ?? u['role'] ?? '').toString().toLowerCase();
+    return _toInt(u['supervisor_id']) ?? (t == 'supervisor' ? _toInt(u['user_id']) : null);
+  }
+
+  /// Returns created request JSON, or null on failure.
+  Future<Map<String, dynamic>?> _submitCompletionRevertRequest({
+    required int subtaskId,
+    required int supervisorId,
+    required String reason,
+  }) async {
+    try {
+      final r = await http.post(
+        AppConfig.apiUri('subtask-completion-revert-requests/'),
+        headers: const {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'subtask_id': subtaskId,
+          'supervisor_id': supervisorId,
+          'reason': reason,
+        }),
+      );
+      if (r.statusCode == 201) {
+        final d = jsonDecode(r.body);
+        if (d is Map<String, dynamic>) return d;
+        if (d is Map) return Map<String, dynamic>.from(d);
+      }
+    } catch (_) {}
+    return null;
   }
 
   String _statusBadgeLabel(Subtask subtask) {
@@ -407,19 +466,24 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
     required String status,
     required String notes,
     required List<XFile> phasePhotos,
+    int? supervisorId,
   }) async {
+    // Django APPEND_SLASH: detail URLs must end with / before the query string,
+    // e.g. subtasks/132/?supervisor_id=… — not subtasks/132?… (PATCH cannot be redirected).
+    final supQ = supervisorId != null ? '?supervisor_id=$supervisorId' : '';
     if (phasePhotos.isEmpty) {
       return http.patch(
-        AppConfig.apiUri('subtasks/$subtaskId/'),
+        AppConfig.apiUri('subtasks/$subtaskId/$supQ'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'status': status, 'progress_notes': notes}),
       );
     }
 
-    final request =
-        http.MultipartRequest('PATCH', AppConfig.apiUri('subtasks/$subtaskId/'))
-          ..fields['status'] = status
-          ..fields['progress_notes'] = notes;
+    final request = http.MultipartRequest(
+      'PATCH',
+      AppConfig.apiUri('subtasks/$subtaskId/$supQ'),
+    )..fields['status'] = status
+      ..fields['progress_notes'] = notes;
 
     var fileIndex = 0;
     for (final photo in phasePhotos.take(5)) {
@@ -435,7 +499,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
     return http.Response.fromStream(streamed);
   }
 
-  /// Supervisor must not uncheck a server-completed subtask without a reason.
+  /// Requests PM approval to uncheck a completed subtask (does not uncheck immediately).
   Future<String?> _showSupervisorRevertCompletionDialog(
     BuildContext hostContext, {
     required String subtaskTitle,
@@ -446,7 +510,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
       builder: (dCtx) => StatefulBuilder(
         builder: (sCtx, setS) {
           return AlertDialog(
-            title: const Text('Uncheck completed subtask?'),
+            title: const Text('Request to uncheck completed subtask'),
             content: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 400),
               child: Column(
@@ -454,8 +518,9 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '“$subtaskTitle” is currently marked complete. To update it to not '
-                    'complete, provide a reason. This is saved with the subtask update.',
+                    '“$subtaskTitle” is marked complete. To change that, the project '
+                    'manager must approve. Explain why it should be unchecked—your PM '
+                    'will get a request and can authorize the change from their account.',
                     style: TextStyle(color: Colors.grey[800], fontSize: 14),
                   ),
                   const SizedBox(height: 12),
@@ -493,7 +558,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                   Navigator.pop<String>(dCtx, text.trim());
                 },
                 style: ElevatedButton.styleFrom(backgroundColor: primary),
-                child: const Text('Update & uncheck'),
+                child: const Text('Send request to project manager'),
               ),
             ],
           );
@@ -571,6 +636,18 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                                     final st = phase.subtasks[sIndex];
                                     if (val == false &&
                                         st.status == 'Completed') {
+                                      if (st.hasPendingRevert) {
+                                        if (!context.mounted) return;
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'A request is already waiting for the project manager.',
+                                            ),
+                                          ),
+                                        );
+                                        return;
+                                      }
                                       final reason =
                                           await _showSupervisorRevertCompletionDialog(
                                         context,
@@ -579,13 +656,78 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                                       if (reason == null) {
                                         return;
                                       }
+                                      final sid = _currentSupervisorId();
+                                      final subId = int.tryParse(st.id);
+                                      if (sid == null || subId == null) {
+                                        if (!context.mounted) return;
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Could not determine supervisor id. Please re-login.',
+                                            ),
+                                          ),
+                                        );
+                                        return;
+                                      }
+                                      if (!context.mounted) return;
+                                      showDialog(
+                                        context: context,
+                                        barrierDismissible: false,
+                                        builder: (_) => const Center(
+                                          child: CircularProgressIndicator(),
+                                        ),
+                                      );
+                                      Map<String, dynamic>? res;
+                                      try {
+                                        res =
+                                            await _submitCompletionRevertRequest(
+                                          subtaskId: subId,
+                                          supervisorId: sid,
+                                          reason: reason,
+                                        );
+                                      } finally {
+                                        if (context.mounted) {
+                                          Navigator.of(
+                                            context,
+                                            rootNavigator: true,
+                                          ).pop();
+                                        }
+                                      }
+                                      if (!context.mounted) return;
+                                      if (res == null) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Could not send request. Check your connection or try again.',
+                                            ),
+                                            backgroundColor: Colors.red,
+                                          ),
+                                        );
+                                        return;
+                                      }
+                                      final rid = res['revert_request_id'];
                                       setModalState(() {
-                                        st.completed = false;
+                                        st.completed = true;
+                                        st.pendingRevertRequestId = rid is int
+                                            ? rid
+                                            : int.tryParse('$rid');
+                                        st.pendingRevertReason = reason;
                                         st.notes = reason;
                                         if (sIndex < noteKeyVersions.length) {
                                           noteKeyVersions[sIndex]++;
                                         }
                                       });
+                                      if (!context.mounted) return;
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Request sent to the project manager. The subtask stays complete until they approve.',
+                                          ),
+                                        ),
+                                      );
                                       return;
                                     }
                                     setModalState(() {
@@ -626,6 +768,33 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                                           color: Colors.grey[600],
                                         ),
                                       ),
+                                      if (phase
+                                          .subtasks[sIndex]
+                                          .hasPendingRevert) ...[
+                                        const SizedBox(height: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFFFF7ED),
+                                            borderRadius:
+                                                BorderRadius.circular(6),
+                                            border: Border.all(
+                                              color: const Color(0xFFFFD6A8),
+                                            ),
+                                          ),
+                                          child: const Text(
+                                            'Awaiting project manager approval to uncheck',
+                                            style: TextStyle(
+                                              fontSize: 10.5,
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFF9A3412),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ),
@@ -841,6 +1010,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                             status: targetBackendStatus,
                             notes: subtaskNotes,
                             phasePhotos: subtaskPhotos,
+                            supervisorId: _currentSupervisorId(),
                           ),
                         );
                       }

@@ -15,6 +15,9 @@ class ActiveProject extends StatefulWidget {
   final double? cardsViewportHeight;
   final bool compactCards;
   final bool carouselWhenMultiple;
+  final int? deepLinkProjectId;
+  final int? deepLinkPhaseId;
+  final int? deepLinkSubtaskId;
 
   const ActiveProject({
     super.key,
@@ -24,6 +27,9 @@ class ActiveProject extends StatefulWidget {
     this.cardsViewportHeight,
     this.compactCards = false,
     this.carouselWhenMultiple = false,
+    this.deepLinkProjectId,
+    this.deepLinkPhaseId,
+    this.deepLinkSubtaskId,
   });
 
   @override
@@ -36,6 +42,7 @@ class _ActiveProjectState extends State<ActiveProject> {
   Map<int, double> _progressByProjectId = {};
   int? _selectedProjectId;
   bool _isLoading = true;
+  bool _inboxDeepLinkDetailOpened = false;
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _cardsScrollController = ScrollController();
   final PageController _carouselController = PageController(
@@ -230,20 +237,34 @@ class _ActiveProjectState extends State<ActiveProject> {
                 : int.tryParse(projects.first['project_id'].toString()))
           : null;
 
+      int? linkPid = widget.deepLinkProjectId;
+      if (linkPid != null) {
+        final exists = projects.any((p) {
+          final r = p['project_id'];
+          final id = r is int ? r : int.tryParse(r.toString());
+          return id == linkPid;
+        });
+        if (!exists) linkPid = null;
+      }
+      final selectedId = linkPid ?? firstProjectId;
+
       if (!mounted) return;
       setState(() {
         _projects = projects;
         _phasesByProjectId = phasesByProjectId;
         _progressByProjectId = progressByProjectId;
-        _selectedProjectId = firstProjectId;
+        _selectedProjectId = selectedId;
         _isLoading = false;
       });
 
-      if (firstProjectId != null && widget.onProjectLoaded != null) {
+      if (selectedId != null && widget.onProjectLoaded != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          widget.onProjectLoaded!(firstProjectId);
+          widget.onProjectLoaded!(selectedId);
         });
       }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _maybeOpenInboxDeepLink();
+      });
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -351,6 +372,70 @@ class _ActiveProjectState extends State<ActiveProject> {
 
     if (totalSubtasks == 0) return 0.0;
     return completedSubtasks / totalSubtasks;
+  }
+
+  int? _parseProjectId(Map<String, dynamic> project) {
+    final projectIdRaw = project['project_id'];
+    if (projectIdRaw == null) return null;
+    if (projectIdRaw is int) return projectIdRaw;
+    return int.tryParse(projectIdRaw.toString());
+  }
+
+  Map<String, dynamic>? _projectById(int id) {
+    for (final p in _projects) {
+      if (_parseProjectId(p) == id) return p;
+    }
+    return null;
+  }
+
+  void _openProjectInfoPage(
+    BuildContext context,
+    Map<String, dynamic> project, {
+    int? focusPhaseId,
+    int? focusSubtaskId,
+  }) {
+    final projectName = project['project_name'] ?? 'Unknown Project';
+    final projectId = _parseProjectId(project);
+    if (projectId == null || projectId <= 0) return;
+    final location = _getLocation(project);
+    final progress = _progressByProjectId[projectId] ?? 0.0;
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            ProjectInfosPage(
+          projectTitle: projectName.toString(),
+          projectLocation: location,
+          projectImage: (project['project_image'] ?? '').toString(),
+          progress: progress,
+          budget: project['budget']?.toString(),
+          projectId: projectId,
+          focusPhaseId: focusPhaseId,
+          focusSubtaskId: focusSubtaskId,
+        ),
+        transitionDuration: Duration.zero,
+      ),
+    );
+  }
+
+  void _maybeOpenInboxDeepLink() {
+    if (!mounted) return;
+    if (_inboxDeepLinkDetailOpened) return;
+    final pid = widget.deepLinkProjectId;
+    if (pid == null) return;
+    final project = _projectById(pid);
+    if (project == null) return;
+
+    final hasFocus = widget.deepLinkPhaseId != null ||
+        widget.deepLinkSubtaskId != null;
+    if (hasFocus) {
+      _inboxDeepLinkDetailOpened = true;
+      _openProjectInfoPage(
+        context,
+        project,
+        focusPhaseId: widget.deepLinkPhaseId,
+        focusSubtaskId: widget.deepLinkSubtaskId,
+      );
+    }
   }
 
   void _selectProject(int projectId) {
@@ -735,28 +820,9 @@ class _ActiveProjectState extends State<ActiveProject> {
                                   width: double.infinity,
                                   child: OutlinedButton(
                                     onPressed: () {
-                                      Navigator.of(context).push(
-                                        PageRouteBuilder(
-                                          pageBuilder:
-                                              (
-                                                context,
-                                                animation,
-                                                secondaryAnimation,
-                                              ) => ProjectInfosPage(
-                                                projectTitle: projectName
-                                                    .toString(),
-                                                projectLocation: location,
-                                                projectImage:
-                                                    (project['project_image'] ??
-                                                            '')
-                                                        .toString(),
-                                                progress: progress,
-                                                budget: project['budget']
-                                                    ?.toString(),
-                                                projectId: projectId,
-                                              ),
-                                          transitionDuration: Duration.zero,
-                                        ),
+                                      _openProjectInfoPage(
+                                        context,
+                                        project,
                                       );
                                     },
                                     style: OutlinedButton.styleFrom(

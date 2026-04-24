@@ -60,6 +60,7 @@ def record_material_usage(
     supervisor: Supervisors,
     field_worker: FieldWorker = None,
     notes: str = "",
+    enforce_inventory: bool = True,
 ):
     """
     Consume `quantity` units of `inventory_item` for `phase`.
@@ -86,8 +87,8 @@ def record_material_usage(
     phase = Phase.objects.select_for_update().get(pk=phase.pk)
     project = phase.project
 
-    # Rule 1 — inventory
-    if inventory_item.quantity < quantity:
+    # Rule 1 — inventory (optional in reservation-based flows)
+    if enforce_inventory and inventory_item.quantity < quantity:
         raise MaterialUsageError(
             f"Not enough inventory: requested {quantity}, "
             f"available {inventory_item.quantity}."
@@ -115,9 +116,11 @@ def record_material_usage(
             f"Remaining: {remaining}, this cost: {cost}."
         )
 
-    # Apply deductions
-    inventory_item.quantity = inventory_item.quantity - quantity
-    inventory_item.save(update_fields=["quantity", "updated_at"])
+    # Apply deductions. In reservation-based planned flows the inventory stock
+    # has already been reserved at planning time, so we should not deduct again.
+    if enforce_inventory:
+        inventory_item.quantity = inventory_item.quantity - quantity
+        inventory_item.save(update_fields=["quantity", "updated_at"])
 
     phase.used_budget = used + cost
     phase.save(update_fields=["used_budget", "updated_at"])

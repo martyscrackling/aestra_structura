@@ -31,6 +31,7 @@ class AttendanceReport {
     required this.cashAdvance,
     required this.deduction,
     required this.damagesDeduction,
+    this.damagesPmCovers = false,
     required this.damagesCategory,
     required this.damagesItem,
     required this.damagesPrice,
@@ -55,6 +56,8 @@ class AttendanceReport {
   final double cashAdvance;
   final double deduction;
   final double damagesDeduction;
+  /// When true, damage cost is not deducted from the worker; attribution remains on record.
+  final bool damagesPmCovers;
   final String? damagesCategory;
   final String? damagesItem;
   final double damagesPrice;
@@ -131,6 +134,10 @@ class AttendanceReport {
 
   double get totalGovernmentDeductions =>
       sssDeduction + philhealthDeduction + pagibigDeduction;
+
+  /// True when a damage is recorded (attributed) for this worker, including PM-covered cost.
+  bool get hasRecordedDamage =>
+      damagesPmCovers || damagesDeduction > 0 || damagesPrice > 0;
 
   double get totalDeductions => deduction + damagesDeduction + totalGovernmentDeductions;
 
@@ -256,6 +263,18 @@ class _ReportsPageState extends State<ReportsPage> {
   final Map<int, List<Map<String, dynamic>>> _workersCacheByProject =
       <int, List<Map<String, dynamic>>>{};
 
+  /// One bulk attendance fetch is reused for the main week + 4 history windows.
+  int? _attendanceBulkCacheProjectId;
+  List<Map<String, dynamic>>? _attendanceBulkCache;
+  DateTime? _attendanceBulkCacheAt;
+  static const _attendanceBulkTtl = Duration(minutes: 2);
+
+  void _invalidateAttendanceBulkCache() {
+    _attendanceBulkCacheProjectId = null;
+    _attendanceBulkCache = null;
+    _attendanceBulkCacheAt = null;
+  }
+
   final _money = NumberFormat.currency(
     locale: 'en_PH',
     symbol: '₱',
@@ -265,10 +284,11 @@ class _ReportsPageState extends State<ReportsPage> {
   Future<void> _initializeReportScope() async {
     await _loadSupervisorProjects();
     await _restorePersistedSalaryDate();
-    await Future.wait<void>([
-      _refreshReports(),
-      _loadReportsHistory(),
-    ]);
+    // Load current week first (fills attendance cache); then history reuses the same data.
+    await _refreshReports();
+    if (mounted) {
+      unawaited(_loadReportsHistory());
+    }
   }
 
   String _salaryDatePrefsKey({required int projectId}) {
@@ -485,7 +505,9 @@ class _ReportsPageState extends State<ReportsPage> {
               'hourly_rate': r.hourlyRate,
               'cash_advance': r.cashAdvance,
               'deduction': r.deduction,
+              'total_deductions': r.totalDeductions,
               'damages_deduction': r.damagesDeduction,
+              'damages_pm_covers': r.damagesPmCovers,
               'gross_pay': r.grossPay,
               'computed_salary': r.computedSalary,
             },
@@ -593,6 +615,7 @@ class _ReportsPageState extends State<ReportsPage> {
               cashAdvance: cashAdvanceBalance,
               deduction: deductionPerSalary,
               damagesDeduction: row.damagesDeduction,
+              damagesPmCovers: row.damagesPmCovers,
               damagesCategory: row.damagesCategory,
               damagesItem: row.damagesItem,
               damagesPrice: row.damagesPrice,
@@ -627,6 +650,16 @@ class _ReportsPageState extends State<ReportsPage> {
     if (value is double) return value;
     if (value is num) return value.toDouble();
     return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  bool _toBool(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) {
+      final s = value.trim().toLowerCase();
+      return s == 'true' || s == '1' || s == 'yes';
+    }
+    return false;
   }
 
   String _dateString(DateTime date) {
@@ -1070,16 +1103,30 @@ class _ReportsPageState extends State<ReportsPage> {
       dates.add(date);
     }
 
-    // Fetch all attendance for this project once to avoid N daily parallel requests.
-    final response = await http.get(
-      AppConfig.apiUri('attendance/?project_id=$projectId'),
-    );
-    if (response.statusCode != 200) {
-      throw Exception('Failed to load attendance data (${response.statusCode})');
+    // Reuse one bulk attendance response for main report + 4 history windows.
+    final List<Map<String, dynamic>> allAttendance;
+    final now = DateTime.now();
+    if (_attendanceBulkCacheProjectId == projectId &&
+        _attendanceBulkCache != null &&
+        _attendanceBulkCacheAt != null &&
+        now.difference(_attendanceBulkCacheAt!) < _attendanceBulkTtl) {
+      allAttendance = _attendanceBulkCache!;
+    } else {
+      final response = await http.get(
+        AppConfig.apiUri('attendance/?project_id=$projectId'),
+      );
+      if (response.statusCode != 200) {
+        throw Exception(
+            'Failed to load attendance data (${response.statusCode})',
+        );
+      }
+      allAttendance = (jsonDecode(response.body) as List<dynamic>)
+          .whereType<Map<String, dynamic>>()
+          .toList();
+      _attendanceBulkCacheProjectId = projectId;
+      _attendanceBulkCache = allAttendance;
+      _attendanceBulkCacheAt = now;
     }
-    final allAttendance = (jsonDecode(response.body) as List<dynamic>)
-        .whereType<Map<String, dynamic>>()
-        .toList();
 
     // Group attendance records by date for easy lookup.
     final attendanceByDateMap = <String, List<Map<String, dynamic>>>{};
@@ -1262,6 +1309,7 @@ class _ReportsPageState extends State<ReportsPage> {
                 worker['damages_deduction'] ??
                 0,
           ),
+          damagesPmCovers: _toBool(worker['damages_pm_covers']),
           damagesCategory: worker['damages_category']?.toString(),
           damagesItem: worker['damages_item']?.toString(),
           damagesPrice: _toDouble(worker['damages_price']),
@@ -1285,6 +1333,7 @@ class _ReportsPageState extends State<ReportsPage> {
 
   Future<void> _refreshReports() async {
     if (!mounted) return;
+    _invalidateAttendanceBulkCache();
     setState(() {
       _isLoading = true;
       _loadError = null;
@@ -1660,7 +1709,9 @@ class _ReportsPageState extends State<ReportsPage> {
         _weekStart = selected;
       });
       await _refreshReports();
-      await _loadReportsHistory();
+      if (mounted) {
+        unawaited(_loadReportsHistory());
+      }
     }
   }
 
@@ -1698,12 +1749,15 @@ class _ReportsPageState extends State<ReportsPage> {
 
   Future<void> _onProjectChanged(int? projectId) async {
     if (projectId == null || projectId == _selectedProjectId) return;
+    _invalidateAttendanceBulkCache();
     setState(() {
       _selectedProjectId = projectId;
     });
     await _restorePersistedSalaryDate();
     await _refreshReports();
-    await _loadReportsHistory();
+    if (mounted) {
+      unawaited(_loadReportsHistory());
+    }
   }
 
   Widget _kpiCard(String title, String value, {Color? color, IconData? icon}) {
@@ -1943,110 +1997,114 @@ class _ReportsPageState extends State<ReportsPage> {
                     if (!isMobile)
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 24),
-                        child: Row(
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE5E7EB)),
+                          ),
+                          child: Row(
                           children: [
                             // report date selector
-                            Card(
-                              color: Colors.white,
-                              elevation: 1,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xFFE5E7EB)),
                               ),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
+                              child: TextButton.icon(
+                                onPressed: _pickReportDate,
+                                icon: const Icon(
+                                  Icons.calendar_today,
+                                  size: 18,
+                                  color: Color(0xFF0C1935),
                                 ),
-                                child: Row(
-                                  children: [
-                                    TextButton.icon(
-                                      onPressed: _pickReportDate,
-                                      icon: const Icon(
-                                        Icons.calendar_today,
-                                        size: 18,
-                                      ),
-                                      label: Text(_dateFmt.format(_weekEnd)),
-                                    ),
-                                  ],
+                                label: Text(
+                                  _dateFmt.format(_weekEnd),
+                                  style: const TextStyle(
+                                    color: Color(0xFF0C1935),
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
                             ),
                             const SizedBox(width: 10),
-                            Card(
-                              color: Colors.white,
-                              elevation: 1,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xFFE5E7EB)),
                               ),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
+                              child: TextButton.icon(
+                                onPressed: _pickSalaryDate,
+                                icon: const Icon(
+                                  Icons.payments_outlined,
+                                  size: 18,
+                                  color: Color(0xFF0C1935),
                                 ),
-                                child: TextButton.icon(
-                                  onPressed: _pickSalaryDate,
-                                  icon: const Icon(
-                                    Icons.payments_outlined,
+                                label: Text(
+                                  'Salary: ${_dateFmt.format(_salaryDate)}',
+                                  style: const TextStyle(
+                                    color: Color(0xFF0C1935),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xFFE5E7EB)),
+                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.apartment,
                                     size: 18,
+                                    color: Color(0xFF0C1935),
                                   ),
-                                  label: Text(
-                                    'Salary: ${_dateFmt.format(_salaryDate)}',
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Card(
-                              color: Colors.white,
-                              elevation: 1,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.apartment, size: 18),
-                                    const SizedBox(width: 8),
-                                    SizedBox(
-                                      width: 200,
-                                      child: DropdownButtonHideUnderline(
-                                        child: DropdownButton<int>(
-                                          value: _selectedProjectId,
-                                          dropdownColor: Colors.white,
-                                          isExpanded: true,
-                                          isDense: true,
-                                          hint: Text(
-                                            _isLoadingProjects
-                                                ? 'Loading projects...'
-                                                : 'Select Project',
-                                          ),
-                                          items: _supervisorProjects
-                                              .map(
-                                                (project) =>
-                                                    DropdownMenuItem<int>(
-                                                      value: project.projectId,
-                                                      child: Text(
-                                                        project.projectName,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                      ),
-                                                    ),
-                                              )
-                                              .toList(),
-                                          onChanged: _isLoadingProjects
-                                              ? null
-                                              : (value) {
-                                                  _onProjectChanged(value);
-                                                },
+                                  const SizedBox(width: 8),
+                                  SizedBox(
+                                    width: 200,
+                                    child: DropdownButtonHideUnderline(
+                                      child: DropdownButton<int>(
+                                        value: _selectedProjectId,
+                                        dropdownColor: Colors.white,
+                                        isExpanded: true,
+                                        isDense: true,
+                                        hint: Text(
+                                          _isLoadingProjects
+                                              ? 'Loading projects...'
+                                              : 'Select Project',
                                         ),
+                                        items: _supervisorProjects
+                                            .map(
+                                              (project) => DropdownMenuItem<int>(
+                                                value: project.projectId,
+                                                child: Text(
+                                                  project.projectName,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            )
+                                            .toList(),
+                                        onChanged: _isLoadingProjects
+                                            ? null
+                                            : (value) {
+                                                _onProjectChanged(value);
+                                              },
                                       ),
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
                             ),
                             if (_isSalaryDayMode) const SizedBox(width: 10),
@@ -2065,6 +2123,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                 ),
                               ),
                           ],
+                        ),
                         ),
                       ),
                     if (!isMobile && _isSalaryDayMode)
@@ -2570,10 +2629,8 @@ class _ReportsPageState extends State<ReportsPage> {
                                                                       fontSize:
                                                                           9,
                                                                     ),
-                                                                  if (r.damagesDeduction >
-                                                                          0 ||
-                                                                      r.damagesPrice >
-                                                                          0)
+                                                                  if (r
+                                                                      .hasRecordedDamage)
                                                                     _damagePill(
                                                                       r,
                                                                       fontSize:
@@ -2682,9 +2739,12 @@ class _ReportsPageState extends State<ReportsPage> {
                               )
                             : Card(
                                 color: Colors.white,
-                                elevation: 2,
+                                elevation: 0,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
+                                  side: const BorderSide(
+                                    color: Color(0xFFE5E7EB),
+                                  ),
                                 ),
                                 child: Column(
                                   crossAxisAlignment:
@@ -2697,7 +2757,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                         vertical: 14,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: Colors.white,
+                                        color: const Color(0xFFF8FAFC),
                                         borderRadius: const BorderRadius.only(
                                           topLeft: Radius.circular(12),
                                           topRight: Radius.circular(12),
@@ -2956,10 +3016,8 @@ class _ReportsPageState extends State<ReportsPage> {
                                                                             .ellipsis,
                                                                   ),
                                                                   if (r.hasHolidayPay ||
-                                                                      r.damagesDeduction >
-                                                                          0 ||
-                                                                      r.damagesPrice >
-                                                                          0) ...[
+                                                                      r
+                                                                          .hasRecordedDamage) ...[
                                                                     const SizedBox(
                                                                       height: 4,
                                                                     ),
@@ -2973,10 +3031,8 @@ class _ReportsPageState extends State<ReportsPage> {
                                                                           _holidayPill(
                                                                             r,
                                                                           ),
-                                                                        if (r.damagesDeduction >
-                                                                                0 ||
-                                                                            r.damagesPrice >
-                                                                                0)
+                                                                        if (r
+                                                                            .hasRecordedDamage)
                                                                           _damagePill(
                                                                             r,
                                                                           ),
@@ -3570,15 +3626,16 @@ class _ReportsPageState extends State<ReportsPage> {
         builder: (context, setModalState) {
           final effectiveDeduction = isSalaryDay ? editableDeduction : 0.0;
           final effectiveDamages = isSalaryDay ? r.damagesDeduction : 0.0;
-          final hasDamage = r.damagesDeduction > 0 || r.damagesPrice > 0;
+          final hasDamage = r.hasRecordedDamage;
           final liveTotalDeductions =
               r.totalGovernmentDeductions +
               effectiveDeduction +
               effectiveDamages;
           final liveNetSalary = r.grossPay - liveTotalDeductions;
-          final damageRepaymentPeriods = r.damagesDeduction > 0
-              ? (r.damagesPrice / r.damagesDeduction).ceil()
-              : 0;
+          final damageRepaymentPeriods =
+              !r.damagesPmCovers && r.damagesDeduction > 0
+                  ? (r.damagesPrice / r.damagesDeduction).ceil()
+                  : 0;
 
           return Container(
             decoration: const BoxDecoration(
@@ -4135,9 +4192,15 @@ class _ReportsPageState extends State<ReportsPage> {
                                 ),
                                 Expanded(
                                   child: _damageStat(
-                                    'Per Salary',
-                                    '- ${_money.format(r.damagesDeduction)}',
-                                    const Color(0xFFDC2626),
+                                    r.damagesPmCovers
+                                        ? 'Worker pays'
+                                        : 'Per Salary',
+                                    r.damagesPmCovers
+                                        ? '—'
+                                        : '- ${_money.format(r.damagesDeduction)}',
+                                    r.damagesPmCovers
+                                        ? const Color(0xFF0F766E)
+                                        : const Color(0xFFDC2626),
                                   ),
                                 ),
                                 if (damageRepaymentPeriods > 0) ...[
@@ -4167,45 +4230,76 @@ class _ReportsPageState extends State<ReportsPage> {
                               ),
                             ],
                             const SizedBox(height: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isSalaryDay
-                                    ? const Color(0xFFFFE4D0)
-                                    : const Color(0xFFF3F4F6),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    isSalaryDay
-                                        ? Icons.check_circle
-                                        : Icons.schedule,
-                                    size: 12,
-                                    color: isSalaryDay
-                                        ? const Color(0xFFB45309)
-                                        : Colors.grey[600],
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    isSalaryDay
-                                        ? 'Deducting this salary day'
-                                        : 'Not deducted today · only on salary day',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
+                            if (r.damagesPmCovers)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFECFDF5),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.verified,
+                                      size: 12,
+                                      color: Color(0xFF0F766E),
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Project covers cost · worker not deducted',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF0F766E),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            else
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isSalaryDay
+                                      ? const Color(0xFFFFE4D0)
+                                      : const Color(0xFFF3F4F6),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      isSalaryDay
+                                          ? Icons.check_circle
+                                          : Icons.schedule,
+                                      size: 12,
                                       color: isSalaryDay
                                           ? const Color(0xFFB45309)
-                                          : Colors.grey[700],
+                                          : Colors.grey[600],
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      isSalaryDay
+                                          ? 'Deducting this salary day'
+                                          : 'Not deducted today · only on salary day',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: isSalaryDay
+                                            ? const Color(0xFFB45309)
+                                            : Colors.grey[700],
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
                           ],
                         ),
                       ),
@@ -4284,7 +4378,15 @@ class _ReportsPageState extends State<ReportsPage> {
                       '- ${_money.format(effectiveDeduction)}',
                       Colors.redAccent,
                     ),
-                    if (r.damagesDeduction > 0)
+                    if (r.damagesPmCovers && r.hasRecordedDamage)
+                      _salaryRow(
+                        (r.damagesItem ?? '').isNotEmpty
+                            ? 'Damage (${r.damagesItem}) · PM'
+                            : 'Damage (PM covered)',
+                        'No worker deduction',
+                        const Color(0xFF0F766E),
+                      )
+                    else if (r.damagesDeduction > 0)
                       _salaryRow(
                         (r.damagesItem ?? '').isNotEmpty
                             ? 'Damage (${r.damagesItem})'
@@ -4526,7 +4628,16 @@ class _ReportsPageState extends State<ReportsPage> {
     final item = r.damagesItem ?? '';
     final label = item.isNotEmpty ? item.toUpperCase() : 'DAMAGE';
     final effective = _effectiveDamages(r);
-    final priceLabel = effective > 0 ? '-${_money.format(effective)}' : '';
+    final String priceLabel;
+    if (r.damagesPmCovers) {
+      if (r.damagesPrice > 0) {
+        priceLabel = 'PM·${_money.format(r.damagesPrice)}';
+      } else {
+        priceLabel = 'PM';
+      }
+    } else {
+      priceLabel = effective > 0 ? '-${_money.format(effective)}' : '';
+    }
     return InkWell(
       onTap: () => _showWorkerDetails(r),
       borderRadius: BorderRadius.circular(6),
@@ -4571,7 +4682,9 @@ class _ReportsPageState extends State<ReportsPage> {
                   style: TextStyle(
                     fontSize: fontSize,
                     fontWeight: FontWeight.w800,
-                    color: const Color(0xFFDC2626),
+                    color: r.damagesPmCovers
+                        ? const Color(0xFF0F766E)
+                        : const Color(0xFFDC2626),
                   ),
                 ),
               ),

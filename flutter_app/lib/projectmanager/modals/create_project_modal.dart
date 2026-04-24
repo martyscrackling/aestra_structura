@@ -9,6 +9,8 @@ import '../../services/auth_service.dart';
 import '../../services/app_config.dart';
 import '../../services/app_time_service.dart';
 import '../../services/date_utils.dart' as ph_date_utils;
+import 'add_client_modal.dart';
+import 'add_worker_modal.dart';
 
 class CreateProjectModal extends StatefulWidget {
   const CreateProjectModal({super.key});
@@ -235,6 +237,24 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
     } finally {
       setState(() => _isLoadingClients = false);
     }
+  }
+
+  Future<void> _openAddClientModal() async {
+    await showDialog(
+      context: context,
+      builder: (context) => const AddClientModal(),
+    );
+    if (!mounted) return;
+    await _fetchClients();
+  }
+
+  Future<void> _openAddSupervisorModal() async {
+    await showDialog(
+      context: context,
+      builder: (context) => const AddWorkerModal(workerType: 'Supervisor'),
+    );
+    if (!mounted) return;
+    await _fetchSupervisors();
   }
 
   Future<void> _pickImage() async {
@@ -1245,6 +1265,19 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
                   return null;
                 },
               ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: _openAddClientModal,
+            icon: const Icon(Icons.person_add_alt_1, size: 18),
+            label: const Text('Add Client'),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFFF7A18),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            ),
+          ),
+        ),
         const SizedBox(height: 12),
 
         // Supervisor in-charge
@@ -1320,6 +1353,19 @@ class _CreateProjectModalState extends State<CreateProjectModal> {
                   return null;
                 },
               ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: _openAddSupervisorModal,
+            icon: const Icon(Icons.badge_outlined, size: 18),
+            label: const Text('Add Supervisor'),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFFF7A18),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            ),
+          ),
+        ),
         const SizedBox(height: 12),
 
         // Budget

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
+import 'supervisor_inbox_nav.dart';
 import 'widgets/sidebar.dart';
 import 'widgets/dashboard_header.dart';
 import 'widgets/active_project.dart';
@@ -49,29 +51,38 @@ class _AllProjectsPageState extends State<AllProjectsPage> {
     );
   }
 
-  Widget _buildMobileLayout() {
+  Widget _buildMobileLayout({required ActiveProject child}) {
     return Padding(
       padding: const EdgeInsets.all(12),
-      child: ActiveProject(key: _activeProjectKey, enableSelection: false),
+      child: child,
     );
   }
 
-  Widget _buildTabletLayout() {
+  Widget _buildTabletLayout({required ActiveProject child}) {
     return Padding(
       padding: const EdgeInsets.all(20),
-      child: ActiveProject(key: _activeProjectKey, enableSelection: false),
+      child: child,
     );
   }
 
-  Widget _buildDesktopLayout() {
+  Widget _buildDesktopLayout({required ActiveProject child}) {
     return Padding(
       padding: const EdgeInsets.all(24),
-      child: ActiveProject(key: _activeProjectKey, enableSelection: false),
+      child: child,
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final q = GoRouterState.of(context).uri.queryParameters;
+    final activeProject = ActiveProject(
+      key: _activeProjectKey,
+      enableSelection: false,
+      deepLinkProjectId: parseInboxId(q['project_id'] ?? q['project']),
+      deepLinkPhaseId: parseInboxId(q['phase_id']),
+      deepLinkSubtaskId: parseInboxId(q['subtask_id']),
+    );
+
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth > 1024;
     final isTablet = screenWidth > 600 && screenWidth <= 1024;
@@ -94,10 +105,10 @@ class _AllProjectsPageState extends State<AllProjectsPage> {
                             ? const EdgeInsets.only(bottom: 100)
                             : null,
                         child: isMobile
-                            ? _buildMobileLayout()
+                            ? _buildMobileLayout(child: activeProject)
                             : isTablet
-                            ? _buildTabletLayout()
-                            : _buildDesktopLayout(),
+                            ? _buildTabletLayout(child: activeProject)
+                            : _buildDesktopLayout(child: activeProject),
                       ),
                     ),
                   ],

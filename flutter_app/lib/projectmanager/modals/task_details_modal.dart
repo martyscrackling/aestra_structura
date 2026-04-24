@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../project_details_page.dart';
+import '../phase_subtask_models.dart';
 import 'photo_viewer_modal.dart';
 
 class SubTask {

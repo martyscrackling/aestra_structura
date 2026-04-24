@@ -522,13 +522,29 @@ class SupervisorSerializer(serializers.ModelSerializer):
         return value
 
 
+class FieldWorkerDamageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.FieldWorkerDamage
+        fields = [
+            'id',
+            'category',
+            'item',
+            'price',
+            'schedule',
+            'deduction_per_salary',
+            'pm_covers',
+            'created_at',
+        ]
+
+
 class FieldWorkerSerializer(serializers.ModelSerializer):
     assignment_status = serializers.SerializerMethodField()
     assigned_projects = serializers.SerializerMethodField()
     shift_schedule = serializers.SerializerMethodField()
     current_project_shift_start = serializers.SerializerMethodField()
     current_project_shift_end = serializers.SerializerMethodField()
-    
+    damage_entries = FieldWorkerDamageSerializer(many=True, read_only=True)
+
     class Meta:
         model = models.FieldWorker
         fields = [
@@ -574,6 +590,8 @@ class FieldWorkerSerializer(serializers.ModelSerializer):
             'damages_price',
             'damages_schedule',
             'damages_deduction_per_salary',
+            'damages_pm_covers',
+            'damage_entries',
             'created_at',
         ]
         extra_kwargs = {
@@ -605,6 +623,7 @@ class FieldWorkerSerializer(serializers.ModelSerializer):
             'damages_price': {'required': False, 'allow_null': True},
             'damages_schedule': {'required': False, 'allow_null': True},
             'damages_deduction_per_salary': {'required': False, 'allow_null': True},
+            'damages_pm_covers': {'required': False},
         }
 
     def get_assignment_status(self, obj):
@@ -1020,8 +1039,15 @@ class BackJobReviewSerializer(serializers.ModelSerializer):
 
 
 class SubtaskSerializer(serializers.ModelSerializer):
+    """`phase` is always a single id; never a nested object (avoids stack overflow with PhaseSerializer)."""
+    phase = serializers.PrimaryKeyRelatedField(
+        queryset=models.Phase.objects.all(),
+        required=False,
+        allow_null=True,
+    )
     assigned_workers = serializers.SerializerMethodField()
     update_photos = serializers.SerializerMethodField()
+    pending_revert_request = serializers.SerializerMethodField()
 
     class Meta:
         model = models.Subtask
@@ -1035,10 +1061,10 @@ class SubtaskSerializer(serializers.ModelSerializer):
             'updated_at',
             'assigned_workers',
             'update_photos',
+            'pending_revert_request',
         ]
         extra_kwargs = {
             'subtask_id': {'read_only': True},
-            'phase': {'required': False},
             'created_at': {'read_only': True},
             'updated_at': {'read_only': True},
             'progress_notes': {'required': False, 'allow_blank': True, 'allow_null': True},
@@ -1052,6 +1078,12 @@ class SubtaskSerializer(serializers.ModelSerializer):
             if worker is None:
                 continue
             worker_id = worker.fieldworker_id
+            photo_url = None
+            if getattr(worker, 'photo', None):
+                try:
+                    photo_url = worker.photo.url
+                except Exception:  # noqa: BLE001
+                    photo_url = None
             workers.append({
                 'assignment_id': assignment.assignment_id,
                 # Keep common id aliases for compatibility across app screens.
@@ -1061,24 +1093,152 @@ class SubtaskSerializer(serializers.ModelSerializer):
                 'last_name': worker.last_name,
                 'phone_number': worker.phone_number,
                 'role': worker.role,
-                'photo': worker.photo.url if worker.photo else None,
+                'photo': photo_url,
             })
         return workers
 
     def get_update_photos(self, obj):
         photos = obj.update_photos.all()
-        return [
-            {
-                'photo_id': photo.photo_id,
-                'photo': photo.photo.url if photo.photo else None,
-                'created_at': photo.created_at,
-            }
-            for photo in photos
+        out = []
+        for photo in photos:
+            photo_path = None
+            if getattr(photo, 'photo', None):
+                try:
+                    photo_path = photo.photo.url
+                except Exception:  # noqa: BLE001
+                    photo_path = None
+            created = getattr(photo, 'created_at', None)
+            out.append(
+                {
+                    'photo_id': photo.photo_id,
+                    'photo': photo_path,
+                    'created_at': created.isoformat() if created is not None else None,
+                }
+            )
+        return out
+
+    def get_pending_revert_request(self, obj):
+        req = (
+            obj.completion_revert_requests
+            .filter(status=models.SubtaskCompletionRevertRequest.STATUS_PENDING)
+            .order_by('-created_at')
+            .first()
+        )
+        if not req:
+            return None
+        return {
+            'revert_request_id': req.revert_request_id,
+            'reason': req.reason,
+            'status': req.status,
+            'created_at': req.created_at.isoformat() if req.created_at else None,
+        }
+
+
+class SubtaskNestedSerializer(SubtaskSerializer):
+    """Nested under [Phase] only: never encode `phase` as a nested object (breaks phase↔subtasks cycles)."""
+    phase = serializers.IntegerField(source='phase_id', read_only=True)
+
+    class Meta(SubtaskSerializer.Meta):
+        pass
+
+
+class SubtaskCompletionRevertRequestCreateSerializer(serializers.Serializer):
+    subtask_id = serializers.IntegerField()
+    supervisor_id = serializers.IntegerField()
+    reason = serializers.CharField(allow_blank=False, trim_whitespace=True)
+
+    def validate(self, attrs):
+        subtask_id = attrs['subtask_id']
+        try:
+            subtask = models.Subtask.objects.select_related('phase__project').get(
+                subtask_id=subtask_id
+            )
+        except models.Subtask.DoesNotExist:
+            raise serializers.ValidationError({'subtask_id': 'Subtask not found.'})
+        if subtask.status != 'completed':
+            raise serializers.ValidationError(
+                {'subtask_id': 'Only a completed subtask can be reverted this way.'}
+            )
+        sup_id = attrs['supervisor_id']
+        try:
+            sup = models.Supervisors.objects.get(supervisor_id=sup_id)
+        except models.Supervisors.DoesNotExist:
+            raise serializers.ValidationError({'supervisor_id': 'Supervisor not found.'})
+        project = subtask.phase.project
+        if project is None or sup.project_id_id != project.project_id:
+            raise serializers.ValidationError(
+                {
+                    'supervisor_id': (
+                        'This supervisor is not assigned to the subtask’s project.'
+                    )
+                }
+            )
+        if models.SubtaskCompletionRevertRequest.objects.filter(
+            subtask=subtask,
+            status=models.SubtaskCompletionRevertRequest.STATUS_PENDING,
+        ).exists():
+            raise serializers.ValidationError(
+                {
+                    'subtask_id': (
+                        'A pending revert request already exists for this subtask.'
+                    )
+                }
+            )
+        attrs['_subtask'] = subtask
+        attrs['_supervisor'] = sup
+        return attrs
+
+    def build_instance(self) -> 'models.SubtaskCompletionRevertRequest':
+        """Call after is_valid with validated_data."""
+        data = self.validated_data
+        st = data['_subtask']
+        sup = data['_supervisor']
+        return models.SubtaskCompletionRevertRequest.objects.create(
+            subtask=st,
+            supervisor=sup,
+            reason=data['reason'],
+            status=models.SubtaskCompletionRevertRequest.STATUS_PENDING,
+        )
+
+
+class SubtaskCompletionRevertRequestListSerializer(serializers.ModelSerializer):
+    subtask_id = serializers.IntegerField(source='subtask.subtask_id', read_only=True)
+    subtask_title = serializers.CharField(source='subtask.title', read_only=True)
+    phase_name = serializers.CharField(source='subtask.phase.phase_name', read_only=True)
+    project_id = serializers.IntegerField(
+        source='subtask.phase.project.project_id', read_only=True
+    )
+    project_name = serializers.CharField(
+        source='subtask.phase.project.project_name', read_only=True
+    )
+    supervisor_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = models.SubtaskCompletionRevertRequest
+        fields = [
+            'revert_request_id',
+            'subtask_id',
+            'subtask_title',
+            'phase_name',
+            'project_id',
+            'project_name',
+            'supervisor',
+            'supervisor_name',
+            'reason',
+            'status',
+            'created_at',
         ]
+
+    def get_supervisor_name(self, obj):
+        s = obj.supervisor
+        if s is None:
+            return ''
+        n = f'{(s.first_name or "").strip()} {(s.last_name or "").strip()}'.strip()
+        return n or s.email or ''
 
 
 class PhaseSerializer(serializers.ModelSerializer):
-    subtasks = SubtaskSerializer(many=True, required=False)
+    subtasks = SubtaskNestedSerializer(many=True, required=False)
     project_id = serializers.IntegerField(source='project.project_id', read_only=True)
     remaining_phase_budget = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     is_over_budget = serializers.BooleanField(read_only=True)
@@ -1467,6 +1627,7 @@ class InventoryUsageSerializer(serializers.ModelSerializer):
 
 class PhaseMaterialPlanSerializer(serializers.ModelSerializer):
     inventory_item_name = serializers.CharField(source='inventory_item.name', read_only=True)
+    subtask_title = serializers.CharField(source='subtask.title', read_only=True)
     inventory_item_unit_price = serializers.DecimalField(
         source='inventory_item.price', max_digits=12, decimal_places=2, read_only=True
     )
@@ -1477,6 +1638,8 @@ class PhaseMaterialPlanSerializer(serializers.ModelSerializer):
         fields = [
             'plan_id',
             'phase',
+            'subtask',
+            'subtask_title',
             'inventory_item',
             'inventory_item_name',
             'inventory_item_unit_price',
@@ -1513,6 +1676,17 @@ class PhaseMaterialPlanSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "A material plan for this phase/item already exists. "
                 "Update the existing plan instead."
+            )
+        item_type = (item.item_type or '').strip().lower()
+        item_category = (item.category or '').strip().lower().rstrip('s')
+        if item_type != 'material' and item_category != 'material':
+            raise serializers.ValidationError(
+                "Only inventory items categorized as Material can be added to a phase material plan."
+            )
+        subtask = attrs.get('subtask') or (self.instance.subtask if self.instance else None)
+        if subtask is not None and subtask.phase_id != phase.phase_id:
+            raise serializers.ValidationError(
+                "Selected subtask does not belong to the selected phase."
             )
         return attrs
 
@@ -1625,6 +1799,19 @@ class InventoryItemSerializer(serializers.ModelSerializer):
     def get_created_by_name(self, obj):
         u = obj.created_by
         return f"{u.first_name} {u.last_name}".strip() if u else ''
+
+    def _get_request_supervisor_id(self):
+        """PK in query string when a supervisor is calling the API (not the User id)."""
+        request = self.context.get('request')
+        if not request:
+            return None
+        raw = request.query_params.get('supervisor_id')
+        if not raw or str(raw).strip() in ('', 'null', 'None'):
+            return None
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return None
 
     def _get_supervisor_project_ids(self):
         request = self.context.get('request')
@@ -1777,7 +1964,20 @@ class InventoryItemSerializer(serializers.ModelSerializer):
         active = obj.usages.filter(status='Checked Out')
         project_ids = self._get_supervisor_project_ids()
         if project_ids is not None:
-            active = active.filter(inventory_unit__current_project_id__in=project_ids)
+            from django.db.models import Q
+            sup_id = self._get_request_supervisor_id()
+            parts = []
+            if project_ids:
+                parts.append(Q(inventory_unit__current_project_id__in=project_ids))
+            if sup_id is not None:
+                parts.append(Q(checked_out_by_id=sup_id))
+            if parts:
+                combined = parts[0]
+                for p in parts[1:]:
+                    combined |= p
+                active = active.filter(combined)
+            else:
+                active = active.none()
         return InventoryUsageSerializer(active, many=True).data
 
     def get_project_name(self, obj):

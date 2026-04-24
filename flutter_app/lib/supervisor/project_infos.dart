@@ -22,6 +22,8 @@ class ProjectInfosPage extends StatefulWidget {
   final double progress;
   final String? budget;
   final int projectId;
+  final int? focusPhaseId;
+  final int? focusSubtaskId;
 
   const ProjectInfosPage({
     super.key,
@@ -31,6 +33,8 @@ class ProjectInfosPage extends StatefulWidget {
     required this.progress,
     this.budget,
     required this.projectId,
+    this.focusPhaseId,
+    this.focusSubtaskId,
   });
 
   @override
@@ -1320,6 +1324,40 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
     );
   }
 
+  int? _resolvedFocusPhaseId() {
+    if (_phases == null) return null;
+    if (widget.focusSubtaskId != null) {
+      for (final p in _phases!) {
+        final pm = p as Map<String, dynamic>;
+        for (final s in (pm['subtasks'] as List<dynamic>? ?? const [])) {
+          final sm = s as Map<String, dynamic>;
+          final sid = sm['subtask_id'];
+          int? si;
+          if (sid is int) {
+            si = sid;
+          } else if (sid is num) {
+            si = sid.toInt();
+          } else {
+            si = int.tryParse(sid?.toString() ?? '');
+          }
+          if (si == widget.focusSubtaskId) {
+            final phid = pm['phase_id'];
+            if (phid is int) return phid;
+            if (phid is num) return phid.toInt();
+            return int.tryParse(phid?.toString() ?? '');
+          }
+        }
+      }
+    }
+    return widget.focusPhaseId;
+  }
+
+  int? _asIntId(dynamic v) {
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v?.toString() ?? '');
+  }
+
   Widget _buildTasksToDoSection() {
     if (_phases == null || _phases!.isEmpty) {
       return Container(
@@ -1337,6 +1375,8 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
       );
     }
 
+    final focusForExpand = _resolvedFocusPhaseId();
+
     return Column(
       children: _phases!.map((phase) {
         final phaseMap = phase as Map<String, dynamic>;
@@ -1344,6 +1384,9 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
             .toString();
         final subtasks = (phaseMap['subtasks'] as List<dynamic>? ?? []);
         final progress = _phaseProgressPercent(phaseMap);
+        final phaseId = _asIntId(phaseMap['phase_id']);
+        final expandPhase =
+            focusForExpand != null && phaseId != null && focusForExpand == phaseId;
 
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
@@ -1356,6 +1399,7 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
               borderRadius: BorderRadius.circular(12),
             ),
             child: ExpansionTile(
+              initiallyExpanded: expandPhase,
               tilePadding: const EdgeInsets.symmetric(
                 horizontal: 16,
                 vertical: 8,
@@ -1423,6 +1467,9 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
                             final status = _formatSubtaskStatus(
                               subtaskMap['status'],
                             );
+                            final stId = _asIntId(subtaskMap['subtask_id']);
+                            final highlightInbox = widget.focusSubtaskId != null &&
+                                stId == widget.focusSubtaskId;
 
                             return Container(
                               margin: const EdgeInsets.only(bottom: 8),
@@ -1432,6 +1479,12 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
                                 margin: EdgeInsets.zero,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(8),
+                                  side: highlightInbox
+                                      ? const BorderSide(
+                                          color: Color(0xFFFF6F00),
+                                          width: 2,
+                                        )
+                                      : BorderSide.none,
                                 ),
                                 child: Padding(
                                   padding: const EdgeInsets.all(12),

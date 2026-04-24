@@ -27,6 +27,10 @@ class PmDashboardSummary {
   final int notificationsCount;
   final List<PmTaskTodayItem> notificationsItems;
 
+  /// In-app inbox (e.g. supervisor completed a subtask); unread is badge-eligible.
+  final int inboxUnreadCount;
+  final List<PmInboxItem> inboxItems;
+
   const PmDashboardSummary({
     required this.totalProjects,
     required this.recentProjects,
@@ -44,6 +48,8 @@ class PmDashboardSummary {
     required this.tasksToday,
     required this.notificationsCount,
     required this.notificationsItems,
+    this.inboxUnreadCount = 0,
+    this.inboxItems = const [],
   });
 
   factory PmDashboardSummary.fromJson(Map<String, dynamic> json) {
@@ -53,6 +59,7 @@ class PmDashboardSummary {
     final workers = (json['workers'] as Map<String, dynamic>? ?? const {});
     final notifications =
         (json['notifications'] as Map<String, dynamic>? ?? const {});
+    final inbox = (json['inbox'] as Map<String, dynamic>? ?? const {});
 
     final recentProjectsRaw =
         (projects['recent'] as List<dynamic>? ?? const []);
@@ -72,6 +79,12 @@ class PmDashboardSummary {
 
     final notificationsCount =
         (notifications['count'] as num?)?.toInt() ?? fallbackOpenTasks;
+
+    final inboxItemsRaw = (inbox['items'] as List<dynamic>? ?? const []);
+    final inboxItems = inboxItemsRaw
+        .whereType<Map<String, dynamic>>()
+        .map(PmInboxItem.fromJson)
+        .toList();
 
     return PmDashboardSummary(
       totalProjects: (projects['total'] as num?)?.toInt() ?? 0,
@@ -107,6 +120,59 @@ class PmDashboardSummary {
           .whereType<Map<String, dynamic>>()
           .map(PmTaskTodayItem.fromJson)
           .toList(),
+      inboxUnreadCount: (inbox['unread_count'] as num?)?.toInt() ?? 0,
+      inboxItems: inboxItems,
+    );
+  }
+}
+
+class PmInboxItem {
+  final int notificationId;
+  final String kind;
+  final String title;
+  final String body;
+  final bool read;
+  final DateTime? createdAt;
+  final int? subtaskId;
+  final int? projectId;
+  final int? phaseId;
+  final String supervisorName;
+  /// From payload, e.g. `inventory` for deep link to PM inventory.
+  final String? target;
+
+  const PmInboxItem({
+    required this.notificationId,
+    required this.kind,
+    required this.title,
+    required this.body,
+    required this.read,
+    this.createdAt,
+    this.subtaskId,
+    this.projectId,
+    this.phaseId,
+    this.supervisorName = '',
+    this.target,
+  });
+
+  factory PmInboxItem.fromJson(Map<String, dynamic> json) {
+    return PmInboxItem(
+      notificationId: (json['notification_id'] as num?)?.toInt() ?? 0,
+      kind: (json['kind'] as String?) ?? '',
+      title: (json['title'] as String?) ?? '',
+      body: (json['body'] as String?) ?? '',
+      read: json['read'] as bool? ?? false,
+      createdAt: DateTime.tryParse(
+        (json['created_at'] as String?) ?? '',
+      ),
+      subtaskId: (json['subtask_id'] as num?)?.toInt(),
+      projectId: (json['project_id'] as num?)?.toInt(),
+      phaseId: (json['phase_id'] as num?)?.toInt(),
+      supervisorName: (json['supervisor_name'] as String?) ?? '',
+      target: () {
+        final t = json['target']?.toString().trim();
+        if (t == null || t.isEmpty) return null;
+        return t;
+      }(),
     );
   }
 }
@@ -365,6 +431,8 @@ class PmDashboardService {
       tasksToday: summary.tasksToday,
       notificationsCount: summary.notificationsCount,
       notificationsItems: summary.notificationsItems,
+      inboxUnreadCount: summary.inboxUnreadCount,
+      inboxItems: summary.inboxItems,
     );
   }
 
@@ -449,6 +517,12 @@ class PmDashboardService {
     }
 
     return const <Map<String, dynamic>>[];
+  }
+
+  /// Clears cached dashboard JSON so the next [fetchSummary] hits the network.
+  static void clearUserCache(int? userId) {
+    if (userId == null) return;
+    _cacheByUser.remove(userId);
   }
 }
 

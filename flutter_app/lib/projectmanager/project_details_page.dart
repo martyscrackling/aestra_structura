@@ -11,114 +11,7 @@ import 'modals/allocate_phase_budget_modal.dart';
 import 'subtask_manage.dart';
 import '../services/app_config.dart';
 import '../services/budget_service.dart';
-
-class Phase {
-  final int phaseId;
-  final int projectId;
-  final String phaseName;
-  final String? description;
-  final int? daysDuration;
-  final String status;
-  final List<Subtask> subtasks;
-  final DateTime? startDate;
-  final DateTime? endDate;
-  final DateTime? createdAt;
-
-  Phase({
-    required this.phaseId,
-    required this.projectId,
-    required this.phaseName,
-    this.description,
-    this.daysDuration,
-    required this.status,
-    required this.subtasks,
-    this.startDate,
-    this.endDate,
-    this.createdAt,
-  });
-
-  factory Phase.fromJson(Map<String, dynamic> json) {
-    return Phase(
-      phaseId: json['phase_id'],
-      projectId: json['project_id'],
-      phaseName: json['phase_name'],
-      description: json['description'],
-      daysDuration: json['days_duration'],
-      status: json['status'],
-      subtasks:
-          (json['subtasks'] as List<dynamic>?)
-              ?.map((s) => Subtask.fromJson(s))
-              .toList() ??
-          [],
-      startDate: json['start_date'] != null
-          ? DateTime.parse(json['start_date'])
-          : null,
-      endDate: json['end_date'] != null
-          ? DateTime.parse(json['end_date'])
-          : null,
-      createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'])
-          : null,
-    );
-  }
-
-  // Calculate progress for this phase based on subtasks (matching task_progress.dart)
-  double calculateProgress() {
-    if (subtasks.isEmpty) return 1.0;
-    final completed = subtasks.where((s) => s.status == 'completed').length;
-    return completed / subtasks.length;
-  }
-
-  /// PM cannot add/change subtask workers when the phase is completed, or when
-  /// every subtask is already completed (only view assignees).
-  bool get isWorkerAssignmentLocked {
-    if (status.toLowerCase().trim() == 'completed') {
-      return true;
-    }
-    if (subtasks.isEmpty) {
-      return false;
-    }
-    return subtasks.every(
-      (s) => s.status.toLowerCase().trim() == 'completed',
-    );
-  }
-}
-
-class Subtask {
-  final int subtaskId;
-  final String title;
-  final String status;
-  final String? progressNotes;
-  final List<Map<String, dynamic>> updatePhotos;
-  final DateTime? updatedAt;
-
-  Subtask({
-    required this.subtaskId,
-    required this.title,
-    required this.status,
-    this.progressNotes,
-    this.updatePhotos = const [],
-    this.updatedAt,
-  });
-
-  factory Subtask.fromJson(Map<String, dynamic> json) {
-    final updatePhotosRaw = (json['update_photos'] is List)
-        ? (json['update_photos'] as List)
-        : const [];
-    final updatePhotos = updatePhotosRaw
-        .whereType<Map<String, dynamic>>()
-        .toList(growable: false);
-    final updatedAtStr = json['updated_at'] as String?;
-    return Subtask(
-      subtaskId: json['subtask_id'],
-      title: json['title'],
-      status: json['status'],
-      progressNotes: json['progress_notes'] as String?,
-      updatePhotos: updatePhotos,
-      updatedAt: updatedAtStr != null ? DateTime.tryParse(updatedAtStr) : null,
-    );
-  }
-}
+import 'phase_subtask_models.dart';
 
 class BackJobReview {
   final int reviewId;
@@ -210,22 +103,6 @@ class BackJobReview {
   }
 }
 
-class WeeklyTask {
-  final String weekTitle;
-  final String description;
-  final String status;
-  final String date;
-  final double progress;
-
-  WeeklyTask({
-    required this.weekTitle,
-    required this.description,
-    required this.status,
-    required this.date,
-    required this.progress,
-  });
-}
-
 class ProjectTaskDetailsPage extends StatefulWidget {
   final String projectTitle;
   final String projectLocation;
@@ -276,9 +153,8 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
 
     for (var phase in _phases) {
       totalSubtasks += phase.subtasks.length;
-      completedSubtasks += phase.subtasks
-          .where((s) => s.status == 'completed')
-          .length;
+      completedSubtasks = completedSubtasks +
+          phase.subtasks.where((s) => s.status == 'completed').length;
     }
 
     if (totalSubtasks == 0) return 0.0;
@@ -307,9 +183,13 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
         setState(() {
-          _phases = data.map((json) => Phase.fromJson(json)).toList();
+          _phases = data
+              .map<Phase>(
+                (json) => Phase.fromJson(Map<String, dynamic>.from(json as Map)),
+              )
+              .toList();
           // Sort phases by createdAt (oldest first)
-          _phases.sort((a, b) {
+          _phases.sort((Phase a, Phase b) {
             if (a.createdAt != null && b.createdAt != null) {
               int cmp = a.createdAt!.compareTo(b.createdAt!);
               if (cmp != 0) return cmp;

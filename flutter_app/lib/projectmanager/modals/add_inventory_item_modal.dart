@@ -6,7 +6,9 @@ import '../../services/inventory_service.dart';
 import '../../services/auth_service.dart';
 
 class AddInventoryItemModal extends StatefulWidget {
-  const AddInventoryItemModal({super.key});
+  final String? initialCategory;
+
+  const AddInventoryItemModal({super.key, this.initialCategory});
 
   @override
   State<AddInventoryItemModal> createState() => _AddInventoryItemModalState();
@@ -22,7 +24,8 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
   ];
   final _locationController = TextEditingController();
   final _notesController = TextEditingController();
-  final List<String> _categoryOptions = const ['Material', 'Tools', 'Machines'];
+  final _customUnitController = TextEditingController();
+  final List<String> _categoryOptions = const ['Tools', 'Machines'];
   final List<String> _unitOptions = const [
     'pc',
     'pcs',
@@ -38,12 +41,25 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
 
   String? _selectedCategory;
   String _selectedUnit = 'pc';
+  static const String _customUnitOption = 'Custom';
 
   bool get _isMaterial => _selectedCategory == 'Material';
 
   Uint8List? _selectedImageBytes;
   String? _selectedImageName;
   bool _isLoading = false;
+  bool get _isMaterialMode => widget.initialCategory == 'Material';
+
+  @override
+  void initState() {
+    super.initState();
+    if (_isMaterialMode) {
+      _selectedCategory = 'Material';
+    } else if (widget.initialCategory != null &&
+        _categoryOptions.contains(widget.initialCategory)) {
+      _selectedCategory = widget.initialCategory;
+    }
+  }
 
   int _parsedQuantity() {
     final parsed = int.tryParse(_quantityController.text.trim()) ?? 1;
@@ -116,7 +132,11 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
         userId: userId,
         name: _nameController.text.trim(),
         category: _selectedCategory!,
-        unitOfMeasure: _isMaterial ? _selectedUnit : null,
+        unitOfMeasure: _isMaterial
+            ? (_selectedUnit == _customUnitOption
+                  ? _customUnitController.text.trim()
+                  : _selectedUnit)
+            : null,
         serialNumber: serialNumbers.isNotEmpty ? serialNumbers.first : null,
         serialNumbers: serialNumbers,
         quantity: int.tryParse(_quantityController.text.trim()) ?? 1,
@@ -166,6 +186,7 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
     }
     _locationController.dispose();
     _notesController.dispose();
+    _customUnitController.dispose();
     super.dispose();
   }
 
@@ -599,65 +620,66 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
       const SizedBox(height: 12),
       Row(
         children: [
-          Expanded(
-            flex: 2,
-            child: DropdownButtonFormField<String>(
-              initialValue: _selectedCategory,
-              isExpanded: true,
-              decoration: InputDecoration(
-                labelText: 'Category *',
-                labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                filled: true,
-                fillColor: const Color(0xFFF9FAFB),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Colors.grey[300]!),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Colors.grey[300]!),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF0C1935),
-                    width: 2,
+          if (!_isMaterialMode)
+            Expanded(
+              flex: 2,
+              child: DropdownButtonFormField<String>(
+                initialValue: _selectedCategory,
+                isExpanded: true,
+                decoration: InputDecoration(
+                  labelText: 'Category *',
+                  labelStyle: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                  filled: true,
+                  fillColor: const Color(0xFFF9FAFB),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey[300]!),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey[300]!),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF0C1935),
+                      width: 2,
+                    ),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
                   ),
                 ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 12,
-                ),
-              ),
-              items: _categoryOptions
-                  .map(
-                    (category) => DropdownMenuItem<String>(
-                      value: category,
-                      child: Text(category),
-                    ),
-                  )
-                  .toList(),
-              onChanged: _isLoading
-                  ? null
-                  : (value) => setState(() {
-                      _selectedCategory = value;
-                      if (_isMaterial) {
-                        // Materials don't use serial numbers; clear anything
-                        // the user may have typed under tools/machines.
-                        for (final c in _serialNumberControllers) {
-                          c.clear();
+                items: _categoryOptions
+                    .map(
+                      (category) => DropdownMenuItem<String>(
+                        value: category,
+                        child: Text(category),
+                      ),
+                    )
+                    .toList(),
+                onChanged: _isLoading
+                    ? null
+                    : (value) => setState(() {
+                        _selectedCategory = value;
+                        if (_isMaterial) {
+                          // Materials don't use serial numbers; clear anything
+                          // the user may have typed under tools/machines.
+                          for (final c in _serialNumberControllers) {
+                            c.clear();
+                          }
                         }
-                      }
-                    }),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please select a category';
-                }
-                return null;
-              },
+                      }),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please select a category';
+                  }
+                  return null;
+                },
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
+          if (!_isMaterialMode) const SizedBox(width: 12),
           Expanded(
             child: _buildTextField(
               controller: _quantityController,
@@ -723,7 +745,7 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
               vertical: 12,
             ),
           ),
-          items: _unitOptions
+          items: [..._unitOptions, _customUnitOption]
               .map(
                 (unit) => DropdownMenuItem<String>(
                   value: unit,
@@ -735,9 +757,40 @@ class _AddInventoryItemModalState extends State<AddInventoryItemModal> {
               ? null
               : (value) {
                   if (value == null) return;
-                  setState(() => _selectedUnit = value);
+                  setState(() {
+                    _selectedUnit = value;
+                    if (_selectedUnit != _customUnitOption) {
+                      _customUnitController.clear();
+                    }
+                  });
                 },
+          validator: (value) {
+            if (!_isMaterial) return null;
+            final picked = (value ?? '').trim();
+            if (picked.isEmpty) return 'Please select a unit';
+            if (picked == _customUnitOption &&
+                _customUnitController.text.trim().isEmpty) {
+              return 'Please enter a custom unit';
+            }
+            return null;
+          },
         ),
+        if (_selectedUnit == _customUnitOption) ...[
+          const SizedBox(height: 12),
+          _buildTextField(
+            controller: _customUnitController,
+            hintText: 'Custom Unit (e.g., bundle, drum) *',
+            validator: (value) {
+              if (!_isMaterial || _selectedUnit != _customUnitOption) {
+                return null;
+              }
+              if (value == null || value.trim().isEmpty) {
+                return 'Please enter a custom unit';
+              }
+              return null;
+            },
+          ),
+        ],
       ],
       const SizedBox(height: 12),
       _buildTextField(

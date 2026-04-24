@@ -1,5 +1,7 @@
 from django.shortcuts import render
 from rest_framework import generics, status, viewsets
+from rest_framework.mixins import CreateModelMixin, ListModelMixin, RetrieveModelMixin
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.decorators import api_view, action, parser_classes
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -60,6 +62,160 @@ from .email_utils import (
     send_signup_otp_email,
     send_phase_update_summary_email,
 )
+
+
+def _create_pm_inbox_supervisor_completion(subtask, request):
+    """When a supervisor marks a subtask completed, notify the project manager in-app."""
+    supervisor_id_raw = (
+        request.query_params.get('supervisor_id')
+        or request.data.get('supervisor_id')
+        or request.headers.get('X-Supervisor-Id')
+    )
+    if supervisor_id_raw in (None, ''):
+        return
+    phase = getattr(subtask, 'phase', None)
+    project = getattr(phase, 'project', None) if phase is not None else None
+    if project is None or project.user_id is None:
+        return
+    supervisor_name = ''
+    try:
+        sup = models.Supervisors.objects.filter(
+            supervisor_id=int(supervisor_id_raw)
+        ).first()
+        if sup is not None:
+            supervisor_name = (
+                f'{(sup.first_name or "").strip()} {(sup.last_name or "").strip()}'.strip()
+            )
+    except (TypeError, ValueError):
+        pass
+    phase_name = getattr(phase, 'phase_name', None) or 'A phase'
+    who = supervisor_name or 'A supervisor'
+    body = f'{who} completed “{subtask.title}” in {phase_name}.'
+    try:
+        models.InAppNotification.objects.create(
+            recipient_kind=models.InAppNotification.KIND_PM,
+            recipient_user_id=project.user_id,
+            kind='supervisor_subtask_completed',
+            title=f'Subtask completed: {subtask.title}'[:255],
+            body=body,
+            payload={
+                'subtask_id': subtask.subtask_id,
+                'project_id': project.project_id,
+                'phase_id': phase.phase_id if phase else None,
+                'supervisor_name': supervisor_name,
+            },
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception('In-app PM notification failed: %s', exc)
+
+
+def _create_pm_inbox_supervisor_inventory_return(item, supervisor, unit_code, is_checkout_return):
+    """When a supervisor returns tools to PM (checkout or on-site release), notify the item owner."""
+    if supervisor is None:
+        return
+    pm_uid = item.created_by_id
+    if pm_uid is None:
+        return
+    sup_name = (
+        f'{(supervisor.first_name or "").strip()} '
+        f'{(supervisor.last_name or "").strip()}'
+    ).strip() or 'A supervisor'
+    if is_checkout_return:
+        body = f'{sup_name} checked in and returned: {item.name} ({unit_code}) to your inventory.'
+    else:
+        body = f'{sup_name} returned an on-site unit to your inventory: {item.name} ({unit_code}).'
+    try:
+        models.InAppNotification.objects.create(
+            recipient_kind=models.InAppNotification.KIND_PM,
+            recipient_user_id=pm_uid,
+            kind='supervisor_inventory_returned',
+            title=f'Inventory returned: {item.name}'[:255],
+            body=body[:2000],
+            payload={
+                'target': 'inventory',
+                'item_id': item.item_id,
+                'unit_code': unit_code,
+                'supervisor_name': sup_name,
+            },
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception('In-app PM inventory return notification failed: %s', exc)
+
+
+def _create_pm_inbox_supervisor_report_submitted(project, supervisor, submission, is_new: bool):
+    """Notify the project owner when a supervisor submits or updates a payroll / attendance report."""
+    pm_uid = project.user_id
+    if pm_uid is None:
+        return
+    sup_name = ''
+    if supervisor is not None:
+        sup_name = (
+            f'{(supervisor.first_name or "").strip()} '
+            f'{(supervisor.last_name or "").strip()}'
+        ).strip() or 'A supervisor'
+    else:
+        sup_name = 'A supervisor'
+    pname = (getattr(project, 'project_name', None) or '').strip() or 'A project'
+    if is_new:
+        body = f'{sup_name} submitted a report for {pname}.'
+        title = f'Report received: {pname}'[:255]
+    else:
+        body = f'{sup_name} updated a report for {pname}.'
+        title = f'Report updated: {pname}'[:255]
+    try:
+        models.InAppNotification.objects.create(
+            recipient_kind=models.InAppNotification.KIND_PM,
+            recipient_user_id=pm_uid,
+            kind='supervisor_report_submitted',
+            title=title,
+            body=body[:2000],
+            payload={
+                'target': 'reports',
+                'project_id': project.project_id,
+                'submission_id': submission.submission_id,
+                'submission_db_id': submission.pk,
+                'supervisor_name': sup_name,
+            },
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception('In-app PM supervisor report notification failed: %s', exc)
+
+
+def _pm_display_name_for_request(request) -> str:
+    uid = _get_request_pm_user_id(request)
+    u = _get_pm_user_or_none(uid)
+    if u is None:
+        return 'The project manager'
+    parts = [p for p in (u.first_name, u.last_name) if p]
+    if parts:
+        return ' '.join(str(x).strip() for x in parts if str(x).strip())
+    if u.email:
+        return u.email.split('@')[0]
+    return 'The project manager'
+
+
+def _create_supervisor_inbox_from_pm(
+    *, project, kind: str, title: str, body: str, payload: dict
+) -> None:
+    """Notify the project’s assigned supervisor about a PM action."""
+    if project is None:
+        return
+    sup = getattr(project, 'supervisor', None)
+    if sup is None:
+        return
+    try:
+        pl = dict(payload) if payload else {}
+        pl.setdefault('project_id', project.project_id)
+        models.InAppNotification.objects.create(
+            recipient_kind=models.InAppNotification.KIND_SUPERVISOR,
+            recipient_supervisor=sup,
+            kind=kind,
+            title=title[:255],
+            body=(body or '')[:2000],
+            payload=pl,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception('In-app supervisor notification failed: %s', exc)
 
 
 def _get_request_pm_user_id(request):
@@ -259,6 +415,8 @@ from .serializers import (
     BackJobReviewSerializer,
     PhaseSerializer,
     SubtaskSerializer,
+    SubtaskCompletionRevertRequestCreateSerializer,
+    SubtaskCompletionRevertRequestListSerializer,
     SubtaskFieldWorkerSerializer,
     AttendanceSerializer,
     InventoryItemSerializer,
@@ -1397,6 +1555,9 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
     serializer_class = FieldWorkerSerializer
 
     def get_queryset(self):
+        def _with_damage_entries(qs):
+            return qs.prefetch_related('damage_entries')
+
         pm_user_id = _get_request_pm_user_id(self.request)
         project_id = self.request.query_params.get('project_id')
         supervisor_id = self.request.query_params.get('supervisor_id')
@@ -1425,11 +1586,13 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
                     Q(project_id=project_id) |
                     Q(subtask_assignments__subtask__phase__project_id=project_id)
                 )
-            return queryset.distinct()
+            return _with_damage_entries(queryset.distinct())
 
         if pm_user_id is None:
             if project_id:
-                return models.FieldWorker.objects.filter(project_id=project_id)
+                return _with_damage_entries(
+                    models.FieldWorker.objects.filter(project_id=project_id)
+                )
             return models.FieldWorker.objects.none()
 
         # If include_other_projects is requested, return ALL workers accessible to this PM
@@ -1440,7 +1603,7 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
                 | Q(project_id__user_id=pm_user_id)
                 | Q(subtask_assignments__subtask__phase__project__user_id=pm_user_id)
             ).distinct()
-            return queryset
+            return _with_damage_entries(queryset)
 
         # Default behavior: filter by project if specified
         queryset = models.FieldWorker.objects.filter(
@@ -1453,7 +1616,7 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
                 Q(project_id=project_id)
                 | Q(subtask_assignments__subtask__phase__project_id=project_id)
             )
-        return queryset
+        return _with_damage_entries(queryset)
 
     def get_serializer_context(self):
         """Pass current_project_id context to serializer for assignment status calculation"""
@@ -1538,6 +1701,72 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
         data['image_verification'] = 'ACCEPT'
         return Response(
             data,
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=['post'], url_path='add-damage')
+    def add_damage(self, request, pk=None):
+        """Append one damage line; updates aggregate legacy `damages_*` fields on the worker."""
+        from decimal import Decimal, InvalidOperation
+
+        def _to_dec(v):
+            if v in (None, ''):
+                return None
+            try:
+                return Decimal(str(v))
+            except (InvalidOperation, TypeError, ValueError):
+                return None
+
+        field_worker = self.get_object()
+        data = request.data or {}
+        item = (data.get('damages_item') or data.get('item') or '').strip() or None
+        if not item:
+            return Response(
+                {'damages_item': ['This field is required.']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        category = (data.get('damages_category') or data.get('category') or '').strip() or None
+        price = _to_dec(data.get('damages_price', data.get('price')))
+        schedule = (
+            (data.get('damages_schedule') or data.get('schedule') or 'Payment every Salary') or 'Payment every Salary'
+        ).strip()
+        pm_in = data.get('damages_pm_covers', data.get('pm_covers', False))
+        if isinstance(pm_in, str):
+            pm_covers = pm_in.lower() in ('true', '1', 'yes')
+        else:
+            pm_covers = bool(pm_in)
+
+        if pm_covers:
+            ded_for_row = Decimal('0')
+        else:
+            ded_for_row = _to_dec(
+                data.get('damages_deduction_per_salary', data.get('deduction_per_salary'))
+            )
+            if ded_for_row is None:
+                ded_for_row = Decimal('0')
+
+        models.FieldWorkerDamage.objects.create(
+            field_worker=field_worker,
+            category=category,
+            item=item,
+            price=price,
+            schedule=schedule,
+            deduction_per_salary=ded_for_row,
+            pm_covers=pm_covers,
+        )
+        field_worker.recompute_damages_aggregates()
+        field_worker.save(
+            update_fields=[
+                'damages_category',
+                'damages_item',
+                'damages_price',
+                'damages_schedule',
+                'damages_deduction_per_salary',
+                'damages_pm_covers',
+            ]
+        )
+        return Response(
+            self.get_serializer(field_worker).data,
             status=status.HTTP_200_OK,
         )
 
@@ -2019,7 +2248,7 @@ class SupervisorReportSubmissionViewSet(viewsets.ViewSet):
             )
         sup = models.Supervisors.objects.filter(supervisor_id=sup_id).first()
 
-        obj, _created = models.SupervisorReportSubmission.objects.update_or_create(
+        obj, created = models.SupervisorReportSubmission.objects.update_or_create(
             submission_id=str(submission_id),
             defaults={
                 'project': project,
@@ -2027,6 +2256,10 @@ class SupervisorReportSubmissionViewSet(viewsets.ViewSet):
                 'report_data': data,
             },
         )
+        if project.user_id is not None:
+            _create_pm_inbox_supervisor_report_submitted(
+                project, sup, obj, is_new=created
+            )
         return Response(
             _flatten_supervisor_report_for_client(obj),
             status=status.HTTP_201_CREATED,
@@ -2076,7 +2309,31 @@ class PhaseViewSet(viewsets.ModelViewSet):
         project_id = self.request.query_params.get('project_id')
         if project_id:
             queryset = queryset.filter(project_id=project_id)
-        return queryset
+        subtask_qs = models.Subtask.objects.prefetch_related(
+            'completion_revert_requests',
+            'assigned_workers__field_worker',
+            'update_photos',
+        )
+        return queryset.prefetch_related(
+            Prefetch('subtasks', queryset=subtask_qs),
+        )
+
+    def perform_create(self, serializer):
+        super().perform_create(serializer)
+        phase = serializer.instance
+        project = getattr(phase, 'project', None)
+        if project is None:
+            return
+        pm_name = _pm_display_name_for_request(self.request)
+        phase_name = (getattr(phase, 'phase_name', None) or 'New phase').strip()
+        pname = (getattr(project, 'project_name', None) or 'the project').strip()
+        _create_supervisor_inbox_from_pm(
+            project=project,
+            kind='pm_phase_added',
+            title=f'New phase: {phase_name}'[:255],
+            body=f'{pm_name} added phase “{phase_name}” to {pname}.',
+            payload={'target': 'phase', 'phase_id': phase.phase_id},
+        )
 
     def destroy(self, request, *args, **kwargs):
         phase = self.get_object()
@@ -2203,6 +2460,38 @@ class PhaseViewSet(viewsets.ModelViewSet):
             if not field_worker:
                 return Response({'error': 'field_worker not found'}, status=404)
 
+        # If this phase has an active material plan for the selected item,
+        # enforce the remaining assigned quantity (planned - actual) as the
+        # stock ceiling and skip central inventory deduction on usage save.
+        enforce_inventory = True
+        plan = models.PhaseMaterialPlan.objects.filter(
+            phase_id=phase.phase_id,
+            inventory_item_id=item.item_id,
+            status=models.PhaseMaterialPlan.STATUS_ACTIVE,
+        ).first()
+        if plan is not None:
+            from django.db.models import Sum as _Sum
+
+            used_qty = (
+                models.InventoryUsage.objects.filter(
+                    phase_id=phase.phase_id,
+                    inventory_item_id=item.item_id,
+                ).aggregate(total=_Sum('quantity_used'))['total']
+                or 0
+            )
+            remaining_qty = max(0, int(plan.planned_quantity or 0) - int(used_qty or 0))
+            if qty > remaining_qty:
+                return Response(
+                    {
+                        'error': (
+                            f'Not enough inventory: requested {qty}, '
+                            f'available {remaining_qty}.'
+                        )
+                    },
+                    status=400,
+                )
+            enforce_inventory = False
+
         try:
             usage, warnings = record_material_usage(
                 phase=phase,
@@ -2211,6 +2500,7 @@ class PhaseViewSet(viewsets.ModelViewSet):
                 supervisor=supervisor,
                 field_worker=field_worker,
                 notes=notes,
+                enforce_inventory=enforce_inventory,
             )
         except MaterialUsageError as e:
             msg = getattr(e, 'message', None) or (e.messages[0] if getattr(e, 'messages', None) else str(e))
@@ -2333,6 +2623,60 @@ class SubtaskViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(phase__project_id=project_id)
         return queryset
 
+    @staticmethod
+    def _sync_parent_project_status(subtask) -> None:
+        try:
+            phase = subtask.phase
+            project = phase.project
+        except Exception:  # noqa: BLE001
+            return
+        if project is None:
+            return
+        try:
+            proj = models.Project.objects.get(project_id=project.project_id)
+        except models.Project.DoesNotExist:  # noqa: BLE001
+            return
+        proj.update_status_based_on_progress()
+
+    def perform_create(self, serializer):
+        super().perform_create(serializer)
+        self._sync_parent_project_status(serializer.instance)
+
+    def perform_destroy(self, instance):
+        try:
+            phase = instance.phase
+            project_id = (
+                int(phase.project_id) if getattr(phase, 'project_id', None) is not None else None
+            )
+        except Exception:  # noqa: BLE001
+            project_id = None
+        super().perform_destroy(instance)
+        if project_id is not None:
+            try:
+                proj = models.Project.objects.get(project_id=project_id)
+            except models.Project.DoesNotExist:  # noqa: BLE001
+                return
+            proj.update_status_based_on_progress()
+
+    def perform_update(self, serializer):
+        instance = serializer.instance
+        new_status = serializer.validated_data.get('status', instance.status)
+        if instance.status == 'completed' and new_status != 'completed':
+            user_id = self.request.query_params.get('user_id')
+            project = instance.phase.project if instance.phase_id else None
+            pm_uid = project.user_id if project is not None else None
+            is_pm = (
+                user_id is not None
+                and pm_uid is not None
+                and str(user_id) == str(pm_uid)
+            )
+            if not is_pm:
+                raise PermissionDenied(
+                    'A completed subtask can only be reverted after the Project Manager '
+                    'approves a revert request. Use the “request revert” action from the supervisor app.',
+                )
+        serializer.save()
+
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
@@ -2431,13 +2775,176 @@ class SubtaskViewSet(viewsets.ModelViewSet):
                     },
                 )
 
+        if (
+            new_status == 'completed'
+            and previous_status != 'completed'
+        ):
+            _create_pm_inbox_supervisor_completion(updated_subtask, request)
+
+        self._sync_parent_project_status(updated_subtask)
+
         return Response(serializer.data)
+
+
+class SubtaskCompletionRevertRequestViewSet(
+    viewsets.GenericViewSet,
+    ListModelMixin,
+    CreateModelMixin,
+    RetrieveModelMixin,
+):
+    """Supervisor creates revert requests; PM lists and approves/denies."""
+
+    queryset = models.SubtaskCompletionRevertRequest.objects.all()
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return SubtaskCompletionRevertRequestCreateSerializer
+        return SubtaskCompletionRevertRequestListSerializer
+
+    def get_queryset(self):
+        qs = models.SubtaskCompletionRevertRequest.objects.select_related(
+            'subtask__phase__project', 'supervisor'
+        )
+        user_id = self.request.query_params.get('user_id')
+        st = (self.request.query_params.get('status') or '').strip()
+        if user_id:
+            try:
+                qs = qs.filter(subtask__phase__project__user_id=int(user_id))
+            except (TypeError, ValueError):
+                qs = qs.none()
+        if st:
+            qs = qs.filter(status=st)
+        return qs.order_by('-created_at')
+
+    def create(self, request, *args, **kwargs):
+        ser = SubtaskCompletionRevertRequestCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        inst = ser.build_instance()
+        out = SubtaskCompletionRevertRequestListSerializer(
+            inst, context=self.get_serializer_context()
+        )
+        return Response(out.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='approve')
+    def approve(self, request, pk=None):
+        user_id = request.query_params.get('user_id') or request.data.get('user_id')
+        req = self.get_object()
+        project = req.subtask.phase.project
+        pm_uid = project.user_id if project is not None else None
+        if (
+            project is None
+            or user_id is None
+            or pm_uid is None
+            or int(user_id) != int(pm_uid)
+        ):
+            return Response(
+                {'detail': 'Only the project manager for this subtask can approve.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if req.status != models.SubtaskCompletionRevertRequest.STATUS_PENDING:
+            return Response(
+                {'detail': 'This request is not pending.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        with transaction.atomic():
+            sub = models.Subtask.objects.select_for_update().get(
+                subtask_id=req.subtask_id
+            )
+            sub.status = 'pending'
+            if req.reason:
+                # Subtask.progress_notes is limited to 1000 chars; long revert reasons
+                # must not break save or JSON serialization of the subtask.
+                sub.progress_notes = (req.reason or '')[:1000]
+            sub.save()
+            req.status = models.SubtaskCompletionRevertRequest.STATUS_APPROVED
+            req.resolved_at = timezone.now()
+            req.save()
+        sub = (
+            models.Subtask.objects.filter(subtask_id=sub.subtask_id)
+            .select_related('phase', 'phase__project')
+            .prefetch_related(
+                'assigned_workers__field_worker',
+                'update_photos',
+                'completion_revert_requests',
+            )
+            .get()
+        )
+        SubtaskViewSet._sync_parent_project_status(sub)
+        return Response(
+            SubtaskSerializer(sub, context=self.get_serializer_context()).data,
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=['post'], url_path='deny')
+    def deny(self, request, pk=None):
+        user_id = request.query_params.get('user_id') or request.data.get('user_id')
+        req = self.get_object()
+        project = req.subtask.phase.project
+        pm_uid = project.user_id if project is not None else None
+        if (
+            project is None
+            or user_id is None
+            or pm_uid is None
+            or int(user_id) != int(pm_uid)
+        ):
+            return Response(
+                {'detail': 'Only the project manager for this subtask can deny.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if req.status != models.SubtaskCompletionRevertRequest.STATUS_PENDING:
+            return Response(
+                {'detail': 'This request is not pending.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        req.status = models.SubtaskCompletionRevertRequest.STATUS_DENIED
+        req.resolved_at = timezone.now()
+        req.save()
+        return Response(
+            SubtaskCompletionRevertRequestListSerializer(
+                req, context=self.get_serializer_context()
+            ).data,
+            status=status.HTTP_200_OK,
+        )
 
 
 # SubtaskFieldWorker ViewSet
 class SubtaskFieldWorkerViewSet(viewsets.ModelViewSet):
     queryset = models.SubtaskFieldWorker.objects.all()
     serializer_class = SubtaskFieldWorkerSerializer
+
+    def perform_create(self, serializer):
+        super().perform_create(serializer)
+        inst = getattr(serializer, 'instance', None)
+        if inst is None:
+            return
+        rows = inst if isinstance(inst, (list, tuple)) else [inst]
+        for assignment in rows:
+            self._notify_supervisor_worker_assigned(assignment)
+
+    def _notify_supervisor_worker_assigned(self, assignment):
+        try:
+            subtask = assignment.subtask
+            fw = assignment.field_worker
+            phase = subtask.phase
+            project = phase.project
+        except Exception:  # noqa: BLE001
+            return
+        pm_name = _pm_display_name_for_request(self.request)
+        wname = f'{(fw.first_name or "").strip()} {(fw.last_name or "").strip()}'.strip()
+        if not wname:
+            wname = 'A worker'
+        st_title = (subtask.title or 'Subtask').strip()
+        _create_supervisor_inbox_from_pm(
+            project=project,
+            kind='pm_worker_assigned',
+            title=f'Worker assigned: {st_title}'[:255],
+            body=f'{pm_name} assigned {wname} to “{st_title}”.',
+            payload={
+                'target': 'subtask',
+                'subtask_id': subtask.subtask_id,
+                'phase_id': phase.phase_id,
+            },
+        )
 
     def get_queryset(self):
         queryset = models.SubtaskFieldWorker.objects.all()
@@ -2456,6 +2963,21 @@ class SubtaskFieldWorkerViewSet(viewsets.ModelViewSet):
         response['Pragma'] = 'no-cache'
         return response
 
+    @action(detail=False, methods=['delete'], url_path='for-subtask')
+    def for_subtask(self, request, *args, **kwargs):
+        """Clear all [SubtaskFieldWorker] rows for one subtask (list routes do not run `destroy`).
+
+        The Flutter app calls: DELETE `subtask-assignments/for-subtask/?subtask_id=<id>`.
+        """
+        subtask_id = request.query_params.get('subtask_id')
+        if not subtask_id:
+            return Response(
+                {'detail': 'subtask_id query parameter is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        models.SubtaskFieldWorker.objects.filter(subtask_id=subtask_id).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     def create(self, request, *args, **kwargs):
         # Support bulk assignment
         if isinstance(request.data, list):
@@ -2466,16 +2988,7 @@ class SubtaskFieldWorkerViewSet(viewsets.ModelViewSet):
         return super().create(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
-        # Allow deleting all assignments for a subtask via query param
-        subtask_id = request.query_params.get('subtask_id')
-        if subtask_id:
-            deleted_count = models.SubtaskFieldWorker.objects.filter(
-                subtask_id=subtask_id
-            ).delete()[0]
-            return Response(
-                {'deleted': deleted_count},
-                status=status.HTTP_204_NO_CONTENT
-            )
+        # Deleting a collection is not a standard list action; use `for_subtask` instead.
         return super().destroy(request, *args, **kwargs)
 
 
@@ -2776,6 +3289,37 @@ def pm_dashboard_summary(request):
 
     tasks_today = recent_open_items[:5]
 
+    inbox_unread = models.InAppNotification.objects.filter(
+        recipient_kind=models.InAppNotification.KIND_PM,
+        recipient_user_id=user_id,
+        read_at__isnull=True,
+    ).count()
+    inbox_qs = (
+        models.InAppNotification.objects.filter(
+            recipient_kind=models.InAppNotification.KIND_PM,
+            recipient_user_id=user_id,
+        )
+        .order_by('-created_at')[:25]
+    )
+    inbox_items = []
+    for n in inbox_qs:
+        pl = n.payload if isinstance(n.payload, dict) else {}
+        inbox_items.append(
+            {
+                'notification_id': n.notification_id,
+                'kind': n.kind,
+                'title': n.title,
+                'body': n.body,
+                'read': n.read_at is not None,
+                'created_at': n.created_at.isoformat() if n.created_at else None,
+                'subtask_id': pl.get('subtask_id'),
+                'project_id': pl.get('project_id'),
+                'phase_id': pl.get('phase_id'),
+                'supervisor_name': pl.get('supervisor_name') or '',
+                'target': pl.get('target'),
+            }
+        )
+
     return Response(
         {
             'success': True,
@@ -2807,9 +3351,150 @@ def pm_dashboard_summary(request):
                 'count': int(open_subtasks_count),
                 'items': recent_open_items,
             },
+            'inbox': {
+                'unread_count': int(inbox_unread),
+                'items': inbox_items,
+            },
         },
         status=status.HTTP_200_OK,
     )
+
+
+@csrf_exempt
+@api_view(['POST'])
+def pm_inbox_mark_read(request, notification_id):
+    user_id_raw = request.query_params.get('user_id') or request.data.get('user_id')
+    if not user_id_raw:
+        return Response(
+            {'success': False, 'message': 'user_id is required'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        user_id = int(user_id_raw)
+        nid = int(notification_id)
+    except (TypeError, ValueError):
+        return Response(
+            {'success': False, 'message': 'user_id and notification_id must be integers'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    n = models.InAppNotification.objects.filter(
+        notification_id=nid,
+        recipient_user_id=user_id,
+        recipient_kind=models.InAppNotification.KIND_PM,
+    ).first()
+    if n is None:
+        return Response(
+            {'success': False, 'message': 'Notification not found'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    if n.read_at is None:
+        n.read_at = timezone.now()
+        n.save(update_fields=['read_at'])
+    return Response({'success': True})
+
+
+@api_view(['GET'])
+def supervisor_inbox(request):
+    """In-app notifications for a supervisor (PM actions, etc.)."""
+    sup_raw = request.query_params.get('supervisor_id')
+    if not sup_raw:
+        return Response(
+            {'success': False, 'message': 'supervisor_id is required'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        sup_id = int(sup_raw)
+    except (TypeError, ValueError):
+        return Response(
+            {'success': False, 'message': 'supervisor_id must be an integer'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if not models.Supervisors.objects.filter(supervisor_id=sup_id).exists():
+        return Response(
+            {'success': False, 'message': 'Supervisor not found'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    inbox_unread = models.InAppNotification.objects.filter(
+        recipient_kind=models.InAppNotification.KIND_SUPERVISOR,
+        recipient_supervisor_id=sup_id,
+        read_at__isnull=True,
+    ).count()
+    inbox_qs = (
+        models.InAppNotification.objects.filter(
+            recipient_kind=models.InAppNotification.KIND_SUPERVISOR,
+            recipient_supervisor_id=sup_id,
+        )
+        .order_by('-created_at')[:40]
+    )
+    inbox_items = []
+    for n in inbox_qs:
+        pl = n.payload if isinstance(n.payload, dict) else {}
+        inbox_items.append(
+            {
+                'notification_id': n.notification_id,
+                'kind': n.kind,
+                'title': n.title,
+                'body': n.body,
+                'read': n.read_at is not None,
+                'created_at': n.created_at.isoformat() if n.created_at else None,
+                'target': pl.get('target'),
+                'project_id': pl.get('project_id'),
+                'phase_id': pl.get('phase_id'),
+                'subtask_id': pl.get('subtask_id'),
+                'plan_id': pl.get('plan_id'),
+                'item_id': pl.get('item_id'),
+                'unit_id': pl.get('unit_id'),
+            }
+        )
+    return Response(
+        {
+            'success': True,
+            'inbox': {
+                'unread_count': int(inbox_unread),
+                'items': inbox_items,
+            },
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@csrf_exempt
+@api_view(['POST'])
+def supervisor_inbox_mark_read(request, notification_id):
+    sup_raw = request.query_params.get('supervisor_id') or request.data.get(
+        'supervisor_id'
+    )
+    if not sup_raw:
+        return Response(
+            {'success': False, 'message': 'supervisor_id is required'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        sup_id = int(sup_raw)
+        nid = int(notification_id)
+    except (TypeError, ValueError):
+        return Response(
+            {
+                'success': False,
+                'message': 'supervisor_id and notification_id must be integers',
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    n = models.InAppNotification.objects.filter(
+        notification_id=nid,
+        recipient_supervisor_id=sup_id,
+        recipient_kind=models.InAppNotification.KIND_SUPERVISOR,
+    ).first()
+    if n is None:
+        return Response(
+            {'success': False, 'message': 'Notification not found'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    if n.read_at is None:
+        n.read_at = timezone.now()
+        n.save(update_fields=['read_at'])
+    return Response({'success': True})
 
 
 @csrf_exempt
@@ -3220,8 +3905,46 @@ def pm_audit_trail(request):
 
 # ── Inventory ViewSets ───────────────────────────────────────────────────────
 
+
+def _inventory_item_is_material_row(item) -> bool:
+    """Match serializer logic: materials use scalar [quantity], not [InventoryUnit] rows."""
+    if (getattr(item, 'item_type', None) or '').strip().lower() == 'material':
+        return True
+    cat = (getattr(item, 'category', None) or '').strip().lower().rstrip('s')
+    return cat == 'material'
+
+
 class InventoryItemViewSet(viewsets.ModelViewSet):
     serializer_class = InventoryItemSerializer
+
+    def perform_update(self, serializer):
+        """Serializer exposes [quantity] as a computed field; apply raw PATCH for materials."""
+        item = serializer.instance
+        q_new = None
+        if 'quantity' in self.request.data:
+            if not _inventory_item_is_material_row(item):
+                raise ValidationError(
+                    {
+                        'quantity': (
+                            'Tools and machines use per-unit stock. Use add_units or '
+                            'remove_units instead of setting quantity directly.'
+                        )
+                    }
+                )
+            raw = self.request.data.get('quantity')
+            try:
+                q_new = int(raw)
+            except (TypeError, ValueError) as exc:
+                raise ValidationError(
+                    {'quantity': 'Must be a non-negative integer.'}
+                ) from exc
+            if q_new < 0:
+                raise ValidationError({'quantity': 'Must be non-negative.'})
+
+        super().perform_update(serializer)
+        if q_new is not None and item.quantity != q_new:
+            item.quantity = q_new
+            item.save(update_fields=['quantity', 'updated_at'])
 
     def destroy(self, request, *args, **kwargs):
         item = self.get_object()
@@ -3331,7 +4054,6 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
         pm_user_id = _get_request_pm_user_id(self.request)
         pm_user = _get_pm_user_or_none(pm_user_id)
         if pm_user is None:
-            from rest_framework.exceptions import ValidationError
             raise ValidationError('A valid user_id (ProjectManager) is required.')
 
         quantity_raw = self.request.data.get('quantity')
@@ -3647,6 +4369,22 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
 
         self._refresh_item_status_from_units(item)
         if target_project:
+            pm_name = _pm_display_name_for_request(request)
+            itype = (getattr(item, 'item_type', None) or 'Tool')[:20]
+            _create_supervisor_inbox_from_pm(
+                project=target_project,
+                kind='pm_tool_assigned',
+                title=f'{itype} assigned: {item.name}'[:255],
+                body=(
+                    f'{pm_name} assigned {unit.unit_code} ({item.name}) '
+                    f'to {target_project.project_name}.'
+                ),
+                payload={
+                    'target': 'inventory',
+                    'item_id': item.item_id,
+                    'unit_id': unit.unit_id,
+                },
+            )
             message = f'{unit.unit_code} assigned to {target_project.project_name}'
         else:
             message = f'{unit.unit_code} unassigned from project'
@@ -3935,13 +4673,26 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
         item = self.get_object()
         unit_id = request.data.get('unit_id')
 
+        usage_qs = item.usages.filter(status='Checked Out')
+        # Supervisors must only return their own checkouts; PM calls use user_id, not this param.
+        sup_raw = request.query_params.get('supervisor_id')
+        if sup_raw is not None and str(sup_raw).strip() not in ('', 'null', 'None'):
+            try:
+                sup_id = int(sup_raw)
+                usage_qs = usage_qs.filter(checked_out_by_id=sup_id)
+            except (TypeError, ValueError):
+                return Response({'error': 'Invalid supervisor_id.'}, status=400)
+
         if unit_id:
-            active_usage = item.usages.filter(
-                inventory_unit_id=unit_id,
-                status='Checked Out',
+            try:
+                uid = int(unit_id)
+            except (TypeError, ValueError):
+                return Response({'error': 'Invalid unit_id format.'}, status=400)
+            active_usage = usage_qs.filter(
+                inventory_unit_id=uid,
             ).order_by('-checkout_date').first()
         else:
-            active_usage = item.usages.filter(status='Checked Out').order_by('-checkout_date').first()
+            active_usage = usage_qs.order_by('-checkout_date').first()
 
         if not active_usage:
             return Response({'error': 'No active checkout found for this item.'}, status=400)
@@ -3963,11 +4714,105 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
 
         self._refresh_item_status_from_units(item)
 
+        sup_notify = request.query_params.get('supervisor_id')
+        if sup_notify and str(sup_notify).strip() not in ('', 'null', 'None'):
+            sup_obj = getattr(active_usage, 'checked_out_by', None)
+            if sup_obj is not None:
+                _create_pm_inbox_supervisor_inventory_return(
+                    item,
+                    supervisor=sup_obj,
+                    unit_code=unit.unit_code if unit else '',
+                    is_checkout_return=True,
+                )
+
         return Response({
             'message': f'{item.name} has been returned.',
             'unit_code': unit.unit_code if unit else '',
             'item': InventoryItemSerializer(item, context={'request': request}).data,
         })
+
+    @action(detail=True, methods=['post'], url_path='release_assigned_unit')
+    @transaction.atomic
+    def release_assigned_unit(self, request, pk=None):
+        """
+        Supervisor sends an assigned (on-site) unit back to the PM inventory pool
+        (clears current_project). Not for units that are Checked Out — use return_item.
+        """
+        sup_raw = request.query_params.get('supervisor_id') or request.data.get('supervisor_id')
+        if not sup_raw:
+            return Response({'error': 'supervisor_id is required.'}, status=400)
+        try:
+            sup_id = int(sup_raw)
+            sv = models.Supervisors.objects.get(supervisor_id=sup_id)
+        except (ValueError, TypeError):
+            return Response({'error': 'Invalid supervisor_id.'}, status=400)
+        except models.Supervisors.DoesNotExist:
+            return Response({'error': 'Supervisor not found.'}, status=404)
+
+        item = self.get_object()
+        unit_id = request.data.get('unit_id')
+        if not unit_id:
+            return Response({'error': 'unit_id is required.'}, status=400)
+        try:
+            unit = item.units.get(unit_id=int(unit_id))
+        except (models.InventoryUnit.DoesNotExist, ValueError, TypeError):
+            return Response({'error': 'Invalid unit_id.'}, status=404)
+
+        if not unit.current_project_id:
+            return Response({'error': 'Unit is not assigned to a project.'}, status=400)
+        if unit.status == 'Checked Out':
+            return Response(
+                {
+                    'error': (
+                        'This unit is checked out. Return it with the check-in action '
+                        'for active checkouts first.'
+                    ),
+                },
+                status=400,
+            )
+
+        supervisor_project_ids = list(
+            models.Project.objects
+            .filter(
+                Q(supervisor_id=sv.supervisor_id)
+                | Q(supervisors__supervisor_id=sv.supervisor_id)
+            )
+            .distinct()
+            .values_list('project_id', flat=True)
+        )
+        if unit.current_project_id not in supervisor_project_ids:
+            return Response(
+                {'error': 'This unit is not assigned to your projects.'},
+                status=403,
+            )
+
+        previous = unit.current_project
+        unit.current_project = None
+        if unit.status == 'Returned':
+            unit.status = 'Available'
+        unit.save(update_fields=['current_project', 'status', 'updated_at'])
+
+        models.InventoryUnitMovement.objects.create(
+            unit=unit,
+            from_project=previous,
+            to_project=None,
+            action='Transferred',
+            moved_by=None,
+            notes='Supervisor returned assigned unit to PM inventory',
+        )
+        self._refresh_item_status_from_units(item)
+        _create_pm_inbox_supervisor_inventory_return(
+            item,
+            supervisor=sv,
+            unit_code=unit.unit_code,
+            is_checkout_return=False,
+        )
+        return Response(
+            {
+                'message': f'{unit.unit_code} returned to project manager inventory.',
+                'item': InventoryItemSerializer(item, context={'request': request}).data,
+            }
+        )
 
 
 class PhaseMaterialPlanViewSet(viewsets.ModelViewSet):
@@ -3984,7 +4829,7 @@ class PhaseMaterialPlanViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = models.PhaseMaterialPlan.objects.select_related(
-            'phase', 'inventory_item'
+            'phase', 'inventory_item', 'subtask'
         ).order_by('phase_id', 'inventory_item_id')
         phase_id = self.request.query_params.get('phase_id')
         project_id = self.request.query_params.get('project_id')
@@ -3993,6 +4838,116 @@ class PhaseMaterialPlanViewSet(viewsets.ModelViewSet):
         if project_id:
             qs = qs.filter(phase__project_id=project_id)
         return qs
+
+    @staticmethod
+    def _notify_supervisor_material_allocated(plan: models.PhaseMaterialPlan) -> None:
+        try:
+            phase = plan.phase
+            project = getattr(phase, 'project', None)
+            it = plan.inventory_item
+        except Exception:  # noqa: BLE001
+            return
+        if project is None or it is None:
+            return
+        uom = (getattr(it, 'unit_of_measure', None) or 'units').strip()
+        qty = int(plan.planned_quantity or 0)
+        phase_name = (getattr(phase, 'phase_name', None) or 'phase').strip()
+        title = f'Materials planned: {it.name}'[:255]
+        body = f'{qty} {uom} of {it.name} allocated to {phase_name}.'
+        payload = {
+            'target': 'materials',
+            'phase_id': phase.phase_id,
+            'plan_id': plan.pk,
+            'inventory_item_id': it.item_id,
+        }
+        st = getattr(plan, 'subtask', None)
+        st_id = getattr(st, 'subtask_id', None) if st is not None else None
+        if st_id:
+            payload['subtask_id'] = st_id
+        _create_supervisor_inbox_from_pm(
+            project=project,
+            kind='pm_material_allocated',
+            title=title,
+            body=body,
+            payload=payload,
+        )
+
+    @staticmethod
+    def _adjust_inventory_quantity(item_id: int, delta: int):
+        if delta == 0:
+            return
+        item = models.InventoryItem.objects.select_for_update().get(pk=item_id)
+        next_qty = int(item.quantity) + int(delta)
+        if next_qty < 0:
+            raise ValidationError(
+                {
+                    'planned_quantity': (
+                        f'Insufficient inventory stock for "{item.name}". '
+                        f'Available: {item.quantity}.'
+                    )
+                }
+            )
+        item.quantity = next_qty
+        item.save(update_fields=['quantity', 'updated_at'])
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        plan = serializer.save()
+        # Reserve planned material quantity from inventory stock.
+        self._adjust_inventory_quantity(
+            item_id=int(plan.inventory_item_id),
+            delta=-int(plan.planned_quantity),
+        )
+        plan.inventory_reserved = True
+        plan.save(update_fields=['inventory_reserved', 'updated_at'])
+        self._notify_supervisor_material_allocated(plan)
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        old_plan = models.PhaseMaterialPlan.objects.select_for_update().get(
+            pk=self.get_object().pk
+        )
+        old_qty = int(old_plan.planned_quantity)
+        old_item_id = int(old_plan.inventory_item_id)
+        old_reserved = bool(old_plan.inventory_reserved)
+
+        plan = serializer.save()
+        new_qty = int(plan.planned_quantity)
+        new_item_id = int(plan.inventory_item_id)
+
+        if not old_reserved:
+            # Legacy rows (created before reservation logic) had no stock
+            # deducted yet, so reserve the full current planned quantity.
+            self._adjust_inventory_quantity(
+                item_id=new_item_id,
+                delta=-new_qty,
+            )
+            plan.inventory_reserved = True
+            plan.save(update_fields=['inventory_reserved', 'updated_at'])
+            return
+
+        if old_item_id == new_item_id:
+            # Positive delta reserves more stock; negative delta releases stock.
+            delta_qty = new_qty - old_qty
+            self._adjust_inventory_quantity(
+                item_id=new_item_id,
+                delta=-delta_qty,
+            )
+            return
+
+        # Item changed: release old reservation, then reserve new one.
+        self._adjust_inventory_quantity(item_id=old_item_id, delta=old_qty)
+        self._adjust_inventory_quantity(item_id=new_item_id, delta=-new_qty)
+
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        was_reserved = bool(instance.inventory_reserved)
+        item_id = int(instance.inventory_item_id)
+        qty = int(instance.planned_quantity)
+        super().perform_destroy(instance)
+        if was_reserved:
+            # Revert reservation when a previously-reserved plan row is removed.
+            self._adjust_inventory_quantity(item_id=item_id, delta=qty)
 
 
 class InventoryUsageViewSet(viewsets.ReadOnlyModelViewSet):

@@ -147,6 +147,7 @@ class _InventoryPageState extends State<InventoryPage> {
   bool _isLoading = true;
 
   String _query = '';
+  int? _focusItemId;
 
   @override
   void initState() {
@@ -167,6 +168,7 @@ class _InventoryPageState extends State<InventoryPage> {
 
       final active = <ActiveUsage>[];
       for (final item in items) {
+        if (item.isMaterial) continue;
         for (final usage in item.activeUsages) {
           final user = usage['field_worker_name']?.toString().isNotEmpty == true
               ? usage['field_worker_name'].toString()
@@ -190,9 +192,24 @@ class _InventoryPageState extends State<InventoryPage> {
         }
       }
 
+      int? focusId;
+      if (mounted) {
+        final st = GoRouterState.of(context);
+        final param =
+            st.uri.queryParameters['item_id'] ?? st.uri.queryParameters['item'] ?? '';
+        final parsed = int.tryParse(param);
+        if (parsed != null) {
+          if (items.any((t) => t.id == parsed.toString())) {
+            focusId = parsed;
+          }
+        }
+      }
       setState(() {
         _items = items;
         _active = active;
+        if (focusId != null) {
+          _focusItemId = focusId;
+        }
       });
     } catch (e) {
       if (mounted) {
@@ -212,6 +229,14 @@ class _InventoryPageState extends State<InventoryPage> {
         t.category.toLowerCase().contains(q) ||
         t.status.toLowerCase().contains(q);
   }).toList();
+
+  List<ToolItem> get _filteredToolsAndMachines => _filtered
+      .where((t) => !t.isMaterial)
+      .toList();
+
+  List<ToolItem> get _filteredMaterials => _filtered
+      .where((t) => t.isMaterial)
+      .toList();
 
   void _navigateToPage(String page) {
     switch (page) {
@@ -271,7 +296,7 @@ class _InventoryPageState extends State<InventoryPage> {
                                   crossAxisAlignment:
                                       CrossAxisAlignment.stretch,
                                   children: [
-                                    // Mobile search + materials button (only on mobile)
+                                    // Mobile search
                                     if (isMobile) ...[
                                       Row(
                                         children: [
@@ -295,29 +320,6 @@ class _InventoryPageState extends State<InventoryPage> {
                                               ),
                                             ),
                                           ),
-                                          const SizedBox(width: 8),
-                                          OutlinedButton(
-                                            onPressed: () {
-                                              Navigator.of(context).push(
-                                                MaterialPageRoute(
-                                                  builder: (_) =>
-                                                      const MaterialsPage(),
-                                                ),
-                                              );
-                                            },
-                                            style: OutlinedButton.styleFrom(
-                                              foregroundColor: primary,
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 12,
-                                                    vertical: 12,
-                                                  ),
-                                            ),
-                                            child: const Icon(
-                                              Icons.layers,
-                                              size: 20,
-                                            ),
-                                          ),
                                         ],
                                       ),
                                       const SizedBox(height: 16),
@@ -336,7 +338,7 @@ class _InventoryPageState extends State<InventoryPage> {
                                         ),
                                         const SizedBox(width: 12),
                                         Text(
-                                          '${_filtered.length} items',
+                                          '${_filteredToolsAndMachines.length} items',
                                           style: const TextStyle(
                                             color: Colors.grey,
                                             fontSize: 12,
@@ -425,21 +427,21 @@ class _InventoryPageState extends State<InventoryPage> {
                                                     ),
                                                   ),
                                                 SizedBox(
-                                                  width: isMobile ? 120 : 160,
-                                                ), // for details/use actions
+                                                  width: isMobile ? 130 : 200,
+                                                ), // availability + Use + Return
                                               ],
                                             ),
                                           ),
 
                                           // Table Body
-                                          _filtered.isEmpty
+                                          _filteredToolsAndMachines.isEmpty
                                               ? Padding(
                                                   padding: const EdgeInsets.all(
                                                     24,
                                                   ),
                                                   child: Center(
                                                     child: Text(
-                                                      'No tools found',
+                                                      'No tools or machines found',
                                                       style: TextStyle(
                                                         color: Colors.grey[600],
                                                       ),
@@ -450,14 +452,21 @@ class _InventoryPageState extends State<InventoryPage> {
                                                   shrinkWrap: true,
                                                   physics:
                                                       const NeverScrollableScrollPhysics(),
-                                                  itemCount: _filtered.length,
+                                                  itemCount:
+                                                      _filteredToolsAndMachines
+                                                          .length,
                                                   itemBuilder: (context, i) {
-                                                    final t = _filtered[i];
+                                                    final t =
+                                                        _filteredToolsAndMachines[i];
                                                     final isEven = i.isEven;
                                                     return _tableRow(
                                                       t,
                                                       isEven,
                                                       isMobile,
+                                                      highlightInbox: int.tryParse(
+                                                            t.id,
+                                                          ) ==
+                                                          _focusItemId,
                                                     );
                                                   },
                                                 ),
@@ -465,6 +474,135 @@ class _InventoryPageState extends State<InventoryPage> {
                                       ),
                                     ),
 
+                                    const SizedBox(height: 22),
+
+                                    // Materials section
+                                    Row(
+                                      children: [
+                                        Text(
+                                          'All Materials',
+                                          style: TextStyle(
+                                            fontSize: isMobile ? 14 : 16,
+                                            fontWeight: FontWeight.w800,
+                                            color: Colors.grey[800],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Text(
+                                          '${_filteredMaterials.length} items',
+                                          style: const TextStyle(
+                                            color: Colors.grey,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Card(
+                                      color: Colors.white,
+                                      elevation: 2,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Column(
+                                        children: [
+                                          Container(
+                                            padding: EdgeInsets.symmetric(
+                                              horizontal: isMobile ? 12 : 16,
+                                              vertical: isMobile ? 10 : 14,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: primary.withOpacity(0.05),
+                                              borderRadius:
+                                                  const BorderRadius.only(
+                                                    topLeft: Radius.circular(
+                                                      12,
+                                                    ),
+                                                    topRight: Radius.circular(
+                                                      12,
+                                                    ),
+                                                  ),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                Expanded(
+                                                  flex: 3,
+                                                  child: Text(
+                                                    'Material Name',
+                                                    style: TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                      fontSize: isMobile
+                                                          ? 12
+                                                          : 13,
+                                                    ),
+                                                  ),
+                                                ),
+                                                if (!isMobile)
+                                                  const Expanded(
+                                                    flex: 2,
+                                                    child: Text(
+                                                      'Category',
+                                                      style: TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        fontSize: 13,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                if (!isMobile)
+                                                  const Expanded(
+                                                    flex: 1,
+                                                    child: Text(
+                                                      'Unit',
+                                                      style: TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        fontSize: 13,
+                                                      ),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                          _filteredMaterials.isEmpty
+                                              ? Padding(
+                                                  padding: const EdgeInsets.all(
+                                                    24,
+                                                  ),
+                                                  child: Center(
+                                                    child: Text(
+                                                      'No materials found',
+                                                      style: TextStyle(
+                                                        color: Colors.grey[600],
+                                                      ),
+                                                    ),
+                                                  ),
+                                                )
+                                              : ListView.builder(
+                                                  shrinkWrap: true,
+                                                  physics:
+                                                      const NeverScrollableScrollPhysics(),
+                                                  itemCount:
+                                                      _filteredMaterials.length,
+                                                  itemBuilder: (context, i) {
+                                                    final t =
+                                                        _filteredMaterials[i];
+                                                    final isEven = i.isEven;
+                                                    return _materialRow(
+                                                      t,
+                                                      isEven,
+                                                      isMobile,
+                                                      highlightInbox: int.tryParse(
+                                                            t.id,
+                                                          ) ==
+                                                          _focusItemId,
+                                                    );
+                                                  },
+                                                ),
+                                        ],
+                                      ),
+                                    ),
                                     const SizedBox(height: 22),
 
                                     // Active / In-use section
@@ -542,47 +680,6 @@ class _InventoryPageState extends State<InventoryPage> {
                                                           color:
                                                               Colors.grey[700],
                                                           fontSize: 12,
-                                                        ),
-                                                      ),
-                                                      const SizedBox(
-                                                        height: 10,
-                                                      ),
-                                                      Align(
-                                                        alignment: Alignment
-                                                            .centerRight,
-                                                        child: ElevatedButton.icon(
-                                                          onPressed: () =>
-                                                              _returnUsage(
-                                                                usage,
-                                                              ),
-                                                          icon: const Icon(
-                                                            Icons
-                                                                .assignment_return,
-                                                            size: 16,
-                                                          ),
-                                                          label: const Text(
-                                                            'Return',
-                                                          ),
-                                                          style: ElevatedButton.styleFrom(
-                                                            backgroundColor:
-                                                                const Color(
-                                                                  0xFFFF7A18,
-                                                                ),
-                                                            foregroundColor:
-                                                                Colors.white,
-                                                            padding:
-                                                                const EdgeInsets.symmetric(
-                                                                  horizontal:
-                                                                      12,
-                                                                  vertical: 8,
-                                                                ),
-                                                            shape: RoundedRectangleBorder(
-                                                              borderRadius:
-                                                                  BorderRadius.circular(
-                                                                    8,
-                                                                  ),
-                                                            ),
-                                                          ),
                                                         ),
                                                       ),
                                                     ],
@@ -669,9 +766,6 @@ class _InventoryPageState extends State<InventoryPage> {
                                                           ),
                                                         ),
                                                       ),
-                                                      SizedBox(
-                                                        width: 110,
-                                                      ), // for actions
                                                     ],
                                                   ),
                                                 ),
@@ -890,52 +984,6 @@ class _InventoryPageState extends State<InventoryPage> {
                                                                     maxLines: 2,
                                                                   ),
                                                                 ),
-
-                                                                const SizedBox(
-                                                                  width: 12,
-                                                                ),
-                                                                SizedBox(
-                                                                  width: 110,
-                                                                  child: ElevatedButton.icon(
-                                                                    onPressed: () =>
-                                                                        _returnUsage(
-                                                                          usage,
-                                                                        ),
-                                                                    icon: const Icon(
-                                                                      Icons
-                                                                          .assignment_return,
-                                                                      size: 16,
-                                                                    ),
-                                                                    label: const Text(
-                                                                      'Return',
-                                                                      style: TextStyle(
-                                                                        fontSize:
-                                                                            12,
-                                                                      ),
-                                                                    ),
-                                                                    style: ElevatedButton.styleFrom(
-                                                                      backgroundColor:
-                                                                          const Color(
-                                                                            0xFFFF7A18,
-                                                                          ),
-                                                                      foregroundColor:
-                                                                          Colors
-                                                                              .white,
-                                                                      padding: const EdgeInsets.symmetric(
-                                                                        horizontal:
-                                                                            10,
-                                                                        vertical:
-                                                                            8,
-                                                                      ),
-                                                                      shape: RoundedRectangleBorder(
-                                                                        borderRadius:
-                                                                            BorderRadius.circular(
-                                                                              8,
-                                                                            ),
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                ),
                                                               ],
                                                             ),
                                                           );
@@ -969,7 +1017,12 @@ class _InventoryPageState extends State<InventoryPage> {
     );
   }
 
-  Widget _tableRow(ToolItem t, bool isEven, bool isMobile) {
+  Widget _tableRow(
+    ToolItem t,
+    bool isEven,
+    bool isMobile, {
+    bool highlightInbox = false,
+  }) {
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: isMobile ? 12 : 16,
@@ -979,6 +1032,9 @@ class _InventoryPageState extends State<InventoryPage> {
         color: isEven ? Colors.grey.shade50 : Colors.white,
         border: Border(
           bottom: BorderSide(color: Colors.grey.shade200, width: 1),
+          left: highlightInbox
+              ? const BorderSide(color: Color(0xFFFF6F00), width: 3)
+              : BorderSide.none,
         ),
       ),
       child: Row(
@@ -1093,40 +1149,167 @@ class _InventoryPageState extends State<InventoryPage> {
               ),
             ),
           SizedBox(
-            width: isMobile ? 120 : 160,
-            child: Row(
+            width: isMobile ? 132 : 200,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: Text(
-                    _availabilitySummary(t),
-                    style: TextStyle(
-                      fontSize: isMobile ? 10 : 12,
-                      fontWeight: FontWeight.w600,
-                      color: t.availableUnitsCount > 0
-                          ? const Color(0xFF0C1935)
-                          : Colors.redAccent,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                Text(
+                  _availabilitySummary(t),
+                  style: TextStyle(
+                    fontSize: isMobile ? 10 : 12,
+                    fontWeight: FontWeight.w600,
+                    color: t.availableUnitsCount > 0
+                        ? const Color(0xFF0C1935)
+                        : Colors.redAccent,
                   ),
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
                 ),
-                Expanded(
-                  child: TextButton(
-                    onPressed: t.hasCheckoutableUnits
-                        ? () => _showUseItemModal(t)
-                        : null,
-                    child: Text(
-                      'Use',
-                      style: TextStyle(
-                        fontSize: isMobile ? 10 : 12,
-                        fontWeight: FontWeight.w600,
-                        color: t.hasCheckoutableUnits ? primary : Colors.grey,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextButton(
+                      onPressed: t.hasCheckoutableUnits
+                          ? () => _showUseItemModal(t)
+                          : null,
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: Text(
+                        'Use',
+                        style: TextStyle(
+                          fontSize: isMobile ? 10 : 12,
+                          fontWeight: FontWeight.w600,
+                          color: t.hasCheckoutableUnits ? primary : Colors.grey,
+                        ),
                       ),
                     ),
+                    if (_canShowReturnForTool(t))
+                      TextButton(
+                        onPressed: () => _returnToolFromTable(t),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: Text(
+                          'Return',
+                          style: TextStyle(
+                            fontSize: isMobile ? 10 : 12,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFFFF7A18),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _materialRow(
+    ToolItem t,
+    bool isEven,
+    bool isMobile, {
+    bool highlightInbox = false,
+  }) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 12 : 16,
+        vertical: isMobile ? 10 : 12,
+      ),
+      decoration: BoxDecoration(
+        color: isEven ? Colors.grey.shade50 : Colors.white,
+        border: Border(
+          bottom: BorderSide(color: Colors.grey.shade200, width: 1),
+          left: highlightInbox
+              ? const BorderSide(color: Color(0xFFFF6F00), width: 3)
+              : BorderSide.none,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: Row(
+              children: [
+                if (!isMobile) ...[
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: t.photoUrl != null && t.photoUrl!.isNotEmpty
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.network(
+                              t.photoUrl!,
+                              width: 40,
+                              height: 40,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) =>
+                                  Icon(Icons.inventory_2, color: primary, size: 20),
+                            ),
+                          )
+                        : Icon(Icons.inventory_2, color: primary, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                Expanded(
+                  child: Text(
+                    t.name,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: isMobile ? 13 : 14,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
             ),
           ),
+          if (!isMobile)
+            Expanded(
+              flex: 2,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    t.category,
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ),
+          if (!isMobile)
+            Expanded(
+              flex: 1,
+              child: Text(
+                t.totalUnits.toString(),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF374151),
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
         ],
       ),
     );
@@ -1181,32 +1364,131 @@ class _InventoryPageState extends State<InventoryPage> {
     return '$available available';
   }
 
-  void _showUseItemModal(ToolItem tool) {
+  int? _currentSupervisorId() {
     final user = AuthService().currentUser;
-    final supervisorId = user?['supervisor_id'] ?? user?['user_id'];
-    if (supervisorId == null) return;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => _UseItemModal(
-        tool: tool,
-        supervisorId: supervisorId,
-        accent: accent,
-        onSuccess: () {
-          _loadItems();
-        },
-      ),
-    );
+    final v = user?['supervisor_id'] ?? user?['user_id'];
+    if (v == null) return null;
+    if (v is int) return v;
+    return int.tryParse(v.toString());
   }
 
-  Future<void> _returnUsage(ActiveUsage usage) async {
+  int? _usageSupervisorId(Map<String, dynamic> u) {
+    final raw = u['checked_out_by'];
+    if (raw == null) return null;
+    if (raw is int) return raw;
+    if (raw is Map) {
+      final v = raw['supervisor_id'] ?? raw['id'];
+      if (v is int) return v;
+      return int.tryParse(v.toString());
+    }
+    return int.tryParse(raw.toString());
+  }
+
+  bool _statusIsCheckedOutMap(Map<String, dynamic> u) {
+    return (u['status'] ?? '').toString().trim().toLowerCase() ==
+        'checked out';
+  }
+
+  /// There is a checked-out unit (usage row or unit status) this flow can return.
+  bool _canReturnCheckedOutTool(ToolItem t) {
+    if (t.isMaterial) return false;
+    final sid = _currentSupervisorId();
+    if (sid == null) return false;
+    for (final u in t.activeUsages) {
+      if (!_statusIsCheckedOutMap(u)) continue;
+      final cid = _usageSupervisorId(u);
+      if (cid == null || cid == sid) return true;
+    }
+    for (final u in t.units) {
+      if (_statusIsCheckedOutMap(u)) {
+        // Fallback if usage payload is missing; backend enforces ownership.
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Close an active checkout first; otherwise release an assigned (on-site) unit.
+  bool _shouldReturnCheckoutFirst(ToolItem t) {
+    if (t.isMaterial) return false;
+    final sid = _currentSupervisorId();
+    for (final u in t.activeUsages) {
+      if (!_statusIsCheckedOutMap(u)) continue;
+      final cid = _usageSupervisorId(u);
+      if (sid == null) return true;
+      if (cid == null || cid == sid) return true;
+    }
+    for (final u in t.units) {
+      if (_statusIsCheckedOutMap(u)) return true;
+    }
+    return false;
+  }
+
+  int? _firstReturnableUnitIdForSupervisor(ToolItem t) {
+    final sid = _currentSupervisorId();
+    for (final u in t.activeUsages) {
+      if (!_statusIsCheckedOutMap(u)) continue;
+      final cid = _usageSupervisorId(u);
+      if (sid != null && cid != null && cid != sid) continue;
+      final iu = u['inventory_unit'];
+      if (iu is int) return iu;
+      if (iu == null) continue;
+      return int.tryParse(iu.toString());
+    }
+    for (final u in t.units) {
+      if (!_statusIsCheckedOutMap(u)) continue;
+      final iu = u['unit_id'];
+      if (iu is int) return iu;
+      return int.tryParse(iu?.toString() ?? '');
+    }
+    return null;
+  }
+
+  bool _unitHasProjectAssignment(Map<String, dynamic> u) {
+    if (_statusIsCheckedOutMap(u)) return false;
+    final cp = u['current_project'];
+    if (cp == null) return false;
+    if (cp is int) return cp != 0;
+    final s = cp.toString().trim();
+    return s.isNotEmpty && s != 'null' && s != '0';
+  }
+
+  /// Assigned on a project (on-site) but not checked out — return to PM pool.
+  bool _canReleaseAssignedUnit(ToolItem t) {
+    if (t.isMaterial) return false;
+    for (final u in t.units) {
+      if (_unitHasProjectAssignment(u)) return true;
+    }
+    return false;
+  }
+
+  bool _canShowReturnForTool(ToolItem t) {
+    return _canReturnCheckedOutTool(t) || _canReleaseAssignedUnit(t);
+  }
+
+  int? _firstReleasableAssignedUnitId(ToolItem t) {
+    for (final u in t.units) {
+      if (!_unitHasProjectAssignment(u)) continue;
+      final iu = u['unit_id'];
+      if (iu is int) return iu;
+      return int.tryParse(iu?.toString() ?? '');
+    }
+    return null;
+  }
+
+  Future<void> _returnToolFromTable(ToolItem t) async {
+    final useCheckout = _shouldReturnCheckoutFirst(t);
+    final useRelease = !useCheckout && _canReleaseAssignedUnit(t);
+
+    final body = useCheckout
+        ? 'This will end your active checkout and return the unit to the project manager.'
+        : 'This will send the on-site unit back to the project manager inventory (unassign from the project).';
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Return Unit'),
-        content: Text(
-          'Return ${usage.tool.name} (${usage.serial}) from ${usage.user}?',
-        ),
+        title: const Text('Return to project manager'),
+        content: Text('Return "${t.name}"? $body'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -1225,28 +1507,61 @@ class _InventoryPageState extends State<InventoryPage> {
     );
     if (confirmed != true) return;
 
+    final supervisorId = _currentSupervisorId();
+    if (supervisorId == null) return;
+
     try {
-      final user = AuthService().currentUser;
-      final supervisorId = user?['supervisor_id'] ?? user?['user_id'];
-      if (supervisorId == null) return;
-      await InventoryService.returnItem(
-        itemId: int.parse(usage.tool.id),
-        supervisorId: supervisorId,
-        unitId: usage.unitId,
-      );
+      if (useCheckout) {
+        final unitId = _firstReturnableUnitIdForSupervisor(t);
+        await InventoryService.returnItem(
+          itemId: int.parse(t.id),
+          supervisorId: supervisorId,
+          unitId: unitId,
+        );
+      } else if (useRelease) {
+        final unitId = _firstReleasableAssignedUnitId(t);
+        if (unitId == null) {
+          throw Exception('No unit to return');
+        }
+        await InventoryService.releaseAssignedUnitToPm(
+          itemId: int.parse(t.id),
+          supervisorId: supervisorId,
+          unitId: unitId,
+        );
+      } else {
+        return;
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${usage.serial} returned successfully')),
+          SnackBar(content: Text('${t.name} returned to project manager')),
         );
-        _loadItems();
+        await _loadItems();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to return unit: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Return failed: $e')),
+        );
       }
     }
+  }
+
+  void _showUseItemModal(ToolItem tool) {
+    final user = AuthService().currentUser;
+    final supervisorId = user?['supervisor_id'] ?? user?['user_id'];
+    if (supervisorId == null) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => _UseItemModal(
+        tool: tool,
+        supervisorId: supervisorId,
+        accent: accent,
+        onSuccess: () {
+          _loadItems();
+        },
+      ),
+    );
   }
 }
 

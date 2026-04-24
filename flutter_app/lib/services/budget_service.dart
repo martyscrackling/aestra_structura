@@ -128,17 +128,22 @@ class BudgetService {
     required int phaseId,
     required int inventoryItemId,
     required int plannedQuantity,
+    int? subtaskId,
   }) async {
     final uri = AppConfig.apiUri('phase-material-plans/');
+    final payload = <String, dynamic>{
+      'phase': phaseId,
+      'inventory_item': inventoryItemId,
+      'planned_quantity': plannedQuantity,
+    };
+    if (subtaskId != null) {
+      payload['subtask'] = subtaskId;
+    }
     final response = await http
         .post(
           uri,
           headers: _jsonHeaders,
-          body: jsonEncode({
-            'phase': phaseId,
-            'inventory_item': inventoryItemId,
-            'planned_quantity': plannedQuantity,
-          }),
+          body: jsonEncode(payload),
         )
         .timeout(_timeout);
     return _ok(response, 'create material plan');

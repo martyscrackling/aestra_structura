@@ -118,9 +118,13 @@ class _InventoryPageState extends State<InventoryPage> {
       final data = await InventoryService.getInventoryItems(userId: userId);
       final items = data.map((j) => ToolItem.fromJson(j)).toList();
 
-      // Build active usage list from items that have active_usages
+      // Build active usage list from items that have active_usages (tools &
+      // machines only; materials are not "checked out" in this section)
       final active = <ActiveUsage>[];
       for (final item in items) {
+        if (item.category.toLowerCase().trim() == 'material') {
+          continue;
+        }
         for (final usage in item.activeUsages) {
           final status = (usage['status'] ?? '').toString().trim();
           if (status.toLowerCase() != 'checked out') {
@@ -176,6 +180,14 @@ class _InventoryPageState extends State<InventoryPage> {
     return t.name.toLowerCase().contains(q) ||
         t.category.toLowerCase().contains(q);
   }).toList();
+
+  List<ToolItem> get _filteredToolsAndMachines => _filtered
+      .where((t) => t.category.toLowerCase().trim() != 'material')
+      .toList();
+
+  List<ToolItem> get _filteredMaterials => _filtered
+      .where((t) => t.category.toLowerCase().trim() == 'material')
+      .toList();
 
   @override
   Widget build(BuildContext context) {
@@ -261,6 +273,26 @@ class _InventoryPageState extends State<InventoryPage> {
                             ),
                           ),
                         ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 40,
+                          child: OutlinedButton.icon(
+                            onPressed: () async {
+                              final result = await showDialog(
+                                context: context,
+                                builder: (ctx) => const AddInventoryItemModal(
+                                  initialCategory: 'Material',
+                                ),
+                              );
+                              if (result == true) {
+                                _loadItems();
+                              }
+                            },
+                            icon: const Icon(Icons.layers_outlined),
+                            label: const Text('Add Material'),
+                          ),
+                        ),
                         const SizedBox(height: 12),
                       ] else
                         Row(
@@ -291,6 +323,26 @@ class _InventoryPageState extends State<InventoryPage> {
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: primary,
                                 ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            SizedBox(
+                              height: 40,
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  final result = await showDialog(
+                                    context: context,
+                                    builder: (ctx) =>
+                                        const AddInventoryItemModal(
+                                          initialCategory: 'Material',
+                                        ),
+                                  );
+                                  if (result == true) {
+                                    _loadItems();
+                                  }
+                                },
+                                icon: const Icon(Icons.layers_outlined),
+                                label: const Text('Add Material'),
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -354,7 +406,7 @@ class _InventoryPageState extends State<InventoryPage> {
                             ),
                           ),
                           Text(
-                            '${_filtered.length} items',
+                            '${_filteredToolsAndMachines.length} items',
                             style: const TextStyle(
                               color: Colors.grey,
                               fontSize: 12,
@@ -414,7 +466,18 @@ class _InventoryPageState extends State<InventoryPage> {
                                     const Expanded(
                                       flex: 1,
                                       child: Text(
-                                        'Unit',
+                                        'Available',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
+                                  if (!isMobile)
+                                    const Expanded(
+                                      flex: 1,
+                                      child: Text(
+                                        'Assigned',
                                         style: TextStyle(
                                           fontWeight: FontWeight.w700,
                                           fontSize: 13,
@@ -451,12 +514,12 @@ class _InventoryPageState extends State<InventoryPage> {
                             ),
 
                             // Table Body
-                            _filtered.isEmpty
+                            _filteredToolsAndMachines.isEmpty
                                 ? Padding(
                                     padding: const EdgeInsets.all(24),
                                     child: Center(
                                       child: Text(
-                                        'No tools found',
+                                        'No tools or machines found',
                                         style: TextStyle(
                                           color: Colors.grey[600],
                                         ),
@@ -467,11 +530,132 @@ class _InventoryPageState extends State<InventoryPage> {
                                     shrinkWrap: true,
                                     physics:
                                         const NeverScrollableScrollPhysics(),
-                                    itemCount: _filtered.length,
+                                    itemCount: _filteredToolsAndMachines.length,
                                     itemBuilder: (context, i) {
-                                      final t = _filtered[i];
+                                      final t = _filteredToolsAndMachines[i];
                                       final isEven = i.isEven;
                                       return _tableRow(t, isEven, isMobile);
+                                    },
+                                  ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+
+                      // Materials table
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'All Materials',
+                              style: TextStyle(
+                                fontSize: isMobile ? 14 : 18,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF0C1935),
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '${_filteredMaterials.length} items',
+                            style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Card(
+                        color: Colors.white,
+                        surfaceTintColor: Colors.transparent,
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          children: [
+                            Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: isMobile ? 12 : 16,
+                                vertical: isMobile ? 10 : 14,
+                              ),
+                              decoration: BoxDecoration(
+                                color: primary.withOpacity(0.05),
+                                borderRadius: const BorderRadius.only(
+                                  topLeft: Radius.circular(12),
+                                  topRight: Radius.circular(12),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    flex: 3,
+                                    child: Text(
+                                      'Material Name',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: isMobile ? 12 : 13,
+                                      ),
+                                    ),
+                                  ),
+                                  if (!isMobile)
+                                    const Expanded(
+                                      flex: 2,
+                                      child: Text(
+                                        'Category',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
+                                  if (!isMobile)
+                                    const Expanded(
+                                      flex: 1,
+                                      child: Text(
+                                        'Unit',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
+                                  if (!isMobile)
+                                    const Expanded(
+                                      flex: 1,
+                                      child: Text(
+                                        'Price/Unit',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
+                                  SizedBox(width: isMobile ? 130 : 190),
+                                ],
+                              ),
+                            ),
+                            _filteredMaterials.isEmpty
+                                ? Padding(
+                                    padding: const EdgeInsets.all(24),
+                                    child: Center(
+                                      child: Text(
+                                        'No materials found',
+                                        style: TextStyle(
+                                          color: Colors.grey[600],
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                : ListView.builder(
+                                    shrinkWrap: true,
+                                    physics:
+                                        const NeverScrollableScrollPhysics(),
+                                    itemCount: _filteredMaterials.length,
+                                    itemBuilder: (context, i) {
+                                      final t = _filteredMaterials[i];
+                                      final isEven = i.isEven;
+                                      return _materialRow(t, isEven, isMobile);
                                     },
                                   ),
                           ],
@@ -911,6 +1095,74 @@ class _InventoryPageState extends State<InventoryPage> {
     }
   }
 
+  Future<void> _showEditMaterialQuantityDialog(ToolItem material) async {
+    final controller = TextEditingController(text: material.quantity.toString());
+    final result = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Edit Quantity: ${material.name}'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'New quantity',
+            hintText: 'Enter quantity',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final nextQty = int.tryParse(controller.text.trim());
+              if (nextQty == null || nextQty < 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter a valid quantity.')),
+                );
+                return;
+              }
+              Navigator.of(ctx).pop(nextQty);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+
+    if (result == null) return;
+    final currentQty = material.quantity;
+    if (result == currentQty) return;
+
+    final itemId = int.tryParse(material.id);
+    final userId = AuthService().currentUser?['user_id'];
+    if (itemId == null || userId == null) return;
+
+    try {
+      // Materials are bulk stock on [InventoryItem.quantity], not per-unit rows.
+      await InventoryService.updateMaterialStockQuantity(
+        itemId: itemId,
+        userId: userId,
+        quantity: result,
+      );
+
+      await _loadItems();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Updated ${material.name} quantity to $result'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
+
   Future<void> _showAssignProjectDialog(ToolItem tool) async {
     final itemId = int.tryParse(tool.id);
     if (itemId == null) return;
@@ -991,7 +1243,9 @@ class _InventoryPageState extends State<InventoryPage> {
                       if (isMobile) ...[
                         const SizedBox(height: 4),
                         Text(
-                          'Units: ${t.quantity} • Projects: ${_projectsSummary(t)}',
+                          'Available: ${_availableUnitsCount(t)} • '
+                          'Assigned: ${_assignedUnitsCount(t)}/${t.quantity} • '
+                          'Projects: ${_projectsSummary(t)}',
                           style: const TextStyle(
                             fontSize: 11,
                             color: Color(0xFF6B7280),
@@ -1031,12 +1285,26 @@ class _InventoryPageState extends State<InventoryPage> {
               ),
             ),
 
-          // Units (desktop)
+          // Unassigned units (total − assigned); see Assigned column for n/total.
           if (!isMobile)
             Expanded(
               flex: 1,
               child: Text(
-                _unitsDisplayText(t),
+                _availableUnitsCount(t).toString(),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF374151),
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+
+          if (!isMobile)
+            Expanded(
+              flex: 1,
+              child: Text(
+                _assignedFractionText(t),
                 style: const TextStyle(
                   fontSize: 12,
                   color: Color(0xFF374151),
@@ -1115,6 +1383,144 @@ class _InventoryPageState extends State<InventoryPage> {
     );
   }
 
+  Widget _materialRow(ToolItem t, bool isEven, bool isMobile) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 12 : 16,
+        vertical: isMobile ? 10 : 12,
+      ),
+      decoration: BoxDecoration(
+        color: isEven ? Colors.grey.shade50 : Colors.white,
+        border: Border(
+          bottom: BorderSide(color: Colors.grey.shade200, width: 1),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: Row(
+              children: [
+                if (!isMobile) ...[
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: t.photoUrl != null && t.photoUrl!.isNotEmpty
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.network(
+                              t.photoUrl!,
+                              width: 40,
+                              height: 40,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) =>
+                                  Icon(Icons.inventory_2, color: primary, size: 20),
+                            ),
+                          )
+                        : Icon(Icons.inventory_2, color: primary, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                Expanded(
+                  child: Text(
+                    t.name,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: isMobile ? 13 : 14,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (!isMobile)
+            Expanded(
+              flex: 2,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    t.category,
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ),
+          if (!isMobile)
+            Expanded(
+              flex: 1,
+              child: Text(
+                _unitsDisplayText(t),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF374151),
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          if (!isMobile)
+            Expanded(
+              flex: 1,
+              child: Text(
+                t.price != null ? '₱${t.price!.toStringAsFixed(2)}' : 'N/A',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF374151),
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          SizedBox(
+            width: isMobile ? 130 : 190,
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => _showEditMaterialQuantityDialog(t),
+                    child: Text(
+                      'Edit Qty',
+                      style: TextStyle(
+                        fontSize: isMobile ? 10 : 12,
+                        fontWeight: FontWeight.w600,
+                        color: primary,
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => _confirmDeleteItem(t),
+                    child: Text(
+                      'Remove',
+                      style: TextStyle(
+                        fontSize: isMobile ? 10 : 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.red,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _projectsSummary(ToolItem item) {
     final projectNames = item.units
         .map((u) => (u['current_project_name'] ?? '').toString().trim())
@@ -1134,6 +1540,22 @@ class _InventoryPageState extends State<InventoryPage> {
           (u) => (u['current_project_name'] ?? '').toString().trim().isNotEmpty,
         )
         .length;
+  }
+
+  /// Units not assigned to a project (item quantity minus assigned count).
+  int _availableUnitsCount(ToolItem item) {
+    final total = item.quantity;
+    final assigned = _assignedUnitsCount(item);
+    final left = total - assigned;
+    return left < 0 ? 0 : left;
+  }
+
+  /// Assigned unit count / total units (tools & machines table "Assigned" column).
+  String _assignedFractionText(ToolItem item) {
+    final n = _assignedUnitsCount(item);
+    final d = item.quantity;
+    if (d <= 0) return n.toString();
+    return '$n / $d';
   }
 
   String _unitsDisplayText(ToolItem item) {

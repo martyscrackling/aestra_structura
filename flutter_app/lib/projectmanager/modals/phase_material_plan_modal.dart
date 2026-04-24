@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../../services/app_config.dart';
 import '../../services/budget_service.dart';
 import '../../services/inventory_service.dart';
+import 'add_inventory_item_modal.dart';
 import '../widgets/planned_vs_actual_panel.dart';
 
 /// PM modal to manage material plans for one phase:
@@ -32,11 +36,13 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
 
   List<Map<String, dynamic>> _plans = const [];
   List<Map<String, dynamic>> _inventory = const [];
+  List<Map<String, dynamic>> _subtasks = const [];
   bool _loading = true;
   String? _error;
 
   // Add-form state
   int? _selectedItemId;
+  int? _selectedSubtaskId;
   final TextEditingController _qtyCtrl = TextEditingController();
   bool _submittingAdd = false;
   String? _addError;
@@ -64,12 +70,15 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
       final results = await Future.wait([
         BudgetService.listPhasePlans(phaseId: widget.phaseId),
         InventoryService.getInventoryItems(userId: widget.pmUserId),
+        _loadSubtasksForPhase(),
       ]);
       if (!mounted) return;
       setState(() {
         _plans = results[0];
         _inventory = results[1];
+        _subtasks = results[2];
         _loading = false;
+        _dropInvalidMaterialSelection();
       });
     } catch (e) {
       if (!mounted) return;
@@ -95,17 +104,47 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
     return normalized == 'material' || normalized == 'materials';
   }
 
+  int _stockQuantity(Map<String, dynamic> item) {
+    final q = item['quantity'];
+    if (q is int) return q;
+    if (q is num) return q.toInt();
+    return int.tryParse(q?.toString() ?? '0') ?? 0;
+  }
+
   List<Map<String, dynamic>> get _unplannedInventory => _inventory
       .where(
-        (i) => _isMaterial(i) && !_plannedItemIds.contains(i['item_id']),
+        (i) =>
+            _isMaterial(i) &&
+            !_plannedItemIds.contains(i['item_id']) &&
+            _stockQuantity(i) > 0,
       )
       .toList();
 
+  void _dropInvalidMaterialSelection() {
+    final valid = <int>{};
+    for (final i in _unplannedInventory) {
+      final id = i['item_id'];
+      if (id is int) {
+        valid.add(id);
+      } else if (id is num) {
+        valid.add(id.toInt());
+      }
+    }
+    if (_selectedItemId != null && !valid.contains(_selectedItemId)) {
+      _selectedItemId = null;
+    }
+  }
+
   Future<void> _addPlan() async {
     final itemId = _selectedItemId;
+    final subtaskId = _selectedSubtaskId;
     final qty = int.tryParse(_qtyCtrl.text.trim());
     if (itemId == null) {
       setState(() => _addError = 'Pick a material.');
+      return;
+    }
+    if (subtaskId == null) {
+      setState(() => _addError = 'Pick a subtask destination.');
       return;
     }
     if (qty == null || qty <= 0) {
@@ -122,8 +161,10 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
         phaseId: widget.phaseId,
         inventoryItemId: itemId,
         plannedQuantity: qty,
+        subtaskId: subtaskId,
       );
       _selectedItemId = null;
+      _selectedSubtaskId = null;
       _qtyCtrl.clear();
       _changed = true;
       await _refreshLists();
@@ -194,10 +235,49 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
     try {
       final plans = await BudgetService.listPhasePlans(phaseId: widget.phaseId);
       if (!mounted) return;
-      setState(() => _plans = plans);
+      setState(() {
+        _plans = plans;
+        _dropInvalidMaterialSelection();
+      });
       _reportKey.currentState?.reload();
     } catch (_) {
       // ignore — next full load will fix it
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _loadSubtasksForPhase() async {
+    try {
+      final response = await http.get(
+        AppConfig.apiUri('phases/${widget.phaseId}/'),
+      );
+      if (response.statusCode != 200) return const [];
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) return const [];
+      final rawSubtasks = decoded['subtasks'];
+      if (rawSubtasks is! List) return const [];
+      return rawSubtasks
+          .whereType<Map>()
+          .map((s) => Map<String, dynamic>.from(s))
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> _openAddMaterialModal() async {
+    final added = await showDialog<bool>(
+      context: context,
+      builder: (_) => const AddInventoryItemModal(initialCategory: 'Material'),
+    );
+    if (added == true && mounted) {
+      final inventory = await InventoryService.getInventoryItems(
+        userId: widget.pmUserId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _inventory = inventory;
+        _dropInvalidMaterialSelection();
+      });
     }
   }
 
@@ -386,6 +466,35 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
           ),
           const SizedBox(height: 8),
           DropdownButtonFormField<int>(
+            initialValue: _selectedSubtaskId,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Subtask destination',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            items: _subtasks.map((s) {
+              final id = s['subtask_id'] as int?;
+              final title = (s['title'] ?? '').toString().trim();
+              if (id == null || title.isEmpty) {
+                return null;
+              }
+              return DropdownMenuItem<int>(
+                value: id,
+                child: Text(title, overflow: TextOverflow.ellipsis),
+              );
+            }).whereType<DropdownMenuItem<int>>().toList(),
+            onChanged: _subtasks.isEmpty
+                ? null
+                : (v) => setState(() => _selectedSubtaskId = v),
+            hint: Text(
+              _subtasks.isEmpty
+                  ? 'No subtasks available for this phase.'
+                  : 'Pick target subtask',
+            ),
+          ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<int>(
             initialValue: _selectedItemId,
             isExpanded: true,
             decoration: const InputDecoration(
@@ -406,7 +515,7 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
                 : (v) => setState(() => _selectedItemId = v),
             hint: Text(
               available.isEmpty
-                  ? 'All inventory items are already planned.'
+                  ? 'No material with available stock, or all are already in this plan.'
                   : 'Pick a material',
             ),
           ),
@@ -429,19 +538,26 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
             ),
           ],
           const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton.icon(
-              onPressed: _submittingAdd ? null : _addPlan,
-              icon: _submittingAdd
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.add),
-              label: const Text('Add to plan'),
-            ),
+          Row(
+            children: [
+              OutlinedButton.icon(
+                onPressed: _openAddMaterialModal,
+                icon: const Icon(Icons.playlist_add, size: 16),
+                label: const Text('New Material'),
+              ),
+              const Spacer(),
+              FilledButton.icon(
+                onPressed: _submittingAdd ? null : _addPlan,
+                icon: _submittingAdd
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.add),
+                label: const Text('Add to plan'),
+              ),
+            ],
           ),
         ],
       ),
@@ -499,6 +615,7 @@ class _PlanRowState extends State<_PlanRow> {
   @override
   Widget build(BuildContext context) {
     final name = widget.plan['inventory_item_name'] as String? ?? '-';
+    final subtask = (widget.plan['subtask_title'] ?? '').toString().trim();
     final price = widget.plan['inventory_item_unit_price']?.toString() ?? '0';
     final plannedCost = widget.plan['planned_cost']?.toString() ?? '0';
 
@@ -519,6 +636,15 @@ class _PlanRowState extends State<_PlanRow> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+                if (subtask.isNotEmpty)
+                  Text(
+                    'Subtask: $subtask',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFF4B5563),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 Text(
                   '₱$price/unit  •  planned cost ₱$plannedCost',
                   style: const TextStyle(

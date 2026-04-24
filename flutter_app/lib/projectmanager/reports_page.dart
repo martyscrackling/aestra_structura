@@ -4,8 +4,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'widgets/responsive_page_layout.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
+import 'dart:typed_data';
+
 import '../services/app_config.dart';
 import '../services/auth_service.dart';
+import '../services/file_download/file_download.dart';
 
 class AttendanceReport {
   AttendanceReport({
@@ -31,6 +34,134 @@ class AttendanceReport {
   double get grossPay =>
       totalHours * hourlyRate + overtimeHours * hourlyRate * 1.5;
   double get computedSalary => (grossPay - cashAdvance - deduction);
+}
+
+double _parseDouble(dynamic value) {
+  if (value is num) return value.toDouble();
+  return double.tryParse(value?.toString() ?? '') ?? 0.0;
+}
+
+/// Total deductions (aligned with the salary table and supervisor payload).
+double reportWorkerTotalDeductions(Map<String, dynamic> w) {
+  if (w.containsKey('total_deductions')) {
+    return _parseDouble(w['total_deductions']);
+  }
+  final g = _parseDouble(w['gross_pay']);
+  final c = _parseDouble(w['computed_salary']);
+  if (g != 0.0 || c != 0.0) {
+    return (g - c).abs();
+  }
+  return _parseDouble(w['deduction']) +
+      _parseDouble(w['damages_deduction']) +
+      _parseDouble(w['sss_deduction']) +
+      _parseDouble(w['philhealth_deduction']) +
+      _parseDouble(w['pagibig_deduction']);
+}
+
+String _csvEsc(String? v) {
+  final s = v ?? '';
+  if (s.contains(',') ||
+      s.contains('"') ||
+      s.contains('\n') ||
+      s.contains('\r')) {
+    return '"${s.replaceAll('"', '""')}"';
+  }
+  return s;
+}
+
+/// Excel-friendly UTF-8 CSV with header rows + one line per worker.
+String buildSupervisorReportCsv(Map<String, dynamic> report) {
+  final sb = StringBuffer();
+  final sid = (report['submission_id'] ?? '').toString();
+  final sup = (report['supervisor_name'] ?? '').toString();
+  final project = (report['project_name'] ?? '').toString();
+  final submitted = (report['submitted_at'] ?? '').toString();
+  final salaryDate = (report['salary_date'] ?? '').toString();
+  final start = (report['report_start'] ?? '').toString();
+  final end = (report['report_end'] ?? '').toString();
+
+  sb.writeln('Field,Value');
+  sb.writeln('Submission ID,${_csvEsc(sid)}');
+  sb.writeln('Supervisor,${_csvEsc(sup)}');
+  sb.writeln('Project,${_csvEsc(project)}');
+  sb.writeln('Submitted at,${_csvEsc(submitted)}');
+  if (salaryDate.isNotEmpty) {
+    sb.writeln('Salary date,${_csvEsc(salaryDate)}');
+  }
+  sb.writeln('Report start,${_csvEsc(start)}');
+  sb.writeln('Report end,${_csvEsc(end)}');
+
+  final totals = report['totals'] is Map
+      ? Map<String, dynamic>.from(report['totals'] as Map)
+      : <String, dynamic>{};
+  sb.writeln('Total hours (summary),${totals['total_hours'] ?? ''}');
+  sb.writeln('Total OT (summary),${totals['total_ot'] ?? ''}');
+  sb.writeln('Total deductions (summary),${totals['total_deductions'] ?? ''}');
+  sb.writeln('Total computed salary (summary),${totals['total_salary'] ?? ''}');
+  sb.writeln();
+  sb.writeln(
+    'Name,Role,Days,Hours,OT hours,Hourly rate,Gross pay,Total deductions,Cash advance,Computed salary (net)',
+  );
+  final workers = (report['workers'] as List<dynamic>? ?? const [])
+      .whereType<Map>()
+      .map((w) => Map<String, dynamic>.from(w));
+  for (final m in workers) {
+    final ded = reportWorkerTotalDeductions(m);
+    sb.writeln(
+      [
+        _csvEsc(m['name']?.toString()),
+        _csvEsc(m['role']?.toString()),
+        m['day'] ?? '',
+        m['hours'] ?? '',
+        m['ot_hours'] ?? '',
+        m['hourly_rate'] ?? '',
+        m['gross_pay'] ?? '',
+        ded.toStringAsFixed(2),
+        m['cash_advance'] ?? '',
+        m['computed_salary'] ?? '',
+      ].join(','),
+    );
+  }
+  return '\uFEFF$sb';
+}
+
+String reportExportFilename(Map<String, dynamic> report) {
+  var base = (report['submission_id'] ?? '').toString();
+  if (base.isEmpty) {
+    final pid = report['project_id']?.toString() ?? 'project';
+    final t = (report['submitted_at'] ?? DateTime.now().toIso8601String())
+        .toString();
+    base = '${pid}_$t';
+  }
+  final safe = base.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+  if (safe.isEmpty) return 'supervisor_report.csv';
+  return '$safe.csv';
+}
+
+Future<void> exportSupervisorReportCsv(
+  BuildContext context,
+  Map<String, dynamic> report,
+) async {
+  final csv = buildSupervisorReportCsv(report);
+  final bytes = Uint8List.fromList(utf8.encode(csv));
+  final name = reportExportFilename(report);
+  try {
+    await downloadBytes(
+      bytes: bytes,
+      filename: name,
+      mimeType: 'text/csv; charset=utf-8',
+    );
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Exported: $name')),
+    );
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Export failed: $e')),
+      );
+    }
+  }
 }
 
 class ReportsPage extends StatefulWidget {
@@ -230,13 +361,18 @@ class _ReportsPageState extends State<ReportsPage> {
     Map<int, String> projectById = const {};
     Map<int, String> supervisorById = const {};
 
+    final projectFuture = _fetchProjectNameLookup(userId);
+    final supervisorFuture = _fetchSupervisorNameLookup(userId);
     try {
-      projectById = await _fetchProjectNameLookup(userId);
-    } catch (_) {}
-
+      projectById = await projectFuture;
+    } catch (_) {
+      projectById = const {};
+    }
     try {
-      supervisorById = await _fetchSupervisorNameLookup(userId);
-    } catch (_) {}
+      supervisorById = await supervisorFuture;
+    } catch (_) {
+      supervisorById = const {};
+    }
 
     if (projectById.isEmpty && supervisorById.isEmpty) return reports;
 
@@ -986,7 +1122,7 @@ class _ReportsPageState extends State<ReportsPage> {
         children: [
           const SizedBox(height: 16),
 
-          // Subtitle and action buttons
+          // Subtitle
           Padding(
             padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 24),
             child: Column(
@@ -1009,50 +1145,24 @@ class _ReportsPageState extends State<ReportsPage> {
                         '$selectedProjectLabel\nSupervisor: $selectedSupervisorLabel',
                         style: TextStyle(color: Colors.grey[700], fontSize: 12),
                       ),
-                      const SizedBox(height: 12),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: IconButton(
-                          onPressed: () {},
-                          icon: const Icon(
-                            Icons.download_rounded,
-                            color: Color(0xFF0C1935),
-                          ),
-                          tooltip: 'Export CSV',
-                        ),
-                      ),
                     ],
                   ),
                 ] else
-                  Row(
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Supervisor Report Summary',
-                              style: TextStyle(
-                                color: Color(0xFF0C1935),
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              '$selectedProjectLabel • Supervisor: $selectedSupervisorLabel',
-                              style: TextStyle(color: Colors.grey[700]),
-                            ),
-                          ],
+                      const Text(
+                        'Supervisor Report Summary',
+                        style: TextStyle(
+                          color: Color(0xFF0C1935),
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                      IconButton(
-                        onPressed: () {},
-                        icon: const Icon(
-                          Icons.download_rounded,
-                          color: Color(0xFF0C1935),
-                        ),
-                        tooltip: 'Export CSV',
+                      const SizedBox(height: 6),
+                      Text(
+                        '$selectedProjectLabel • Supervisor: $selectedSupervisorLabel',
+                        style: TextStyle(color: Colors.grey[700]),
                       ),
                     ],
                   ),
@@ -1199,9 +1309,7 @@ class _SubmissionDetailsPageState extends State<SubmissionDetailsPage> {
   String _workerSearchQuery = '';
 
   static const Color _bg = Color(0xFFF9FAFB);
-  static const Color _card = Colors.white;
   static const Color _textPrimary = Color(0xFF111827);
-  static const Color _textSecondary = Color(0xFF6B7280);
   static const Color _primary = Color(0xFF3B82F6);
   static const Color _success = Color(0xFF22C55E);
   static const Color _danger = Color(0xFFEF4444);
@@ -1216,6 +1324,209 @@ class _SubmissionDetailsPageState extends State<SubmissionDetailsPage> {
   double _asDouble(dynamic value) {
     if (value is num) return value.toDouble();
     return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  /// Fills available width (no horizontal scroll) via flex column widths.
+  Widget _buildCompactWorkerSalaryTable(
+    List<Map<String, dynamic>> workers,
+    NumberFormat money,
+  ) {
+    const headStyle = TextStyle(
+      fontFamily: 'Inter',
+      fontSize: 10.5,
+      fontWeight: FontWeight.w700,
+      color: Color(0xFF374151),
+    );
+    const dataStyle = TextStyle(
+      fontFamily: 'Inter',
+      fontSize: 11,
+      color: Color(0xFF111827),
+    );
+    const dataNetStyle = TextStyle(
+      fontFamily: 'Inter',
+      fontSize: 11,
+      fontWeight: FontWeight.w700,
+      color: _success,
+    );
+
+    Widget th(String label, {bool right = false}) {
+      return Container(
+        color: const Color(0xFFF3F4F6),
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+        alignment: right ? Alignment.centerRight : Alignment.centerLeft,
+        child: Text(
+          label,
+          style: headStyle,
+          textAlign: right ? TextAlign.right : TextAlign.left,
+        ),
+      );
+    }
+
+    Widget td(Widget child, {required Color background}) {
+      return Container(
+        color: background,
+        padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 2),
+        child: child,
+      );
+    }
+
+    /// Keeps long peso strings inside narrow flex columns.
+    Widget tcMoney(String s, {required Color background, TextStyle? textStyle}) {
+      return Container(
+        color: background,
+        padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 1),
+        alignment: Alignment.centerRight,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerRight,
+          child: Text(
+            s,
+            style: textStyle ?? dataStyle,
+            textAlign: TextAlign.right,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      );
+    }
+
+    return Table(
+      columnWidths: const {
+        0: FlexColumnWidth(1.85),
+        1: FlexColumnWidth(0.75),
+        2: FlexColumnWidth(0.28),
+        3: FlexColumnWidth(0.32),
+        4: FlexColumnWidth(0.28),
+        5: FlexColumnWidth(0.82),
+        6: FlexColumnWidth(0.82),
+        7: FlexColumnWidth(0.8),
+        8: FlexColumnWidth(0.86),
+      },
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      border: TableBorder(
+        horizontalInside: BorderSide(
+          color: Colors.grey.shade200,
+          width: 0.5,
+        ),
+        top: BorderSide(color: Colors.grey.shade200, width: 0.5),
+        bottom: BorderSide(color: Colors.grey.shade200, width: 0.5),
+      ),
+      children: [
+        TableRow(
+          children: [
+            th('Name'),
+            th('Role'),
+            th('D', right: true),
+            th('H', right: true),
+            th('OT', right: true),
+            th('Gross', right: true),
+            th('Ded', right: true),
+            th('Adv', right: true),
+            th('Net', right: true),
+          ],
+        ),
+        ...workers.asMap().entries.map((e) {
+          final index = e.key;
+          final worker = e.value;
+          final bg = index.isEven
+              ? const Color(0xFFF9FAFB)
+              : Colors.white;
+          final workerName = (worker['name'] ?? 'Unknown Worker').toString();
+          final workerRole = (worker['role'] ?? 'Worker').toString();
+          final workerDays =
+              int.tryParse((worker['day'] ?? '0').toString()) ?? 0;
+          final workerHours = _asDouble(worker['hours']);
+          final workerOtHours = _asDouble(worker['ot_hours']);
+          final workerGross = _asDouble(worker['gross_pay']);
+          final workerComputedSalary = _asDouble(worker['computed_salary']);
+          final workerCashAdvance = _asDouble(worker['cash_advance']);
+          final workerDeduct = reportWorkerTotalDeductions(worker);
+          final rColor = _roleBadgeText(workerRole);
+          final rBg = _roleBadgeBg(workerRole);
+
+          return TableRow(
+            children: [
+              td(
+                Text(
+                  workerName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: dataStyle.copyWith(fontWeight: FontWeight.w600),
+                ),
+                background: bg,
+              ),
+              td(
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: rBg,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    workerRole,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w600,
+                      color: rColor,
+                    ),
+                  ),
+                ),
+                background: bg,
+              ),
+              td(
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    '$workerDays',
+                    style: dataStyle,
+                    textAlign: TextAlign.right,
+                  ),
+                ),
+                background: bg,
+              ),
+              td(
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    workerHours.toStringAsFixed(1),
+                    style: dataStyle,
+                    textAlign: TextAlign.right,
+                  ),
+                ),
+                background: bg,
+              ),
+              td(
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    workerOtHours.toStringAsFixed(1),
+                    style: dataStyle,
+                    textAlign: TextAlign.right,
+                  ),
+                ),
+                background: bg,
+              ),
+              tcMoney(money.format(workerGross), background: bg),
+              tcMoney(
+                money.format(workerDeduct),
+                background: bg,
+              ),
+              tcMoney(
+                money.format(workerCashAdvance),
+                background: bg,
+              ),
+              tcMoney(
+                money.format(workerComputedSalary),
+                background: bg,
+                textStyle: dataNetStyle,
+              ),
+            ],
+          );
+        }),
+      ],
+    );
   }
 
   String _readText(Map<String, dynamic> map, List<String> keys, String fallback) {
@@ -1237,12 +1548,6 @@ class _SubmissionDetailsPageState extends State<SubmissionDetailsPage> {
   DateTime? _parseSubmittedAt() {
     final raw = (widget.report['submitted_at'] ?? '').toString();
     return DateTime.tryParse(raw);
-  }
-
-  int _gridColumns(double width, {required int mobile, required int tablet, required int desktop}) {
-    if (width >= 1200) return desktop;
-    if (width >= 700) return tablet;
-    return mobile;
   }
 
   Color _roleBadgeBg(String role) {
@@ -1331,21 +1636,6 @@ class _SubmissionDetailsPageState extends State<SubmissionDetailsPage> {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final horizontalPadding = constraints.maxWidth >= 900 ? 24.0 : 16.0;
-          final summaryColumns = _gridColumns(
-            constraints.maxWidth,
-            mobile: 1,
-            tablet: 2,
-            desktop: 4,
-          );
-          final workerColumns = _gridColumns(
-            constraints.maxWidth,
-            mobile: 1,
-            tablet: 2,
-            desktop: 3,
-          );
-          final workerCardAspectRatio = workerColumns == 1
-              ? 3.3
-              : (workerColumns == 2 ? 2.45 : 2.15);
 
           return Container(
             color: _bg,
@@ -1374,6 +1664,17 @@ class _SubmissionDetailsPageState extends State<SubmissionDetailsPage> {
                             fontWeight: FontWeight.w700,
                             color: _textPrimary,
                           ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Export report (CSV)',
+                        onPressed: () => exportSupervisorReportCsv(
+                          context,
+                          widget.report,
+                        ),
+                        icon: const Icon(
+                          Icons.download_rounded,
+                          color: _textPrimary,
                         ),
                       ),
                     ],
@@ -1495,7 +1796,7 @@ class _SubmissionDetailsPageState extends State<SubmissionDetailsPage> {
                           children: [
                             const Expanded(
                               child: Text(
-                                'Workers List',
+                                'Worker salaries',
                                 style: TextStyle(
                                   fontFamily: 'Inter',
                                   fontSize: 19,
@@ -1505,8 +1806,8 @@ class _SubmissionDetailsPageState extends State<SubmissionDetailsPage> {
                               ),
                             ),
                             SizedBox(
-                              width: constraints.maxWidth >= 700 ? 220 : 170,
-                              height: 36,
+                              width: constraints.maxWidth >= 700 ? 200 : 150,
+                              height: 32,
                               child: TextField(
                                 controller: _workerSearchController,
                                 onChanged: (value) {
@@ -1514,15 +1815,17 @@ class _SubmissionDetailsPageState extends State<SubmissionDetailsPage> {
                                     _workerSearchQuery = value;
                                   });
                                 },
+                                style: const TextStyle(fontSize: 12.5),
                                 decoration: InputDecoration(
-                                  hintText: 'Search workers...',
-                                  hintStyle: const TextStyle(fontSize: 13),
-                                  prefixIcon: const Icon(Icons.search, size: 18),
+                                  hintText: 'Search...',
+                                  hintStyle: const TextStyle(fontSize: 12.5),
+                                  prefixIcon: const Icon(Icons.search, size: 16),
+                                  isDense: true,
                                   filled: true,
                                   fillColor: Colors.grey[100],
                                   contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 8,
+                                    horizontal: 8,
+                                    vertical: 4,
                                   ),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(30),
@@ -1556,142 +1859,7 @@ class _SubmissionDetailsPageState extends State<SubmissionDetailsPage> {
                             ),
                           )
                         else
-                          GridView.count(
-                            crossAxisCount: workerColumns,
-                            crossAxisSpacing: 8,
-                            mainAxisSpacing: 8,
-                            childAspectRatio: 5.8, // even more compact
-                            physics: const NeverScrollableScrollPhysics(),
-                            shrinkWrap: true,
-                            children: filteredWorkers.map((worker) {
-                              final workerName = (worker['name'] ?? 'Unknown Worker').toString();
-                              final workerRole = (worker['role'] ?? 'Worker').toString();
-                              final workerDays = int.tryParse((worker['day'] ?? '0').toString()) ?? 0;
-                              final workerHours = _asDouble(worker['hours']);
-                              final workerOtHours = _asDouble(worker['ot_hours']);
-                              final workerComputedSalary = _asDouble(worker['computed_salary']);
-                              final workerDeduction = _asDouble(worker['deduction']);
-                              final workerCashAdvance = _asDouble(worker['cash_advance']);
-                              final roleColor = _roleBadgeText(workerRole);
-                              final roleBg = _roleBadgeBg(workerRole);
-
-                              return _HoverSurface(
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                                  decoration: BoxDecoration(
-                                    color: _card,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: const Color(0xFFE5E7EB),
-                                    ),
-                                    boxShadow: const [
-                                      BoxShadow(
-                                        color: Color.fromRGBO(0, 0, 0, 0.02),
-                                        blurRadius: 3,
-                                        offset: Offset(0, 1),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.center,
-                                    children: [
-                                      // Name & Role (role under name)
-                                      Expanded(
-                                        flex: 2,
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Text(
-                                              workerName,
-                                              style: const TextStyle(
-                                                fontFamily: 'Inter',
-                                                fontSize: 13.5,
-                                                fontWeight: FontWeight.w700,
-                                                color: _textPrimary,
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: roleBg,
-                                                borderRadius: BorderRadius.circular(999),
-                                              ),
-                                              child: Text(
-                                                workerRole,
-                                                style: TextStyle(
-                                                  fontFamily: 'Inter',
-                                                  fontSize: 10.5,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: roleColor,
-                                                ),
-                                              ),
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Row(
-                                              children: [
-                                                _InlineInfo(icon: Icons.calendar_today_outlined, text: '${workerDays}d'),
-                                                const SizedBox(width: 7),
-                                                _InlineInfo(icon: Icons.schedule, text: '${workerHours.toStringAsFixed(1)}h'),
-                                                if (workerOtHours > 0) ...[
-                                                  const SizedBox(width: 7),
-                                                  _InlineInfo(icon: Icons.bolt, text: '${workerOtHours.toStringAsFixed(1)} OT'),
-                                                ],
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      // Financials
-                                      Expanded(
-                                        flex: 2,
-                                        child: Row(
-                                          mainAxisAlignment: MainAxisAlignment.end,
-                                          crossAxisAlignment: CrossAxisAlignment.center,
-                                          children: [
-                                            Column(
-                                              crossAxisAlignment: CrossAxisAlignment.end,
-                                              mainAxisAlignment: MainAxisAlignment.center,
-                                              children: [
-                                                Text(
-                                                  'Deduct: ${money.format(workerDeduction)}',
-                                                  style: const TextStyle(
-                                                    fontFamily: 'Inter',
-                                                    fontSize: 11.5,
-                                                    color: _textSecondary,
-                                                  ),
-                                                ),
-                                                Text(
-                                                  'Advance: ${money.format(workerCashAdvance)}',
-                                                  style: const TextStyle(
-                                                    fontFamily: 'Inter',
-                                                    fontSize: 11.5,
-                                                    color: _textSecondary,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Text(
-                                              money.format(workerComputedSalary),
-                                              style: const TextStyle(
-                                                fontFamily: 'Inter',
-                                                fontSize: 15.5,
-                                                fontWeight: FontWeight.w800,
-                                                color: _success,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
+                          _buildCompactWorkerSalaryTable(filteredWorkers, money),
                       ],
                     ),
                   ),
@@ -1841,63 +2009,6 @@ class _StatCard extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _WorkerLine extends StatelessWidget {
-  const _WorkerLine({required this.icon, required this.text});
-
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        children: [
-          Icon(icon, size: 14, color: const Color(0xFF6B7280)),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 13,
-                color: Color(0xFF374151),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _InlineInfo extends StatelessWidget {
-  const _InlineInfo({required this.icon, required this.text});
-
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 13, color: const Color(0xFF6B7280)),
-        const SizedBox(width: 4),
-        Text(
-          text,
-          style: const TextStyle(
-            fontFamily: 'Inter',
-            fontSize: 12,
-            color: Color(0xFF374151),
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
     );
   }
 }

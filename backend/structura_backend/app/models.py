@@ -353,12 +353,22 @@ class Project(models.Model):
         return False
 
     def update_status_based_on_progress(self):
-        """Automatically update status to Completed if progress reaches 100%"""
+        """
+        Set status to Completed when all subtasks are done; if progress drops
+        below 100% (e.g. subtask reverted to pending), clear Completed back to
+        Active and re-apply overdue rules.
+        """
         progress = self.get_progress()
         if progress >= 1.0 and self.status != 'Completed':
             self.status = 'Completed'
             self.on_hold_reason = ''
             self.save(update_fields=['status', 'on_hold_reason'])
+            return True
+        if progress < 1.0 and self.status == 'Completed':
+            self.status = 'Active'
+            self.on_hold_reason = ''
+            self.save(update_fields=['status', 'on_hold_reason'])
+            self.refresh_overdue_status()
             return True
         return False
 
@@ -485,6 +495,8 @@ class FieldWorker(models.Model):
     damages_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     damages_schedule = models.CharField(max_length=50, null=True, blank=True)
     damages_deduction_per_salary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    # When true, repair cost is paid by the project; worker is still the attributed party, no salary deduction.
+    damages_pm_covers = models.BooleanField(default=False)
 
     # Weekly salary and deduction snapshot values.
     weekly_salary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
@@ -511,6 +523,67 @@ class FieldWorker(models.Model):
     def __str__(self):
         project_name = self.project_id.project_name if self.project_id else "Unassigned"
         return f"{self.first_name} {self.last_name} - {project_name}"
+
+    def recompute_damages_aggregates(self):
+        """Sync legacy flat `damages_*` fields from related `damage_entries` (sums / labels)."""
+        from decimal import Decimal
+
+        entries = list(self.damage_entries.all().order_by('created_at', 'id'))
+        if not entries:
+            return
+
+        def dec(v, default=Decimal('0')):
+            if v is None:
+                return default
+            return v if isinstance(v, Decimal) else Decimal(str(v))
+
+        total_price = sum(dec(e.price) for e in entries)
+        total_ded = sum(
+            dec(e.deduction_per_salary) for e in entries if not e.pm_covers
+        )
+        n = len(entries)
+        if n == 1:
+            e0 = entries[0]
+            self.damages_category = e0.category
+            self.damages_item = e0.item
+            self.damages_price = e0.price
+            self.damages_schedule = e0.schedule
+            if e0.pm_covers:
+                self.damages_deduction_per_salary = Decimal('0')
+            else:
+                d0 = e0.deduction_per_salary
+                self.damages_deduction_per_salary = (
+                    d0 if d0 is not None else Decimal('0')
+                )
+            self.damages_pm_covers = e0.pm_covers
+        else:
+            self.damages_category = 'Multiple'
+            self.damages_item = f'{n} items'
+            self.damages_price = total_price
+            self.damages_deduction_per_salary = total_ded
+            self.damages_pm_covers = all(e.pm_covers for e in entries)
+            self.damages_schedule = 'Payment every Salary'
+
+
+class FieldWorkerDamage(models.Model):
+    """One reported damage line per field worker; multiple lines supported."""
+
+    id = models.AutoField(primary_key=True)
+    field_worker = models.ForeignKey(
+        'FieldWorker',
+        on_delete=models.CASCADE,
+        related_name='damage_entries',
+    )
+    category = models.CharField(max_length=50, null=True, blank=True)
+    item = models.CharField(max_length=255, null=True, blank=True)
+    price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    schedule = models.CharField(max_length=50, null=True, blank=True)
+    deduction_per_salary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    pm_covers = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at', 'id']
 
 
 # Client Model
@@ -689,6 +762,47 @@ class Subtask(models.Model):
 
     def __str__(self):
         return f"{self.title} - {self.phase.phase_name}"
+
+
+class SubtaskCompletionRevertRequest(models.Model):
+    """Supervisor asks PM to authorize moving a completed subtask back to not complete."""
+
+    STATUS_PENDING = 'pending'
+    STATUS_APPROVED = 'approved'
+    STATUS_DENIED = 'denied'
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_APPROVED, 'Approved'),
+        (STATUS_DENIED, 'Denied'),
+    ]
+
+    revert_request_id = models.AutoField(primary_key=True)
+    subtask = models.ForeignKey(
+        'Subtask',
+        on_delete=models.CASCADE,
+        related_name='completion_revert_requests',
+    )
+    supervisor = models.ForeignKey(
+        'Supervisors',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='subtask_completion_revert_requests',
+    )
+    reason = models.TextField()
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'Revert #{self.revert_request_id} ({self.status}) for {self.subtask_id}'
 
 
 class SubtaskPhoto(models.Model):
@@ -972,7 +1086,17 @@ class PhaseMaterialPlan(models.Model):
         on_delete=models.CASCADE,
         related_name='phase_plans',
     )
+    subtask = models.ForeignKey(
+        'Subtask',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='material_plans',
+    )
     planned_quantity = models.PositiveIntegerField(default=0)
+    # Tracks whether this plan's quantity has already been reserved
+    # from InventoryItem.quantity to avoid accidental double-deduction.
+    inventory_reserved = models.BooleanField(default=False)
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default=STATUS_ACTIVE,
     )
@@ -1002,3 +1126,43 @@ class PhaseMaterialPlan(models.Model):
 
     def __str__(self):
         return f"{self.phase.phase_name} plan: {self.inventory_item.name} x{self.planned_quantity}"
+
+
+class InAppNotification(models.Model):
+    """Generic in-app row for PM / supervisor; payload holds deep-link data as JSON."""
+
+    KIND_PM = 'pm'
+    KIND_SUPERVISOR = 'supervisor'
+    RECIPIENT_KIND_CHOICES = [
+        (KIND_SUPERVISOR, 'Supervisor'),
+        (KIND_PM, 'Project Manager'),
+    ]
+
+    notification_id = models.AutoField(primary_key=True)
+    recipient_kind = models.CharField(max_length=20, choices=RECIPIENT_KIND_CHOICES)
+    kind = models.CharField(max_length=64, db_index=True)
+    title = models.CharField(max_length=255)
+    body = models.TextField(blank=True, default='')
+    payload = models.JSONField(blank=True, default=dict)
+    read_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    recipient_supervisor = models.ForeignKey(
+        'Supervisors',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='in_app_notifications',
+    )
+    recipient_user = models.ForeignKey(
+        'User',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='in_app_notifications',
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.title} ({self.kind})"

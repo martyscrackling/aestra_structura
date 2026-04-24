@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../project_details_page.dart';
+import '../phase_subtask_models.dart';
 import '../../services/app_config.dart';
 import '../../services/subscription_helper.dart';
 import '../../services/auth_service.dart';
@@ -25,6 +25,20 @@ int _idFromJsonField(dynamic v) {
     }
   }
   return 0;
+}
+
+TimeOfDay? _timeOfDayFromAssignmentField(dynamic v) {
+  if (v == null) return null;
+  final s = v.toString().trim();
+  final parts = s.split(':');
+  if (parts.length < 2) return null;
+  var h = int.tryParse(parts[0]) ?? 0;
+  var m = int.tryParse(parts[1].split('.').first) ?? 0;
+  if (h < 0) h = 0;
+  if (h > 23) h = 23;
+  if (m < 0) m = 0;
+  if (m > 59) m = 59;
+  return TimeOfDay(hour: h, minute: m);
 }
 
 class Worker {
@@ -143,6 +157,9 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
 
       if (response.statusCode == 200) {
         final Map<int, String> otherSubtaskByWorker = {};
+        final Set<int> preSelectedForThisSubtask = {};
+        TimeOfDay? existingShiftStart;
+        TimeOfDay? existingShiftEnd;
         if (assignResponse.statusCode == 200) {
           try {
             final decodedA = jsonDecode(assignResponse.body);
@@ -155,8 +172,23 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
             for (final row in listA) {
               if (row is! Map<String, dynamic>) continue;
               final stId = _idFromJsonField(row['subtask']);
-              if (stId == 0 || stId == currentSubId) continue;
               final fwId = _idFromJsonField(row['field_worker']);
+              if (stId == 0) continue;
+
+              if (stId == currentSubId) {
+                if (fwId != 0) {
+                  preSelectedForThisSubtask.add(fwId);
+                  if (existingShiftStart == null) {
+                    final a = _timeOfDayFromAssignmentField(row['shift_start']);
+                    final b = _timeOfDayFromAssignmentField(row['shift_end']);
+                    if (a != null && b != null) {
+                      existingShiftStart = a;
+                      existingShiftEnd = b;
+                    }
+                  }
+                }
+                continue;
+              }
               if (fwId == 0) continue;
               if (otherSubtaskByWorker.containsKey(fwId)) continue;
               String title = 'Another subtask';
@@ -185,6 +217,11 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
         print('📊 Field workers fetched: ${parsed.length}');
 
         setState(() {
+          _selectedWorkerIds = Set<int>.from(preSelectedForThisSubtask);
+          if (existingShiftStart != null && existingShiftEnd != null) {
+            _shiftStartTime = existingShiftStart;
+            _shiftEndTime = existingShiftEnd;
+          }
           _availableWorkers = parsed
               .map((json) {
                 final rawId = json['fieldworker_id'] ?? json['id'];
@@ -344,10 +381,14 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
     }
 
     try {
-      // First, clear existing assignments for this subtask
+      final userId = AuthService().currentUser?['user_id'];
+      final userQ = userId != null ? 'user_id=$userId&' : '';
+
+      // DRF list URLs do not support DELETE; we must use the `for-subtask` action
+      // so old rows are removed before re-inserting (avoids unique 400s).
       final deleteResponse = await http.delete(
         AppConfig.apiUri(
-          'subtask-assignments/?subtask_id=${widget.subtask.subtaskId}',
+          'subtask-assignments/for-subtask/?${userQ}subtask_id=${widget.subtask.subtaskId}',
         ),
       );
 
@@ -355,6 +396,18 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
 
       // Check for subscription expiry on delete
       if (SubscriptionHelper.handleResponse(context, deleteResponse)) {
+        return;
+      }
+
+      if (deleteResponse.statusCode < 200 || deleteResponse.statusCode >= 300) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Could not clear previous workers (${deleteResponse.statusCode}).',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
         return;
       }
 
@@ -370,8 +423,11 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
 
       print('📤 Saving assignments: $assignments');
 
+      final postPath = userId != null
+          ? 'subtask-assignments/?user_id=$userId'
+          : 'subtask-assignments/';
       final response = await http.post(
-        AppConfig.apiUri('subtask-assignments/'),
+        AppConfig.apiUri(postPath),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(assignments),
       );
@@ -386,7 +442,8 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
       print('✅ Assignment response: ${response.statusCode}');
       print('✅ Assignment body: ${response.body}');
 
-      if (response.statusCode == 201) {
+      final ok = response.statusCode >= 200 && response.statusCode < 300;
+      if (ok) {
         Navigator.pop(context, _selectedWorkerIds.toList());
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -397,9 +454,15 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
           ),
         );
       } else {
+        var detail = response.body;
+        if (detail.length > 180) {
+          detail = '${detail.substring(0, 180)}…';
+        }
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to assign workers'),
+          SnackBar(
+            content: Text(
+              'Failed to assign workers (HTTP ${response.statusCode}) $detail',
+            ),
             backgroundColor: Colors.red,
           ),
         );

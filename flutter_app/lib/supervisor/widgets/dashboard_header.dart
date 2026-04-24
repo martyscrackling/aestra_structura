@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import '../../services/app_config.dart';
 import '../../services/auth_service.dart';
 import '../../services/app_theme_tokens.dart';
+import '../supervisor_inbox_nav.dart';
 import 'supervisor_user_badge.dart';
 
 class DashboardHeader extends StatefulWidget {
@@ -170,15 +171,17 @@ class _SupervisorNotificationMenu extends StatefulWidget {
 class _SupervisorNotificationMenuState
     extends State<_SupervisorNotificationMenu> {
   static const Duration _cacheTtl = Duration(seconds: 45);
-  static final Map<int, _SupervisorNotifCacheEntry> _cacheByProject =
+  static const int _kViewAllValue = 1;
+  static const int _kInboxValueBase = 1000000;
+  static final Map<int, _SupervisorNotifCacheEntry> _cacheBySupervisor =
       <int, _SupervisorNotifCacheEntry>{};
-  static final Map<int, Future<_SupervisorNotifSnapshot>> _inFlightByProject =
+  static final Map<int, Future<_SupervisorNotifSnapshot>> _inFlightBySupervisor =
       <int, Future<_SupervisorNotifSnapshot>>{};
 
   bool _loading = true;
   String? _error;
   int _badgeCount = 0;
-  List<_SupervisorUiNotification> _items = const [];
+  List<_SupervisorInboxRow> _inboxPreview = const [];
 
   @override
   void initState() {
@@ -186,25 +189,24 @@ class _SupervisorNotificationMenuState
     _refresh();
   }
 
+  static void clearSharedCache() {
+    _cacheBySupervisor.clear();
+  }
+
   Future<void> _refresh() async {
     try {
-      final auth = AuthService();
-      final projectIdRaw = auth.currentUser?['project_id'];
-      final projectId = projectIdRaw is int
-          ? projectIdRaw
-          : int.tryParse(projectIdRaw?.toString() ?? '');
-
-      if (projectId == null) {
+      final sid = supervisorIdFromAuth();
+      if (sid == null) {
         if (!mounted) return;
         setState(() {
           _loading = false;
           _badgeCount = 0;
-          _items = const [];
+          _inboxPreview = const [];
         });
         return;
       }
 
-      final cached = _cacheByProject[projectId];
+      final cached = _cacheBySupervisor[sid];
       if (cached != null &&
           DateTime.now().difference(cached.cachedAt) <= _cacheTtl) {
         if (!mounted) return;
@@ -212,7 +214,7 @@ class _SupervisorNotificationMenuState
           _loading = false;
           _error = null;
           _badgeCount = cached.snapshot.badgeCount;
-          _items = cached.snapshot.items;
+          _inboxPreview = cached.snapshot.inboxPreview;
         });
         return;
       }
@@ -224,19 +226,19 @@ class _SupervisorNotificationMenuState
         });
       }
 
-      final inFlight = _inFlightByProject[projectId];
+      final inFlight = _inFlightBySupervisor[sid];
       final Future<_SupervisorNotifSnapshot> future;
       if (inFlight != null) {
         future = inFlight;
       } else {
-        final created = _fetchNotifications(projectId: projectId);
-        _inFlightByProject[projectId] = created;
+        final created = _fetchInbox(supervisorId: sid);
+        _inFlightBySupervisor[sid] = created;
         future = created;
       }
 
       final snapshot = await future;
 
-      _cacheByProject[projectId] = _SupervisorNotifCacheEntry(
+      _cacheBySupervisor[sid] = _SupervisorNotifCacheEntry(
         snapshot: snapshot,
         cachedAt: DateTime.now(),
       );
@@ -246,83 +248,70 @@ class _SupervisorNotificationMenuState
         _loading = false;
         _error = null;
         _badgeCount = snapshot.badgeCount;
-        _items = snapshot.items;
+        _inboxPreview = snapshot.inboxPreview;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
         _badgeCount = 0;
-        _items = const [];
+        _inboxPreview = const [];
         _error = e.toString();
       });
     } finally {
-      final auth = AuthService();
-      final projectIdRaw = auth.currentUser?['project_id'];
-      final projectId = projectIdRaw is int
-          ? projectIdRaw
-          : int.tryParse(projectIdRaw?.toString() ?? '');
-      if (projectId != null) {
-        _inFlightByProject.remove(projectId);
+      final sid = supervisorIdFromAuth();
+      if (sid != null) {
+        _inFlightBySupervisor.remove(sid);
       }
     }
   }
 
-  Future<_SupervisorNotifSnapshot> _fetchNotifications({
-    required int projectId,
-  }) async {
+  Future<_SupervisorNotifSnapshot> _fetchInbox({required int supervisorId}) async {
     final response = await http.get(
-      AppConfig.apiUri('subtasks/?project_id=$projectId'),
+      AppConfig.apiUri('supervisor/inbox/?supervisor_id=$supervisorId'),
     );
-
     if (response.statusCode != 200) {
-      throw Exception('Failed to load: ${response.statusCode}');
+      throw Exception('Failed to load inbox: ${response.statusCode}');
     }
-
     final decoded = jsonDecode(response.body);
-    final rawList = decoded is List
-        ? decoded
-        : (decoded is Map<String, dynamic> && decoded['results'] is List
-              ? decoded['results'] as List<dynamic>
-              : const <dynamic>[]);
-
-    final all = rawList.whereType<Map<String, dynamic>>().toList();
-    final open = all
-        .where((t) => (t['status']?.toString().toLowerCase() ?? '') != 'completed')
-        .toList();
-
-    open.sort((a, b) {
-      final aUpdated = (a['updated_at'] as String?) ?? '';
-      final bUpdated = (b['updated_at'] as String?) ?? '';
-      return bUpdated.compareTo(aUpdated);
-    });
-
-    final items = <_SupervisorUiNotification>[];
-    for (final t in open.take(3)) {
-      final title = (t['title'] as String?) ?? 'Untitled task';
-      final status = (t['status'] as String?) ?? 'pending';
-      items.add(
-        _SupervisorUiNotification(
-          title: title,
+    if (decoded is! Map) {
+      throw Exception('Invalid inbox response');
+    }
+    if (decoded['success'] != true) {
+      throw Exception(decoded['message']?.toString() ?? 'Inbox request failed');
+    }
+    final inbox = (decoded['inbox'] as Map<String, dynamic>?) ?? {};
+    final unread = (inbox['unread_count'] as num?)?.toInt() ?? 0;
+    final raw = (inbox['items'] as List<dynamic>?) ?? const [];
+    final rows = <_SupervisorInboxRow>[];
+    for (final e in raw) {
+      if (e is! Map) continue;
+      final m = Map<String, dynamic>.from(e);
+      final nid = (m['notification_id'] as num?)?.toInt() ?? 0;
+      if (nid == 0) continue;
+      rows.add(
+        _SupervisorInboxRow(
+          notificationId: nid,
+          title: (m['title'] ?? '').toString(),
+          body: (m['body'] ?? '').toString(),
+          read: m['read'] as bool? ?? true,
           time: _relativeTime(
-            DateTime.tryParse((t['updated_at'] as String?) ?? ''),
+            DateTime.tryParse((m['created_at'] as String?) ?? ''),
           ),
-          color: _statusColor(status),
+          target: m['target']?.toString(),
+          projectId: parseInboxId(m['project_id']),
+          phaseId: parseInboxId(m['phase_id']),
+          subtaskId: parseInboxId(m['subtask_id']),
+          planId: parseInboxId(m['plan_id']),
+          itemId: parseInboxId(m['item_id']),
+          unitId: parseInboxId(m['unit_id']),
         ),
       );
     }
-
-    return _SupervisorNotifSnapshot(badgeCount: open.length, items: items);
-  }
-
-  Color _statusColor(String statusRaw) {
-    final status = statusRaw.toLowerCase();
-    return switch (status) {
-      'in_progress' || 'in progress' => const Color(0xFF2563EB),
-      'assigned' => const Color(0xFFFF7A18),
-      'pending' => const Color(0xFF6B7280),
-      _ => const Color(0xFF6B7280),
-    };
+    return _SupervisorNotifSnapshot(
+      badgeCount: unread,
+      inboxPreview: rows.take(6).toList(growable: false),
+    );
   }
 
   String _relativeTime(DateTime? dateTime) {
@@ -344,11 +333,35 @@ class _SupervisorNotificationMenuState
       tooltip: 'Notifications',
       color: Colors.white,
       offset: const Offset(0, 12),
+      constraints: const BoxConstraints(minWidth: 300),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       onOpened: _refresh,
       onSelected: (value) {
-        if (value == 1) {
-          context.go('/supervisor/reports');
+        if (value == _kViewAllValue) {
+          context.go('/supervisor/notifications');
+          return;
+        }
+        if (value >= _kInboxValueBase) {
+          final nid = value - _kInboxValueBase;
+          for (final r in _inboxPreview) {
+            if (r.notificationId == nid) {
+              openSupervisorInboxNotification(
+                context,
+                notificationId: r.notificationId,
+                target: r.target,
+                projectId: r.projectId,
+                phaseId: r.phaseId,
+                subtaskId: r.subtaskId,
+                planId: r.planId,
+                itemId: r.itemId,
+                unitId: r.unitId,
+                markRead: true,
+              );
+              clearSharedCache();
+              _refresh();
+              return;
+            }
+          }
         }
       },
       itemBuilder: (context) {
@@ -357,10 +370,10 @@ class _SupervisorNotificationMenuState
             : _error != null
             ? 'Failed to load'
             : count == 0
-            ? 'No updates'
-            : '$count task${count == 1 ? '' : 's'} need attention';
+            ? 'No unread'
+            : '$count unread';
 
-        return [
+        final entries = <PopupMenuEntry<int>>[
           PopupMenuItem(
             enabled: false,
             child: Column(
@@ -386,46 +399,59 @@ class _SupervisorNotificationMenuState
             ),
           ),
           const PopupMenuDivider(),
-          PopupMenuItem(
-            enabled: false,
-            child: _loading
-                ? const Text(
-                    'Loading…',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
-                  )
-                : _error != null
-                ? const Text(
-                    'Unable to load notifications.',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
-                  )
-                : _items.isEmpty
-                ? const Text(
-                    'No notifications.',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (final n in _items) ...[
-                        _SupervisorNotificationTile(
-                          title: n.title,
-                          time: n.time,
-                          color: n.color,
-                        ),
-                        if (n != _items.last) const SizedBox(height: 12),
-                      ],
-                    ],
-                  ),
-          ),
+        ];
+
+        if (_loading) {
+          entries.add(
+            const PopupMenuItem(
+              enabled: false,
+              child: Text(
+                'Loading…',
+                style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+              ),
+            ),
+          );
+        } else if (_error != null) {
+          entries.add(
+            const PopupMenuItem(
+              enabled: false,
+              child: Text(
+                'Unable to load notifications.',
+                style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+              ),
+            ),
+          );
+        } else if (_inboxPreview.isEmpty) {
+          entries.add(
+            const PopupMenuItem(
+              enabled: false,
+              child: Text(
+                'No messages from your PM yet.',
+                style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+              ),
+            ),
+          );
+        } else {
+          for (final r in _inboxPreview) {
+            entries.add(
+              PopupMenuItem<int>(
+                value: _kInboxValueBase + r.notificationId,
+                child: _SupervisorInboxMenuTile(row: r),
+              ),
+            );
+          }
+        }
+
+        entries.addAll([
           const PopupMenuDivider(),
-          PopupMenuItem(
-            value: 1,
+          const PopupMenuItem(
+            value: _kViewAllValue,
             child: Row(
-              children: const [
+              children: [
                 Icon(Icons.open_in_new, size: 16, color: Color(0xFF2563EB)),
                 SizedBox(width: 8),
                 Text(
-                  'View reports',
+                  'View all notifications',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -435,7 +461,9 @@ class _SupervisorNotificationMenuState
               ],
             ),
           ),
-        ];
+        ]);
+
+        return entries;
       },
       child: Stack(
         clipBehavior: Clip.none,
@@ -473,25 +501,43 @@ class _SupervisorNotificationMenuState
   }
 }
 
-class _SupervisorUiNotification {
-  final String title;
-  final String time;
-  final Color color;
-
-  const _SupervisorUiNotification({
+class _SupervisorInboxRow {
+  const _SupervisorInboxRow({
+    required this.notificationId,
     required this.title,
+    required this.body,
+    required this.read,
     required this.time,
-    required this.color,
+    this.target,
+    this.projectId,
+    this.phaseId,
+    this.subtaskId,
+    this.planId,
+    this.itemId,
+    this.unitId,
   });
+
+  final int notificationId;
+  final String title;
+  final String body;
+  final bool read;
+  final String time;
+  final String? target;
+  final int? projectId;
+  final int? phaseId;
+  final int? subtaskId;
+  final int? planId;
+  final int? itemId;
+  final int? unitId;
 }
 
 class _SupervisorNotifSnapshot {
   final int badgeCount;
-  final List<_SupervisorUiNotification> items;
+  final List<_SupervisorInboxRow> inboxPreview;
 
   const _SupervisorNotifSnapshot({
     required this.badgeCount,
-    required this.items,
+    required this.inboxPreview,
   });
 }
 
@@ -505,50 +551,64 @@ class _SupervisorNotifCacheEntry {
   });
 }
 
-class _SupervisorNotificationTile extends StatelessWidget {
-  const _SupervisorNotificationTile({
-    required this.title,
-    required this.time,
-    required this.color,
-  });
+class _SupervisorInboxMenuTile extends StatelessWidget {
+  const _SupervisorInboxMenuTile({required this.row});
 
-  final String title;
-  final String time;
-  final Color color;
+  final _SupervisorInboxRow row;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          margin: const EdgeInsets.only(top: 4),
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 280),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF0C1935),
+              Expanded(
+                child: Text(
+                  row.title.isEmpty ? 'Notification' : row.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF0C1935),
+                  ),
                 ),
               ),
-              const SizedBox(height: 2),
-              Text(
-                time,
-                style: const TextStyle(fontSize: 11, color: Color(0xFF6B7280)),
-              ),
+              if (!row.read) ...[
+                const SizedBox(width: 6),
+                Container(
+                  width: 8,
+                  height: 8,
+                  margin: const EdgeInsets.only(top: 4),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF2563EB),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ],
             ],
           ),
-        ),
-      ],
+          const SizedBox(height: 2),
+          Text(
+            row.time,
+            style: const TextStyle(fontSize: 11, color: Color(0xFF6B7280)),
+          ),
+          if (row.body.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              row.body,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11, color: Color(0xFF4B5563)),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

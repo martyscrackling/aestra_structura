@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'widgets/sidebar.dart';
 import 'widgets/dashboard_header.dart';
 import 'widgets/manage_workers.dart';
-import 'project_details_page.dart';
+import 'phase_subtask_models.dart';
 import '../services/app_config.dart';
 import '../services/auth_service.dart';
 
@@ -12,10 +12,14 @@ class SubtaskManagePage extends StatefulWidget {
   final Phase phase;
   final bool viewOnly;
 
+  /// After load, scroll this subtask into view (e.g. from a PM notification).
+  final int? focusSubtaskId;
+
   const SubtaskManagePage({
     super.key,
     required this.phase,
     this.viewOnly = false,
+    this.focusSubtaskId,
   });
 
   @override
@@ -25,11 +29,34 @@ class SubtaskManagePage extends StatefulWidget {
 class _SubtaskManagePageState extends State<SubtaskManagePage> {
   late Phase _phase;
   bool _isLoading = false;
+  final GlobalKey _focusSubtaskKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
     _phase = widget.phase;
+    if (widget.focusSubtaskId != null) {
+      void scrollTo() {
+        if (!mounted) return;
+        final c = _focusSubtaskKey.currentContext;
+        if (c != null) {
+          Scrollable.ensureVisible(
+            c,
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeInOut,
+            alignment: 0.15,
+          );
+        }
+      }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        scrollTo();
+        Future<void>.delayed(
+          const Duration(milliseconds: 300),
+          scrollTo,
+        );
+      });
+    }
   }
 
   bool get _viewOnly => widget.viewOnly;
@@ -328,12 +355,19 @@ class _SubtaskManagePageState extends State<SubtaskManagePage> {
                                   final subtask = entry.value;
                                   final isLast =
                                       index == _phase.subtasks.length - 1;
+                                  final focus = widget.focusSubtaskId != null &&
+                                      subtask.subtaskId ==
+                                          widget.focusSubtaskId;
                                   return Column(
+                                    key: focus
+                                        ? _focusSubtaskKey
+                                        : ValueKey<int>(subtask.subtaskId),
                                     children: [
                                       _SubtaskTile(
                                         subtask: subtask,
                                         phase: _phase,
                                         viewOnly: _viewOnly,
+                                        highlight: focus,
                                         onEdit: () => _editSubtask(subtask),
                                         onRemove: () => _removeSubtask(subtask),
                                       ),
@@ -875,6 +909,7 @@ class _SubtaskTile extends StatelessWidget {
   final Subtask subtask;
   final Phase phase;
   final bool viewOnly;
+  final bool highlight;
   final VoidCallback onEdit;
   final VoidCallback onRemove;
 
@@ -882,6 +917,7 @@ class _SubtaskTile extends StatelessWidget {
     required this.subtask,
     required this.phase,
     this.viewOnly = false,
+    this.highlight = false,
     required this.onEdit,
     required this.onRemove,
   });
@@ -924,62 +960,70 @@ class _SubtaskTile extends StatelessWidget {
     final hasProgress = _subtaskHasMeaningfulFieldContent(subtask);
     final assignmentLocked = phase.isWorkerAssignmentLocked;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _getStatusBgColor(subtask.status),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  subtask.status.replaceAll('_', ' ').toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: _getStatusColor(subtask.status),
-                    letterSpacing: 0.3,
+    return Container(
+      decoration: highlight
+          ? BoxDecoration(
+              color: const Color(0x1AEA580C),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFEA580C), width: 1.2),
+            )
+          : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _getStatusBgColor(subtask.status),
+                    borderRadius: BorderRadius.circular(4),
                   ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  subtask.title,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF0C1935),
-                    height: 1.3,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              IconButton(
-                style: _iconActionStyle(),
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => ViewWorkForceModal(
-                      subtask: subtask,
-                      readOnly: assignmentLocked,
+                  child: Text(
+                    subtask.status.replaceAll('_', ' ').toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: _getStatusColor(subtask.status),
+                      letterSpacing: 0.3,
                     ),
-                  );
-                },
-                icon: const Icon(Icons.groups_outlined, size: 22),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    subtask.title,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF0C1935),
+                      height: 1.3,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                IconButton(
+                  style: _iconActionStyle(),
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => ViewWorkForceModal(
+                        subtask: subtask,
+                        readOnly: assignmentLocked,
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.groups_outlined, size: 22),
                 tooltip: assignmentLocked
                     ? 'View who worked on this subtask'
                     : 'View work force',
@@ -1051,6 +1095,7 @@ class _SubtaskTile extends StatelessWidget {
             ),
           ],
         ],
+        ),
       ),
     );
   }

@@ -1,7 +1,15 @@
+import 'dart:async' show unawaited;
+import 'dart:convert';
+import 'dart:math' show min;
+
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
+
+import '../../services/app_config.dart';
 import '../../services/auth_service.dart';
 import '../../services/pm_dashboard_service.dart';
-import 'package:go_router/go_router.dart';
+import '../pm_subtask_notification_nav.dart';
 
 class DashboardHeader extends StatelessWidget {
   const DashboardHeader({super.key, this.title = 'Dashboard'});
@@ -90,6 +98,12 @@ class DashboardHeader extends StatelessWidget {
   }
 }
 
+class _MergedPreview {
+  const _MergedPreview({required this.taskBanners});
+
+  final List<_UiNotification> taskBanners;
+}
+
 class _NotificationMenu extends StatefulWidget {
   const _NotificationMenu();
 
@@ -99,9 +113,14 @@ class _NotificationMenu extends StatefulWidget {
 
 class _NotificationMenuState extends State<_NotificationMenu> {
   static const Duration _cacheTtl = Duration(seconds: 45);
+  static const int _kViewAllValue = 1;
+  static const int _kRevertValueBase = 10000;
+  static const int _kInboxValueBase = 40000;
   static int? _cachedUserId;
   static DateTime? _cachedAt;
   static List<_UiNotification> _cachedItems = const [];
+  static List<Map<String, dynamic>> _cachedReverts = const [];
+  static List<PmInboxItem> _cachedInbox = const [];
   static int _cachedBadgeCount = 0;
   static Future<PmDashboardSummary>? _inFlightSummary;
   static int? _inFlightUserId;
@@ -111,7 +130,18 @@ class _NotificationMenuState extends State<_NotificationMenu> {
   bool _loading = true;
   String? _error;
   List<_UiNotification> _items = const [];
+  List<Map<String, dynamic>> _revertItems = const [];
+  List<PmInboxItem> _inboxItems = const [];
   int _badgeCount = 0;
+
+  static void _invalidateCache() {
+    _cachedAt = null;
+  }
+
+  /// Exposed for other PM screens (e.g. after marking inbox read on Notifications page).
+  static void invalidateSharedCache() {
+    _invalidateCache();
+  }
 
   @override
   void initState() {
@@ -132,6 +162,8 @@ class _NotificationMenuState extends State<_NotificationMenu> {
         if (!mounted) return;
         setState(() {
           _items = const [];
+          _revertItems = const [];
+          _inboxItems = const [];
           _badgeCount = 0;
           _error = null;
           _loading = false;
@@ -149,6 +181,8 @@ class _NotificationMenuState extends State<_NotificationMenu> {
         if (!mounted) return;
         setState(() {
           _items = _cachedItems;
+          _revertItems = _cachedReverts;
+          _inboxItems = _cachedInbox;
           _badgeCount = _cachedBadgeCount;
           _error = null;
           _loading = false;
@@ -175,17 +209,32 @@ class _NotificationMenuState extends State<_NotificationMenu> {
       activeSummaryFuture = summaryFuture;
 
       final summary = await summaryFuture;
-      final derived = _deriveFromSummary(summary);
+      final revRes = await http.get(
+        AppConfig.apiUri(
+          'subtask-completion-revert-requests/?user_id=$userId&status=pending',
+        ),
+      );
+      final reverts = _parseRevertList(revRes);
+      final derived = _mergePreviewRows(summary, reverts);
+      final inbox = summary.inboxItems;
 
       _cachedUserId = userId;
       _cachedAt = DateTime.now();
-      _cachedItems = derived;
-      _cachedBadgeCount = summary.notificationsCount;
+      _cachedItems = derived.taskBanners;
+      _cachedReverts = reverts;
+      _cachedInbox = inbox;
+      _cachedBadgeCount = _combinedBadgeCount(
+        summary.notificationsCount,
+        reverts.length,
+        summary.inboxUnreadCount,
+      );
 
       if (!mounted) return;
       setState(() {
-        _items = derived;
-        _badgeCount = summary.notificationsCount;
+        _items = derived.taskBanners;
+        _revertItems = reverts;
+        _inboxItems = inbox;
+        _badgeCount = _cachedBadgeCount;
         _error = null;
         _loading = false;
       });
@@ -193,6 +242,8 @@ class _NotificationMenuState extends State<_NotificationMenu> {
       if (!mounted) return;
       setState(() {
         _items = const [];
+        _revertItems = const [];
+        _inboxItems = const [];
         _badgeCount = 0;
         _error = e.toString();
         _loading = false;
@@ -226,7 +277,221 @@ class _NotificationMenuState extends State<_NotificationMenu> {
       items.add(_UiNotification(title: title, time: time, color: color));
     }
 
-    return items.take(3).toList(growable: false);
+    return items;
+  }
+
+  _MergedPreview _mergePreviewRows(
+    PmDashboardSummary summary,
+    List<Map<String, dynamic>> reverts,
+  ) {
+    final allTasks = _deriveFromSummary(summary);
+    final nRev = min(3, reverts.length);
+    var room = 3 - nRev;
+    if (room < 0) room = 0;
+    final nIn = min(room, summary.inboxItems.length);
+    room -= nIn;
+    if (room < 0) room = 0;
+    final taskBanners = allTasks.take(room).toList(growable: false);
+    return _MergedPreview(taskBanners: taskBanners);
+  }
+
+  List<Map<String, dynamic>> _parseRevertList(http.Response revRes) {
+    if (revRes.statusCode != 200) return const [];
+    try {
+      final body = jsonDecode(revRes.body);
+      if (body is List) {
+        return body
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      }
+      if (body is Map && body['results'] is List) {
+        return (body['results'] as List<dynamic>)
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      }
+    } catch (_) {
+      // ignore
+    }
+    return const [];
+  }
+
+  int _combinedBadgeCount(
+    int openTaskCount,
+    int pendingReverts,
+    int inboxUnread,
+  ) {
+    return openTaskCount + pendingReverts + inboxUnread;
+  }
+
+  int? _pmUserId() {
+    final raw = AuthService().currentUser?['user_id'];
+    if (raw is int) return raw;
+    return int.tryParse(raw?.toString() ?? '');
+  }
+
+  Future<void> _openRevertApprovalDialog(
+    Map<String, dynamic> row,
+  ) async {
+    if (!mounted) return;
+    final rootMessenger = ScaffoldMessenger.of(context);
+    final ridRaw = row['revert_request_id'];
+    final revertId = ridRaw is int
+        ? ridRaw
+        : int.tryParse(ridRaw?.toString() ?? '');
+    if (revertId == null) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return _PmRevertRequestDialog(
+          data: row,
+          onApprove: () async {
+            final uid = _pmUserId();
+            if (uid == null) return false;
+            final r = await http.post(
+              AppConfig.apiUri(
+                'subtask-completion-revert-requests/$revertId/approve/?user_id=$uid',
+              ),
+              headers: const {'Content-Type': 'application/json'},
+              body: '{}',
+            );
+            if (r.statusCode == 200) {
+              if (mounted) {
+                _invalidateCache();
+                await _refresh();
+                rootMessenger.showSnackBar(
+                  const SnackBar(
+                    content: Text('Subtask reverted to not complete.'),
+                    backgroundColor: Color(0xFF059669),
+                  ),
+                );
+              }
+              return true;
+            }
+            if (dialogContext.mounted) {
+              ScaffoldMessenger.of(dialogContext).showSnackBar(
+                SnackBar(
+                  content: Text('Approve failed (${r.statusCode})'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+            return false;
+          },
+          onDeny: () async {
+            final uid = _pmUserId();
+            if (uid == null) return false;
+            final r = await http.post(
+              AppConfig.apiUri(
+                'subtask-completion-revert-requests/$revertId/deny/?user_id=$uid',
+              ),
+              headers: const {'Content-Type': 'application/json'},
+              body: '{}',
+            );
+            if (r.statusCode == 200) {
+              if (mounted) {
+                _invalidateCache();
+                await _refresh();
+                rootMessenger.showSnackBar(
+                  const SnackBar(
+                    content: Text('Request dismissed. Subtask stays complete.'),
+                  ),
+                );
+              }
+              return true;
+            }
+            if (dialogContext.mounted) {
+              ScaffoldMessenger.of(dialogContext).showSnackBar(
+                SnackBar(
+                  content: Text('Action failed (${r.statusCode})'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+            return false;
+          },
+        );
+      },
+    );
+  }
+
+  void _onMenuItemSelected(int value) {
+    if (value == _kViewAllValue) {
+      context.go('/notifications');
+      return;
+    }
+    if (value >= _kInboxValueBase) {
+      final nid = value - _kInboxValueBase;
+      for (final e in _inboxItems) {
+        if (e.notificationId == nid) {
+          final goInventory = e.target == 'inventory' ||
+              e.kind == 'supervisor_inventory_returned';
+          if (goInventory) {
+            unawaited(
+              openPmInboxInventory(
+                context,
+                notificationId: e.notificationId,
+              ),
+            );
+            if (mounted) {
+              _invalidateCache();
+              unawaited(_refresh());
+            }
+            return;
+          }
+          final goReports = e.target == 'reports' ||
+              e.kind == 'supervisor_report_submitted';
+          if (goReports) {
+            unawaited(
+              openPmInboxReports(
+                context,
+                notificationId: e.notificationId,
+              ),
+            );
+            if (mounted) {
+              _invalidateCache();
+              unawaited(_refresh());
+            }
+            return;
+          }
+          final sid = e.subtaskId;
+          if (sid == null) return;
+          openPmInboxSubtask(
+            context,
+            notificationId: e.notificationId,
+            subtaskId: sid,
+            phaseId: e.phaseId,
+          );
+          if (mounted) {
+            _invalidateCache();
+            unawaited(_refresh());
+          }
+          return;
+        }
+      }
+      return;
+    }
+    if (value >= _kRevertValueBase) {
+      final rid = value - _kRevertValueBase;
+      for (final e in _revertItems) {
+        final id = e['revert_request_id'];
+        final n = id is int
+            ? id
+            : int.tryParse('${id ?? ''}');
+        if (n == rid) {
+          _openRevertApprovalDialog(e);
+          return;
+        }
+      }
+    }
+  }
+
+  DateTime? _parseDate(dynamic v) {
+    if (v == null) return null;
+    if (v is DateTime) return v;
+    return DateTime.tryParse(v.toString());
   }
 
   String _relativeTime(DateTime? dateTime) {
@@ -243,18 +508,24 @@ class _NotificationMenuState extends State<_NotificationMenu> {
   @override
   Widget build(BuildContext context) {
     final count = _badgeCount;
+    final nRev = min(3, _revertItems.length);
+    var room = 3 - nRev;
+    if (room < 0) room = 0;
+    final nIn = min(room, _inboxItems.length);
+    room -= nIn;
+    if (room < 0) room = 0;
+    final nTask = min(room, _items.length);
+    final hasListBody =
+        _error == null && !_loading && (nRev > 0 || nIn > 0 || nTask > 0);
 
     return PopupMenuButton<int>(
       color: Colors.white,
       tooltip: 'Notifications',
       offset: const Offset(0, 12),
+      constraints: const BoxConstraints(minWidth: 300),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       onOpened: _refresh,
-      onSelected: (value) {
-        if (value == 1) {
-          context.go('/notifications');
-        }
-      },
+      onSelected: _onMenuItemSelected,
       itemBuilder: (context) {
         final subtitle = _loading
             ? 'Loading…'
@@ -262,9 +533,9 @@ class _NotificationMenuState extends State<_NotificationMenu> {
             ? 'Failed to load'
             : count == 0
             ? 'No updates'
-            : '$count task${count == 1 ? '' : 's'} need attention';
+            : '$count item${count == 1 ? '' : 's'} need attention';
 
-        return [
+        final entries = <PopupMenuEntry<int>>[
           PopupMenuItem(
             enabled: false,
             child: Column(
@@ -290,42 +561,106 @@ class _NotificationMenuState extends State<_NotificationMenu> {
             ),
           ),
           const PopupMenuDivider(),
-          PopupMenuItem(
-            enabled: false,
-            child: _loading
-                ? const Text(
-                    'Loading…',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
-                  )
-                : _error != null
-                ? const Text(
-                    'Unable to load notifications.',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
-                  )
-                : _items.isEmpty
-                ? const Text(
-                    'No notifications.',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (final n in _items) ...[
-                        _NotificationTile(
-                          title: n.title,
-                          time: n.time,
-                          color: n.color,
-                        ),
-                        if (n != _items.last) const SizedBox(height: 12),
-                      ],
+        ];
+
+        if (_loading) {
+          entries.add(
+            const PopupMenuItem(
+              enabled: false,
+              child: Text(
+                'Loading…',
+                style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+              ),
+            ),
+          );
+        } else if (_error != null) {
+          entries.add(
+            const PopupMenuItem(
+              enabled: false,
+              child: Text(
+                'Unable to load notifications.',
+                style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+              ),
+            ),
+          );
+        } else if (!hasListBody) {
+          entries.add(
+            const PopupMenuItem(
+              enabled: false,
+              child: Text(
+                'No notifications.',
+                style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+              ),
+            ),
+          );
+        } else {
+          for (var i = 0; i < nRev; i++) {
+            final r = _revertItems[i];
+            final idRaw = r['revert_request_id'];
+            final rid = idRaw is int
+                ? idRaw
+                : int.tryParse(idRaw?.toString() ?? '');
+            if (rid == null) continue;
+            final st = (r['subtask_title'] ?? 'Subtask').toString();
+            final project = (r['project_name'] ?? '').toString();
+            final line = project.isNotEmpty ? '$project · $st' : st;
+            entries.add(
+              PopupMenuItem<int>(
+                value: _kRevertValueBase + rid,
+                child: _RevertBellTile(
+                  line: 'Uncheck request: $line',
+                  time: _relativeTime(_parseDate(r['created_at'])),
+                ),
+              ),
+            );
+          }
+          for (var j = 0; j < nIn; j++) {
+            final it = _inboxItems[j];
+            final t = (it.title).trim();
+            final line = t.isNotEmpty
+                ? t
+                : 'Supervisor subtask update';
+            entries.add(
+              PopupMenuItem<int>(
+                value: _kInboxValueBase + it.notificationId,
+                child: _InboxBellTile(
+                  line: line,
+                  body: (it.body).trim(),
+                  time: _relativeTime(it.createdAt),
+                  unread: !it.read,
+                ),
+              ),
+            );
+          }
+          if (nTask > 0) {
+            final taskRows = _items.take(nTask).toList(growable: false);
+            entries.add(
+              PopupMenuItem(
+                enabled: false,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final n in taskRows) ...[
+                      _NotificationTile(
+                        title: n.title,
+                        time: n.time,
+                        color: n.color,
+                      ),
+                      if (n != taskRows.last) const SizedBox(height: 12),
                     ],
-                  ),
-          ),
+                  ],
+                ),
+              ),
+            );
+          }
+        }
+
+        entries.addAll([
           const PopupMenuDivider(),
-          PopupMenuItem(
-            value: 1,
+          const PopupMenuItem(
+            value: _kViewAllValue,
             child: Row(
-              children: const [
+              children: [
                 Icon(Icons.open_in_new, size: 16, color: Color(0xFF2563EB)),
                 SizedBox(width: 8),
                 Text(
@@ -339,7 +674,8 @@ class _NotificationMenuState extends State<_NotificationMenu> {
               ],
             ),
           ),
-        ];
+        ]);
+        return entries;
       },
       child: Stack(
         clipBehavior: Clip.none,
@@ -427,6 +763,272 @@ class _NotificationTile extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RevertBellTile extends StatelessWidget {
+  const _RevertBellTile({required this.line, required this.time});
+
+  final String line;
+  final String time;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          margin: const EdgeInsets.only(top: 4),
+          decoration: const BoxDecoration(
+            color: Color(0xFFFF7A18),
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                line,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF0C1935),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                time.isNotEmpty
+                    ? '$time · Tap to review'
+                    : 'Tap to approve or dismiss',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Color(0xFF6B7280),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Icon(Icons.chevron_right, size: 18, color: Color(0xFFEA580C)),
+      ],
+    );
+  }
+}
+
+class _InboxBellTile extends StatelessWidget {
+  const _InboxBellTile({
+    required this.line,
+    required this.body,
+    required this.time,
+    required this.unread,
+  });
+
+  final String line;
+  final String body;
+  final String time;
+  final bool unread;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          margin: const EdgeInsets.only(top: 4),
+          decoration: BoxDecoration(
+            color: unread
+                ? const Color(0xFF2563EB)
+                : const Color(0xFF94A3B8),
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                line,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF0C1935),
+                ),
+              ),
+              if (body.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(
+                  body,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF4B5563),
+                    height: 1.25,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 2),
+              Text(
+                time.isNotEmpty
+                    ? '$time · Open subtask'
+                    : 'Tap to open subtask',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Color(0xFF6B7280),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Icon(Icons.chevron_right, size: 18, color: Color(0xFF2563EB)),
+      ],
+    );
+  }
+}
+
+class _PmRevertRequestDialog extends StatefulWidget {
+  const _PmRevertRequestDialog({
+    required this.data,
+    required this.onApprove,
+    required this.onDeny,
+  });
+
+  final Map<String, dynamic> data;
+  final Future<bool> Function() onApprove;
+  final Future<bool> Function() onDeny;
+
+  @override
+  State<_PmRevertRequestDialog> createState() => _PmRevertRequestDialogState();
+}
+
+class _PmRevertRequestDialogState extends State<_PmRevertRequestDialog> {
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = (widget.data['subtask_title'] ?? 'Subtask').toString();
+    final project = (widget.data['project_name'] ?? '').toString();
+    final phase = (widget.data['phase_name'] ?? '').toString();
+    final sup = (widget.data['supervisor_name'] ?? '').toString();
+    final reason = (widget.data['reason'] ?? '').toString();
+    final headline = project.isNotEmpty ? '$project · $title' : title;
+
+    return AlertDialog(
+      title: const Text('Supervisor asked to uncheck a subtask'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              headline,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+                color: Color(0xFF0C1935),
+              ),
+            ),
+            if (phase.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Phase: $phase',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF6B7280),
+                ),
+              ),
+            ],
+            if (sup.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                'Supervisor: $sup',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF6B7280),
+                ),
+              ),
+            ],
+            const SizedBox(height: 10),
+            const Text(
+              'Reason',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF6B7280),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              reason,
+              style: const TextStyle(
+                fontSize: 14,
+                color: Color(0xFF374151),
+                height: 1.35,
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        OutlinedButton(
+          onPressed: _busy
+              ? null
+              : () async {
+                  setState(() => _busy = true);
+                  final ok = await widget.onDeny();
+                  if (!context.mounted) return;
+                  if (ok) {
+                    Navigator.of(context).pop();
+                  } else {
+                    setState(() => _busy = false);
+                  }
+                },
+          child: const Text('Dismiss'),
+        ),
+        ElevatedButton(
+          onPressed: _busy
+              ? null
+              : () async {
+                  setState(() => _busy = true);
+                  final ok = await widget.onApprove();
+                  if (!context.mounted) return;
+                  if (ok) {
+                    Navigator.of(context).pop();
+                  } else {
+                    setState(() => _busy = false);
+                  }
+                },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFEA580C),
+            foregroundColor: Colors.white,
+          ),
+          child: _busy
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Text('Approve uncheck'),
         ),
       ],
     );
@@ -645,4 +1247,9 @@ class _MenuRow extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Call after changing inbox read state from outside the header (e.g. [NotificationPage]).
+void invalidatePmNotificationBellCache() {
+  _NotificationMenuState.invalidateSharedCache();
 }

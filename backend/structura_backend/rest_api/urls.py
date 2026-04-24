@@ -19,6 +19,7 @@ from .views import (
     SupervisorViewSet,
     SupervisorsViewSet,
     FieldWorkerViewSet,
+    SubtaskCompletionRevertRequestViewSet,
     ClientViewSet,
     BackJobReviewViewSet,
     PhaseViewSet,
@@ -29,6 +30,9 @@ from .views import (
     InventoryUsageViewSet,
     PhaseMaterialPlanViewSet,
     pm_dashboard_summary,
+    pm_inbox_mark_read,
+    supervisor_inbox,
+    supervisor_inbox_mark_read,
     pm_audit_trail,
     debug_projects,
     debug_all_data,
@@ -43,6 +47,11 @@ router.register(r'barangays', BarangayViewSet, basename='barangay')
 router.register(r'projects', ProjectViewSet, basename='project')
 router.register(r'supervisors', SupervisorsViewSet, basename='supervisors')
 router.register(r'field-workers', FieldWorkerViewSet, basename='fieldworker')
+router.register(
+    r'subtask-completion-revert-requests',
+    SubtaskCompletionRevertRequestViewSet,
+    basename='subtask-completion-revert',
+)
 router.register(r'clients', ClientViewSet, basename='client')
 router.register(r'back-job-reviews', BackJobReviewViewSet, basename='back-job-review')
 router.register(r'phases', PhaseViewSet, basename='phase')
@@ -70,6 +79,17 @@ urlpatterns = [
     path('subscription/check/', check_subscription_status, name='check_subscription_status'),
     path('subscription/activate/', activate_subscription, name='activate_subscription'),
     path('pm/dashboard/', pm_dashboard_summary, name='pm_dashboard_summary'),
+    path(
+        'pm/inbox/<int:notification_id>/read/',
+        pm_inbox_mark_read,
+        name='pm_inbox_mark_read',
+    ),
+    path('supervisor/inbox/', supervisor_inbox, name='supervisor_inbox'),
+    path(
+        'supervisor/inbox/<int:notification_id>/read/',
+        supervisor_inbox_mark_read,
+        name='supervisor_inbox_mark_read',
+    ),
     path('pm/audit-trail/', pm_audit_trail, name='pm_audit_trail'),
     path('image-verification/', verify_profile_photo, name='verify_profile_photo'),
     path('debug/projects/', debug_projects, name='debug_projects'),
