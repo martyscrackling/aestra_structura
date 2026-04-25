@@ -18,6 +18,9 @@ class ClDashboardPage extends StatefulWidget {
 class _ClDashboardPageState extends State<ClDashboardPage> {
   static const Duration _newAccountWindow = Duration(days: 14);
   static const String _clientTutorialStepKey = 'client_quick_tour_step';
+  static const String _clientTutorialDismissedKey = 'client_quick_tour_dismissed';
+  static const String _clientTutorialResumePendingKey =
+      'client_quick_tour_resume_pending';
   final _service = ClientDashboardService();
   late Future<List<ProjectItem>> _future;
   bool _isCompletingQuickTour = false;
@@ -67,6 +70,7 @@ class _ClDashboardPageState extends State<ClDashboardPage> {
     if (user == null) return false;
     if (user['role']?.toString() != 'Client') return false;
     if (user['has_completed_quick_tour'] == true) return false;
+    if (user[_clientTutorialDismissedKey] == true) return false;
     final createdAtRaw = user['created_at']?.toString();
     if (createdAtRaw == null || createdAtRaw.trim().isEmpty) return true;
     final createdAt = DateTime.tryParse(createdAtRaw);
@@ -88,6 +92,8 @@ class _ClDashboardPageState extends State<ClDashboardPage> {
     final hasMoreSteps = nextStep < _clientTutorialSteps.length;
     await authService.updateLocalUserFields({
       _clientTutorialStepKey: nextStep,
+      _clientTutorialDismissedKey: false,
+      _clientTutorialResumePendingKey: hasMoreSteps,
     });
     if (!hasMoreSteps) {
       await authService.markQuickTourCompleted();
@@ -98,6 +104,10 @@ class _ClDashboardPageState extends State<ClDashboardPage> {
   }
 
   Future<void> _startTutorial() async {
+    await AuthService().updateLocalUserFields({
+      _clientTutorialDismissedKey: false,
+      _clientTutorialResumePendingKey: false,
+    });
     await showNewAccountTutorialDialog(
       context: context,
       roleLabel: 'Client',
@@ -111,12 +121,29 @@ class _ClDashboardPageState extends State<ClDashboardPage> {
     if (_hasAutoResumedTutorial) return;
     final currentStep = _currentTutorialStepIndex();
     if (currentStep <= 0 || currentStep >= _clientTutorialSteps.length) return;
+    final resumePending =
+        AuthService().currentUser?[_clientTutorialResumePendingKey] == true;
+    if (!resumePending) return;
     if (!_shouldShowQuickTutorialCard()) return;
     _hasAutoResumedTutorial = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      AuthService().updateLocalUserFields({
+        _clientTutorialResumePendingKey: false,
+      });
       _startTutorial();
     });
+  }
+
+  Future<void> _skipTutorialForNow() async {
+    if (_isCompletingQuickTour) return;
+    setState(() => _isCompletingQuickTour = true);
+    await AuthService().updateLocalUserFields({
+      _clientTutorialDismissedKey: true,
+      _clientTutorialResumePendingKey: false,
+    });
+    if (!mounted) return;
+    setState(() => _isCompletingQuickTour = false);
   }
 
   @override
@@ -179,12 +206,20 @@ class _ClDashboardPageState extends State<ClDashboardPage> {
                                 ),
                                 const SizedBox(width: 8),
                                 ElevatedButton(
-                                  onPressed: _startTutorial,
+                                  onPressed: _isCompletingQuickTour
+                                      ? null
+                                      : _startTutorial,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Color(0xFF0C1935),
                                     foregroundColor: Colors.white,
                                   ),
                                   child: Text('Start Tutorial'),
+                                ),
+                                TextButton(
+                                  onPressed: _isCompletingQuickTour
+                                      ? null
+                                      : _skipTutorialForNow,
+                                  child: const Text('Skip for now'),
                                 ),
                               ],
                             ),

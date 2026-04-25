@@ -37,6 +37,7 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
   static const Duration _newAccountWindow = Duration(days: 14);
   static const String _pmTutorialStepKey = 'pm_quick_tour_step';
   static const String _pmTutorialDismissedKey = 'pm_quick_tour_dismissed';
+  static const String _pmTutorialResumePendingKey = 'pm_quick_tour_resume_pending';
   bool _isCompletingQuickTour = false;
   bool _hasAutoResumedTutorial = false;
 
@@ -157,7 +158,11 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
     final authService = AuthService();
     final nextStep = _currentTutorialStepIndex() + 1;
     final hasMoreSteps = nextStep < _pmTutorialSteps.length;
-    await authService.updateLocalUserFields({_pmTutorialStepKey: nextStep});
+    await authService.updateLocalUserFields({
+      _pmTutorialStepKey: nextStep,
+      _pmTutorialDismissedKey: false,
+      _pmTutorialResumePendingKey: hasMoreSteps,
+    });
     if (!hasMoreSteps) {
       await authService.markQuickTourCompleted();
     }
@@ -171,7 +176,10 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
   }
 
   Future<void> _startTutorial() async {
-    await AuthService().updateLocalUserFields({_pmTutorialDismissedKey: false});
+    await AuthService().updateLocalUserFields({
+      _pmTutorialDismissedKey: false,
+      _pmTutorialResumePendingKey: false,
+    });
     await showNewAccountTutorialDialog(
       context: context,
       roleLabel: 'Project Manager',
@@ -184,7 +192,10 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
   Future<void> _skipTutorialForNow() async {
     if (_isCompletingQuickTour) return;
     setState(() => _isCompletingQuickTour = true);
-    await AuthService().updateLocalUserFields({_pmTutorialDismissedKey: true});
+    await AuthService().updateLocalUserFields({
+      _pmTutorialDismissedKey: true,
+      _pmTutorialResumePendingKey: false,
+    });
     if (!mounted) return;
     setState(() => _isCompletingQuickTour = false);
   }
@@ -193,11 +204,15 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
     if (_hasAutoResumedTutorial) return;
     final currentStep = _currentTutorialStepIndex();
     if (currentStep <= 0 || currentStep >= _pmTutorialSteps.length) return;
+    final resumePending =
+        AuthService().currentUser?[_pmTutorialResumePendingKey] == true;
+    if (!resumePending) return;
     final totalProjects = _summary?.totalProjects ?? 0;
     if (!_shouldShowQuickTour(totalProjects: totalProjects)) return;
     _hasAutoResumedTutorial = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      AuthService().updateLocalUserFields({_pmTutorialResumePendingKey: false});
       _startTutorial();
     });
   }

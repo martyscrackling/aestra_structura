@@ -80,6 +80,15 @@ Future<void> showNewAccountTutorialDialog({
                 currentStep.description,
                 style: TextStyle(color: Colors.grey[700], height: 1.35),
               ),
+              const SizedBox(height: 8),
+              Text(
+                'Tip: finish this step, then return here and we will continue.',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
             ],
           ),
           actions: [
@@ -95,7 +104,7 @@ Future<void> showNewAccountTutorialDialog({
                     ? _TutorialStepChoice.next
                     : _TutorialStepChoice.close,
               ),
-              child: Text(currentIndex < steps.length - 1 ? 'Next' : 'Close'),
+              child: Text(currentIndex < steps.length - 1 ? 'Next tip' : 'Close'),
             ),
             ElevatedButton(
               onPressed: () =>
@@ -104,7 +113,7 @@ Future<void> showNewAccountTutorialDialog({
                 backgroundColor: const Color(0xFF0C1935),
                 foregroundColor: Colors.white,
               ),
-              child: Text(currentStep.actionLabel),
+              child: Text('Do now: ${currentStep.actionLabel}'),
             ),
           ],
         );

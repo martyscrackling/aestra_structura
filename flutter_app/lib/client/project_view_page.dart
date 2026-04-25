@@ -149,9 +149,39 @@ class _ProjectViewPageState extends State<ProjectViewPage> {
   }
 
   String _getImageUrl(String path) {
-    if (path.startsWith('http')) return path;
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
     final baseUri = Uri.parse(AppConfig.apiBaseUrl);
-    return '${baseUri.scheme}://${baseUri.host}${baseUri.hasPort ? ':${baseUri.port}' : ''}$path';
+    final normalizedPath = path.startsWith('/') ? path : '/$path';
+    return '${baseUri.scheme}://${baseUri.host}${baseUri.hasPort ? ':${baseUri.port}' : ''}$normalizedPath';
+  }
+
+  Widget _buildProjectHeaderImage({required String raw, required bool isMobile}) {
+    final fallback = Container(
+      height: isMobile ? 160 : 200,
+      color: Colors.grey[200],
+      alignment: Alignment.center,
+      child: const Icon(Icons.broken_image, size: 48, color: Colors.grey),
+    );
+
+    final imageUrl = raw.trim();
+    if (imageUrl.isEmpty) return fallback;
+    if (imageUrl.startsWith('assets/')) {
+      return Image.asset(
+        imageUrl,
+        height: isMobile ? 160 : 200,
+        width: double.infinity,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => fallback,
+      );
+    }
+
+    return Image.network(
+      _getImageUrl(imageUrl),
+      height: isMobile ? 160 : 200,
+      width: double.infinity,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => fallback,
+    );
   }
 
   String _formatDateLabel(DateTime? dt) {
@@ -760,21 +790,9 @@ class _ProjectViewPageState extends State<ProjectViewPage> {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: Image.network(
-                      project.imageUrl,
-                      height: isMobile ? 160 : 200,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        height: isMobile ? 160 : 200,
-                        color: Colors.grey[200],
-                        alignment: Alignment.center,
-                        child: const Icon(
-                          Icons.broken_image,
-                          size: 48,
-                          color: Colors.grey,
-                        ),
-                      ),
+                    child: _buildProjectHeaderImage(
+                      raw: project.imageUrl,
+                      isMobile: isMobile,
                     ),
                   ),
                   const SizedBox(height: 16),

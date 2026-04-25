@@ -42,6 +42,10 @@ class SupervisorDashboardPage extends StatefulWidget {
 class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
   static const Duration _newAccountWindow = Duration(days: 14);
   static const String _supervisorTutorialStepKey = 'supervisor_quick_tour_step';
+  static const String _supervisorTutorialDismissedKey =
+      'supervisor_quick_tour_dismissed';
+  static const String _supervisorTutorialResumePendingKey =
+      'supervisor_quick_tour_resume_pending';
   int? _currentProjectId;
   bool _showMobileDetails = false;
   bool _isCompletingQuickTour = false;
@@ -443,6 +447,7 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
     if (user == null) return false;
     if (user['role']?.toString() != 'Supervisor') return false;
     if (user['has_completed_quick_tour'] == true) return false;
+    if (user[_supervisorTutorialDismissedKey] == true) return false;
 
     final createdAtRaw = user['created_at']?.toString();
     if (createdAtRaw == null || createdAtRaw.trim().isEmpty) return true;
@@ -459,6 +464,8 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
     final hasMoreSteps = nextStep < _supervisorTutorialSteps.length;
     await authService.updateLocalUserFields({
       _supervisorTutorialStepKey: nextStep,
+      _supervisorTutorialDismissedKey: false,
+      _supervisorTutorialResumePendingKey: hasMoreSteps,
     });
     if (!hasMoreSteps) {
       await authService.markQuickTourCompleted();
@@ -475,6 +482,10 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
   }
 
   Future<void> _startTutorial() async {
+    await AuthService().updateLocalUserFields({
+      _supervisorTutorialDismissedKey: false,
+      _supervisorTutorialResumePendingKey: false,
+    });
     await showNewAccountTutorialDialog(
       context: context,
       roleLabel: 'Supervisor',
@@ -490,12 +501,29 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
     if (currentStep <= 0 || currentStep >= _supervisorTutorialSteps.length) {
       return;
     }
+    final resumePending =
+        AuthService().currentUser?[_supervisorTutorialResumePendingKey] == true;
+    if (!resumePending) return;
     if (!_shouldShowQuickTutorialCard()) return;
     _hasAutoResumedTutorial = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      AuthService().updateLocalUserFields({
+        _supervisorTutorialResumePendingKey: false,
+      });
       _startTutorial();
     });
+  }
+
+  Future<void> _skipTutorialForNow() async {
+    if (_isCompletingQuickTour) return;
+    setState(() => _isCompletingQuickTour = true);
+    await AuthService().updateLocalUserFields({
+      _supervisorTutorialDismissedKey: true,
+      _supervisorTutorialResumePendingKey: false,
+    });
+    if (!mounted) return;
+    setState(() => _isCompletingQuickTour = false);
   }
 
   Widget _buildQuickTutorialCard() {
@@ -526,6 +554,10 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
               foregroundColor: Colors.white,
             ),
             child: const Text('Start Tutorial'),
+          ),
+          TextButton(
+            onPressed: _isCompletingQuickTour ? null : _skipTutorialForNow,
+            child: const Text('Skip for now'),
           ),
         ],
       ),
