@@ -130,7 +130,7 @@ class _ClientDashboardHeaderState extends State<ClientDashboardHeader> {
             children: [
               Expanded(
                 child: Text(
-                  title,
+                  widget.title,
                   style: TextStyle(
                     color: const Color(0xFF0C1935),
                     fontSize: isMobile ? 20 : 24,
