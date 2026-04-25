@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/auth_service.dart';
 import '../../services/app_config.dart';
+import '../../services/payment_service.dart';
 
 class UpgradePlanModal {
   static const List<_PlanOption> _planOptions = [
@@ -328,46 +329,34 @@ class UpgradePlanModal {
                                     }
                                     
                                     final userId = user['user_id'];
-                                    final response = await http.post(
-                                      AppConfig.apiUri('subscription/paymongo-checkout/'),
-                                      headers: {"Content-Type": "application/json"},
-                                      body: json.encode({
-                                        "user_id": userId,
-                                        "subscription_years": plan.years
-                                      }),
+                                    final result = await PaymentService.createCheckoutSession(
+                                      userId: userId,
+                                      years: plan.years,
                                     );
                                     
-                                    if (response.statusCode == 200) {
-                                      final data = json.decode(response.body);
-                                      if (data['success'] == true) {
-                                        final checkoutUrl = data['checkout_url'];
-                                        final uri = Uri.parse(checkoutUrl);
-                                        
-                                        if (await canLaunchUrl(uri)) {
-                                          await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                          if (dialogContext.mounted) {
-                                            Navigator.of(dialogContext).pop();
-                                            messenger.showSnackBar(
-                                              const SnackBar(
-                                                content: Text('Redirecting to secure PayMongo checkout...'),
-                                                backgroundColor: Colors.green,
-                                                duration: Duration(seconds: 4),
-                                              ),
-                                            );
-                                          }
-                                        } else {
-                                          setState(() {
-                                            errorMessage = 'Could not launch payment URL';
-                                          });
+                                    if (result['success'] == true) {
+                                      final checkoutUrl = result['checkout_url'];
+                                      final launched = await PaymentService.launchCheckout(checkoutUrl);
+                                      
+                                      if (launched) {
+                                        if (dialogContext.mounted) {
+                                          Navigator.of(dialogContext).pop();
+                                          messenger.showSnackBar(
+                                            const SnackBar(
+                                              content: Text('Redirecting to secure PayMongo checkout...'),
+                                              backgroundColor: Colors.green,
+                                              duration: Duration(seconds: 4),
+                                            ),
+                                          );
                                         }
                                       } else {
                                         setState(() {
-                                          errorMessage = 'Checkout failed: ${data['message']}';
+                                          errorMessage = 'Could not launch payment URL';
                                         });
                                       }
                                     } else {
                                       setState(() {
-                                        errorMessage = 'Server error: ${response.body}';
+                                        errorMessage = 'Checkout failed: ${result['message']}';
                                       });
                                     }
                                   } catch (e) {
