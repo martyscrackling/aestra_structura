@@ -57,6 +57,15 @@ def _rehash_password_if_plaintext(model_obj, field_name, raw_password):
     model_obj.save(update_fields=[field_name])
 
 
+def _photo_path(photo_field):
+    if not photo_field:
+        return None
+    try:
+        return photo_field.url
+    except Exception:
+        return None
+
+
 from app.image_verification import verify_image_has_human_face
 from .email_utils import (
     send_signup_otp_email,
@@ -637,6 +646,8 @@ def login_user(request):
                         'last_name': supervisor.last_name,
                         'phone': supervisor.phone_number,
                         'phone_number': supervisor.phone_number,
+                        'photo': _photo_path(getattr(supervisor, 'photo', None)),
+                        'photo_url': _photo_path(getattr(supervisor, 'photo', None)),
                         'role': 'Supervisor',
                         'type': 'Supervisor',
                         'force_password_change': password == 'PASSWORD',
@@ -666,6 +677,8 @@ def login_user(request):
                             'last_name': user.last_name,
                             'phone': user.phone,
                             'phone_number': user.phone,
+                            'photo': _photo_path(getattr(client, 'photo', None)) if client else None,
+                            'photo_url': _photo_path(getattr(client, 'photo', None)) if client else None,
                             'role': 'Client',
                             'type': 'Client',
                             'force_password_change': password == 'PASSWORD',
@@ -706,6 +719,8 @@ def login_user(request):
                         'last_name': client.last_name,
                         'phone': client.phone_number,
                         'phone_number': client.phone_number,
+                        'photo': _photo_path(getattr(client, 'photo', None)),
+                        'photo_url': _photo_path(getattr(client, 'photo', None)),
                         'role': 'Client',
                         'type': 'Client',
                         'force_password_change': password == 'PASSWORD',

@@ -54,17 +54,26 @@ class _ClientDashboardHeaderState extends State<ClientDashboardHeader> {
         return;
       }
 
-      final response = await http.get(AppConfig.apiUri('clients/$clientId/'));
-      if (response.statusCode != 200) {
-        if (!mounted) return;
-        setState(() {
-          _profileUser = user;
-        });
-        return;
+      final projectId = int.tryParse('${user?['project_id'] ?? ''}');
+      final userId = int.tryParse('${user?['user_id'] ?? ''}');
+      final candidates = <String>[
+        if (projectId != null) 'clients/$clientId/?project_id=$projectId',
+        if (userId != null) 'clients/$clientId/?user_id=$userId',
+        'clients/$clientId/',
+      ];
+
+      Map<String, dynamic>? decoded;
+      for (final path in candidates) {
+        final response = await http.get(AppConfig.apiUri(path));
+        if (response.statusCode != 200) continue;
+        final body = jsonDecode(response.body);
+        if (body is Map<String, dynamic>) {
+          decoded = body;
+          break;
+        }
       }
 
-      final decoded = jsonDecode(response.body);
-      if (decoded is! Map<String, dynamic>) {
+      if (decoded == null) {
         if (!mounted) return;
         setState(() {
           _profileUser = user;
