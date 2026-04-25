@@ -108,10 +108,34 @@ class StructuraApp extends StatelessWidget {
     final GoRouter router = GoRouter(
       initialLocation: '/',
       refreshListenable: authService,
+      errorBuilder: (context, state) => const NotFoundPage(),
       redirect: (context, state) {
         final currentPath = state.uri.path;
         final loggedIn = authService.isLoggedIn;
         final isPublic = publicRoutes.contains(currentPath);
+        final role = authService.currentUser?['role']?.toString() ?? '';
+        final userHome = authService.homeRouteForRole(role);
+
+        final isSupervisorRoute = currentPath == '/supervisor' ||
+            currentPath.startsWith('/supervisor/');
+        final isClientRoute =
+            currentPath == '/client' || currentPath.startsWith('/client/');
+        final isPmRoute = <String>{
+          '/dashboard',
+          '/license',
+          '/projects',
+          '/workforce',
+          '/clients',
+          '/reports',
+          '/inventory',
+          '/settings',
+          '/notifications',
+          '/audit-trail',
+          '/test-time',
+        }.contains(currentPath);
+        final isSupervisorRole = role == 'Supervisor';
+        final isClientRole = role == 'Client';
+        final isPmRole = !isSupervisorRole && !isClientRole;
 
         if (!loggedIn && !isPublic) {
           final encodedTarget = Uri.encodeComponent(currentPath);
@@ -119,9 +143,20 @@ class StructuraApp extends StatelessWidget {
         }
 
         if (loggedIn && (currentPath == '/login' || currentPath == '/signup')) {
-          return authService.homeRouteForRole(
-            authService.currentUser?['role']?.toString(),
-          );
+          return userHome;
+        }
+
+        // Enforce strict role-based access even when URL is changed manually.
+        if (loggedIn) {
+          if (isSupervisorRole && (isPmRoute || isClientRoute)) {
+            return userHome;
+          }
+          if (isClientRole && (isPmRoute || isSupervisorRoute)) {
+            return userHome;
+          }
+          if (isPmRole && (isSupervisorRoute || isClientRoute)) {
+            return userHome;
+          }
         }
 
         return null;
@@ -2046,6 +2081,68 @@ class FeaturesPage extends StatelessWidget {
         child: Text(
           "Welcome to the Features Page!!",
           style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+        ),
+      ),
+    );
+  }
+}
+
+class NotFoundPage extends StatelessWidget {
+  const NotFoundPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF9FAFB),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                size: 72,
+                color: Color(0xFFFF6B2C),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Page not found',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF0B1534),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'The page you entered does not exist or is no longer available.',
+                style: TextStyle(fontSize: 15, color: Colors.grey[700]),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () => context.go('/'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF6B2C),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 22,
+                    vertical: 14,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                icon: const Icon(Icons.home_rounded),
+                label: const Text(
+                  'Go to home',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
