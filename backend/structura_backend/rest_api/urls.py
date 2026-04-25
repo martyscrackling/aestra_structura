@@ -38,8 +38,6 @@ from .views import (
     debug_projects,
     debug_all_data,
     SupervisorReportSubmissionViewSet,
-    create_paymongo_checkout,
-    paymongo_webhook,
 )
 
 router = DefaultRouter()
@@ -82,8 +80,6 @@ urlpatterns = [
     path('change-password/', change_password, name='change_password'),
     path('subscription/check/', check_subscription_status, name='check_subscription_status'),
     path('subscription/activate/', activate_subscription, name='activate_subscription'),
-    path('subscription/paymongo-checkout/', create_paymongo_checkout, name='create_paymongo_checkout'),
-    path('webhooks/paymongo/', paymongo_webhook, name='paymongo_webhook'),
     path('pm/dashboard/', pm_dashboard_summary, name='pm_dashboard_summary'),
     path(
         'pm/inbox/<int:notification_id>/read/',

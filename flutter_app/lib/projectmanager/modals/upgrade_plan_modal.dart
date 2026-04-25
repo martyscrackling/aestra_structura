@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'package:url_launcher/url_launcher.dart';
 import '../../services/auth_service.dart';
 import '../../services/app_config.dart';
 
@@ -202,6 +200,13 @@ class UpgradePlanModal {
 
   static Future<void> _showPaymentModal(BuildContext context, _PlanOption plan) async {
     final messenger = ScaffoldMessenger.of(context);
+    String paymentMethod = 'card';
+    final cardNumberController = TextEditingController();
+    final cardNameController = TextEditingController();
+    final cardExpiryController = TextEditingController();
+    final cardCvvController = TextEditingController();
+    final gcashNumberController = TextEditingController();
+
     bool isProcessing = false;
     String? errorMessage;
 
@@ -215,189 +220,310 @@ class UpgradePlanModal {
               backgroundColor: Colors.transparent,
               insetPadding: const EdgeInsets.all(16),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 400),
+                constraints: const BoxConstraints(maxWidth: 500),
                 child: Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(24),
                   ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.arrow_back),
-                            onPressed: isProcessing ? null : () => Navigator.pop(context),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
-                          const SizedBox(width: 12),
-                          const Text(
-                            'Secure Checkout',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF0A173D),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-                      
-                      // Summary Card
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.blue.shade200),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Selected Plan', style: TextStyle(color: Colors.black54, fontSize: 13)),
-                                Text(
-                                  '${plan.years} Year${plan.years > 1 ? 's' : ''}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                                ),
-                              ],
+                            IconButton(
+                              icon: const Icon(Icons.arrow_back),
+                              onPressed: isProcessing ? null : () => Navigator.pop(context),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
                             ),
-                            Text(
-                              plan.amountLabel,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Colors.blue),
+                            const SizedBox(width: 12),
+                            const Text(
+                              'Payment Details',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF0A173D),
+                              ),
                             ),
                           ],
                         ),
-                      ),
-                      const SizedBox(height: 24),
-                      
-                      const Icon(Icons.lock_outline, size: 48, color: Colors.green),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'You will be redirected to PayMongo to securely complete your payment using GCash, PayMaya, or Credit/Debit Card.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 14, color: Colors.black87),
-                      ),
-                      const SizedBox(height: 24),
-                      
-                      if (errorMessage != null)
+                        const SizedBox(height: 24),
+                        
+                        // Summary Card
                         Container(
-                          padding: const EdgeInsets.all(12),
-                          margin: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: Colors.red.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.red.shade200),
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.blue.shade200),
                           ),
                           child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Icon(Icons.error_outline, color: Colors.red, size: 20),
-                              const SizedBox(width: 8),
-                              Expanded(child: Text(errorMessage!, style: const TextStyle(color: Colors.red, fontSize: 13))),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Selected Plan', style: TextStyle(color: Colors.black54, fontSize: 13)),
+                                  Text(
+                                    '${plan.years} Year${plan.years > 1 ? 's' : ''}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                  ),
+                                ],
+                              ),
+                              Text(
+                                plan.amountLabel,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Colors.blue),
+                              ),
                             ],
                           ),
                         ),
-                      
-                      SizedBox(
-                        width: double.infinity,
-                        height: 54,
-                        child: ElevatedButton(
-                          onPressed: isProcessing
-                              ? null
-                              : () async {
-                                  setState(() {
-                                    errorMessage = null;
-                                    isProcessing = true;
-                                  });
+                        const SizedBox(height: 24),
+                        
+                        const Text(
+                          'Payment Method',
+                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                        ),
+                        const SizedBox(height: 12),
+                        
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _PaymentMethodSelector(
+                                icon: Icons.credit_card,
+                                label: 'Card',
+                                isSelected: paymentMethod == 'card',
+                                onTap: isProcessing ? null : () => setState(() {
+                                  paymentMethod = 'card';
+                                  errorMessage = null;
+                                }),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _PaymentMethodSelector(
+                                icon: Icons.phone_android,
+                                label: 'GCash',
+                                isSelected: paymentMethod == 'gcash',
+                                onTap: isProcessing ? null : () => setState(() {
+                                  paymentMethod = 'gcash';
+                                  errorMessage = null;
+                                }),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        
+                        if (errorMessage != null)
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            margin: const EdgeInsets.only(bottom: 16),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.red.shade200),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                                const SizedBox(width: 8),
+                                Expanded(child: Text(errorMessage!, style: const TextStyle(color: Colors.red, fontSize: 13))),
+                              ],
+                            ),
+                          ),
+                        
+                        if (paymentMethod == 'card') ...[
+                          TextField(
+                            controller: cardNameController,
+                            enabled: !isProcessing,
+                            decoration: _inputDecoration('Name on Card'),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: cardNumberController,
+                            enabled: !isProcessing,
+                            keyboardType: TextInputType.number,
+                            decoration: _inputDecoration('Card Number (16 digits)'),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: cardExpiryController,
+                                  enabled: !isProcessing,
+                                  decoration: _inputDecoration('MM/YY'),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: TextField(
+                                  controller: cardCvvController,
+                                  enabled: !isProcessing,
+                                  keyboardType: TextInputType.number,
+                                  obscureText: true,
+                                  decoration: _inputDecoration('CVV'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ] else ...[
+                          Center(
+                            child: Column(
+                              children: [
+                                Container(
+                                  width: 180,
+                                  height: 180,
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: Colors.blue.shade200, width: 2),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.blue.withValues(alpha: 0.1),
+                                        blurRadius: 10,
+                                        spreadRadius: 2,
+                                      ),
+                                    ],
+                                  ),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: const [
+                                      Icon(Icons.qr_code_2, size: 100, color: Color(0xFF005CEE)), // GCash Blue
+                                      SizedBox(height: 8),
+                                      Text(
+                                        'AESTRA STRUCTURA',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                          color: Color(0xFF005CEE),
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                const Text(
+                                  'Scan this QR code using your GCash app to pay. Once completed, enter the reference number below.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: Colors.black54, fontSize: 13),
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  controller: gcashNumberController,
+                                  enabled: !isProcessing,
+                                  keyboardType: TextInputType.number,
+                                  decoration: _inputDecoration('GCash Ref. No. (e.g. 1000293...)'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        
+                        const SizedBox(height: 32),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 54,
+                          child: ElevatedButton(
+                            onPressed: isProcessing
+                                ? null
+                                : () async {
+                                    setState(() {
+                                      errorMessage = null;
+                                    });
 
-                                  try {
-                                    final authService = Provider.of<AuthService>(context, listen: false);
-                                    final user = authService.currentUser;
-                                    if (user == null || user['user_id'] == null) {
-                                      setState(() {
-                                        errorMessage = 'User not found. Please log in again.';
-                                        isProcessing = false;
-                                      });
-                                      return;
+                                    // Validation
+                                    if (paymentMethod == 'card') {
+                                      if (cardNameController.text.trim().isEmpty ||
+                                          cardNumberController.text.trim().isEmpty ||
+                                          cardExpiryController.text.trim().isEmpty ||
+                                          cardCvvController.text.trim().isEmpty) {
+                                        setState(() => errorMessage = 'Please fill in all card details.');
+                                        return;
+                                      }
+                                    } else {
+                                      if (gcashNumberController.text.trim().isEmpty) {
+                                        setState(() => errorMessage = 'Please enter your GCash Reference Number to verify payment.');
+                                        return;
+                                      }
                                     }
-                                    
-                                    final userId = user['user_id'];
-                                    final response = await http.post(
-                                      AppConfig.apiUri('subscription/paymongo-checkout/'),
-                                      headers: {"Content-Type": "application/json"},
-                                      body: json.encode({
-                                        "user_id": userId,
-                                        "subscription_years": plan.years
-                                      }),
-                                    );
-                                    
-                                    if (response.statusCode == 200) {
-                                      final data = json.decode(response.body);
-                                      if (data['success'] == true) {
-                                        final checkoutUrl = data['checkout_url'];
-                                        final uri = Uri.parse(checkoutUrl);
-                                        
-                                        if (await canLaunchUrl(uri)) {
-                                          await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                          if (dialogContext.mounted) {
-                                            Navigator.of(dialogContext).pop();
-                                            messenger.showSnackBar(
-                                              const SnackBar(
-                                                content: Text('Redirecting to secure PayMongo checkout...'),
-                                                backgroundColor: Colors.green,
-                                                duration: Duration(seconds: 4),
-                                              ),
-                                            );
-                                          }
-                                        } else {
-                                          setState(() {
-                                            errorMessage = 'Could not launch payment URL';
-                                          });
+
+                                    setState(() => isProcessing = true);
+
+                                    // --- ACTUAL SUBSCRIPTION ACTIVATION ---
+                                    try {
+                                      final authService = Provider.of<AuthService>(context, listen: false);
+                                      final user = authService.currentUser;
+                                      if (user == null || user['user_id'] == null) {
+                                        setState(() {
+                                          errorMessage = 'User not found. Please log in again.';
+                                          isProcessing = false;
+                                        });
+                                        return;
+                                      }
+                                      final userId = user['user_id'];
+                                      final amount = plan.years == 1
+                                          ? 5000
+                                          : plan.years == 3
+                                              ? 13000
+                                              : 22000;
+                                      final response = await http.post(
+                                        AppConfig.apiUri('subscription/activate/'),
+                                        headers: {"Content-Type": "application/json"},
+                                        body: '{"user_id": $userId, "subscription_years": ${plan.years}, "amount": $amount}',
+                                      );
+                                      if (response.statusCode == 200) {
+                                        // Success
+                                        if (dialogContext.mounted) {
+                                          Navigator.of(dialogContext).pop();
+                                          messenger.showSnackBar(
+                                            SnackBar(
+                                              content: Text('Subscription activated!'),
+                                              backgroundColor: Colors.green,
+                                              duration: const Duration(seconds: 4),
+                                            ),
+                                          );
                                         }
                                       } else {
                                         setState(() {
-                                          errorMessage = 'Checkout failed: ${data['message']}';
+                                          errorMessage = 'Activation failed: ' + response.body;
                                         });
                                       }
-                                    } else {
+                                    } catch (e) {
                                       setState(() {
-                                        errorMessage = 'Server error: ${response.body}';
+                                        errorMessage = 'Network error: ' + e.toString();
                                       });
+                                    } finally {
+                                      setState(() => isProcessing = false);
                                     }
-                                  } catch (e) {
-                                    setState(() {
-                                      errorMessage = 'Network error: ' + e.toString();
-                                    });
-                                  } finally {
-                                    setState(() => isProcessing = false);
-                                  }
-                                },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFFF6F00),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                                  },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFFF6F00),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
+                            child: isProcessing
+                                ? const SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                  )
+                                : Text(
+                                    'Pay ${plan.amountLabel}',
+                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                  ),
                           ),
-                          child: isProcessing
-                              ? const SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                                )
-                              : Text(
-                                  'Proceed to Checkout',
-                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -405,6 +531,26 @@ class UpgradePlanModal {
           },
         );
       },
+    );
+  }
+
+  static InputDecoration _inputDecoration(String label) {
+    return InputDecoration(
+      labelText: label,
+      filled: true,
+      fillColor: Colors.grey.shade50,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFFF6F00)),
+      ),
     );
   }
 }
@@ -421,4 +567,54 @@ class _PlanOption {
     required this.subtitle,
     this.isPopular = false,
   });
+}
+
+class _PaymentMethodSelector extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isSelected;
+  final VoidCallback? onTap;
+
+  const _PaymentMethodSelector({
+    required this.icon,
+    required this.label,
+    required this.isSelected,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? const Color(0xFFFF6F00) : Colors.grey.shade300,
+            width: isSelected ? 2 : 1,
+          ),
+          color: isSelected ? const Color(0xFFFF6F00).withValues(alpha: 0.05) : Colors.white,
+        ),
+        child: Column(
+          children: [
+            Icon(
+              icon,
+              color: isSelected ? const Color(0xFFFF6F00) : Colors.grey.shade500,
+              size: 32,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                color: isSelected ? const Color(0xFFFF6F00) : Colors.grey.shade700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

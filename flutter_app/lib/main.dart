@@ -3,9 +3,6 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'package:url_launcher/url_launcher.dart';
 import 'auth/login.dart';
 import 'auth/signup.dart';
 import 'auth/infos.dart';
@@ -30,12 +27,10 @@ import 'supervisor/test_time_page.dart' as supervisor;
 import 'supervisor/notification_inbox_page.dart';
 import 'client/cl_dashboard.dart' as client;
 import 'license/plan.dart';
-import 'license/payment_status.dart';
 import 'services/auth_service.dart';
 import 'services/app_time_service.dart';
 import 'services/app_theme_tokens.dart';
 import 'services/url_strategy/url_strategy.dart';
-import 'services/app_config.dart';
 
 String _lastKnownValidPath = '/';
 late SharedPreferences _appPrefs;
@@ -236,22 +231,6 @@ class StructuraApp extends StatelessWidget {
           name: 'license',
         ),
         GoRoute(
-          path: '/payment-success',
-          builder: (context, state) {
-            final userId = state.uri.queryParameters['user_id'];
-            return PaymentSuccessPage(userId: userId);
-          },
-          name: 'payment-success',
-        ),
-        GoRoute(
-          path: '/payment-failed',
-          builder: (context, state) {
-            final userId = state.uri.queryParameters['user_id'];
-            return PaymentFailedPage(userId: userId);
-          },
-          name: 'payment-failed',
-        ),
-        GoRoute(
           path: '/projects',
           builder: (context, state) => const ProjectsPage(),
           name: 'projects',
@@ -367,7 +346,6 @@ class StructuraApp extends StatelessWidget {
           builder: (context, state) => const client.ClDashboardPage(),
           name: 'client',
         ),
-
       ],
     );
 
@@ -811,7 +789,9 @@ class WhyChooseSection extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: isMobile ? 20 : 40),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: isMobile
+            ? CrossAxisAlignment.center
+            : CrossAxisAlignment.start,
         children: [
           const Text(
             'Why Choose Structura?',
@@ -824,7 +804,7 @@ class WhyChooseSection extends StatelessWidget {
           ),
           const SizedBox(height: 30),
           Wrap(
-            alignment: WrapAlignment.center,
+            alignment: isMobile ? WrapAlignment.center : WrapAlignment.start,
             spacing: 20,
             runSpacing: 20,
             children: const [
@@ -837,6 +817,11 @@ class WhyChooseSection extends StatelessWidget {
                 title: 'Worker & Material Tracking',
                 description:
                     'Track crew assignments, attendance, and resource usage efficiently.',
+              ),
+              FeatureCard(
+                title: 'AI-based Recommendations',
+                description:
+                    'Get suggestions for optimal crew allocation and project management decisions.',
               ),
               FeatureCard(
                 title: 'Data Security',
@@ -1458,204 +1443,353 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
     return result;
   }
 
-  Future<void> _showPaymentModal(BuildContext context, _SubscriptionPlanOption plan) async {
+  Future<void> _showPaymentModal(
+    BuildContext context,
+    _SubscriptionPlanOption plan,
+  ) async {
     final messenger = ScaffoldMessenger.of(context);
-    bool isProcessing = false;
-    String? errorMessage;
+    String paymentMethod = 'card';
+    final cardNumberController = TextEditingController();
+    final cardNameController = TextEditingController();
+    final cardExpiryController = TextEditingController();
+    final cardCvvController = TextEditingController();
+    final gcashNumberController = TextEditingController();
 
-    await showDialog(
+    await showDialog<void>(
       context: context,
       barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.45),
       builder: (dialogContext) {
         return StatefulBuilder(
-          builder: (context, setState) {
-            return Dialog(
-              backgroundColor: Colors.transparent,
-              insetPadding: const EdgeInsets.all(16),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 400),
+          builder: (context, setModalState) {
+            return TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0.95, end: 1),
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              builder: (context, scale, child) {
+                return Transform.scale(scale: scale, child: child);
+              },
+              child: Dialog(
+                backgroundColor: Colors.transparent,
+                insetPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 24,
+                ),
                 child: Container(
-                  padding: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.arrow_back),
-                            onPressed: isProcessing ? null : () => Navigator.pop(context),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
-                          const SizedBox(width: 12),
-                          const Text(
-                            'Secure Checkout',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF0A173D),
-                            ),
-                          ),
-                        ],
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(color: const Color(0xFFE8EDF3)),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x33101C24),
+                        blurRadius: 36,
+                        offset: Offset(0, 14),
                       ),
-                      const SizedBox(height: 24),
-                      
-                      // Summary Card
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.blue.shade200),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                    ],
+                  ),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 580),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(14),
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFFFFF5EA), Color(0xFFFFFFFF)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              border: Border.all(
+                                color: const Color(0xFFFFE5CA),
+                              ),
+                            ),
+                            child: Row(
                               children: [
-                                const Text('Selected Plan', style: TextStyle(color: Colors.black54, fontSize: 13)),
-                                Text(
-                                  '${plan.years} Year${plan.years > 1 ? 's' : ''}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFF8C00),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(
+                                    Icons.payments_rounded,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Complete Payment',
+                                        style: TextStyle(
+                                          fontSize: 21,
+                                          fontWeight: FontWeight.w800,
+                                          color: Color(0xFF0B1437),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        '${plan.amountLabel} for ${plan.years} year${plan.years > 1 ? 's' : ''} plan',
+                                        style: const TextStyle(
+                                          fontSize: 13.5,
+                                          color: Color(0xFF6B7280),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ],
                             ),
-                            Text(
-                              plan.amountLabel,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Colors.blue),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      
-                      const Icon(Icons.lock_outline, size: 48, color: Colors.green),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'You will be redirected to PayMongo to securely complete your payment using GCash, PayMaya, or Credit/Debit Card.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 14, color: Colors.black87),
-                      ),
-                      const SizedBox(height: 24),
-                      
-                      if (errorMessage != null)
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          margin: const EdgeInsets.only(bottom: 16),
-                          decoration: BoxDecoration(
-                            color: Colors.red.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.red.shade200),
                           ),
-                          child: Row(
+                          const SizedBox(height: 16),
+                          Wrap(
+                            spacing: 10,
                             children: [
-                              const Icon(Icons.error_outline, color: Colors.red, size: 20),
-                              const SizedBox(width: 8),
-                              Expanded(child: Text(errorMessage!, style: const TextStyle(color: Colors.red, fontSize: 13))),
+                              ChoiceChip(
+                                avatar: const Icon(
+                                  Icons.credit_card_rounded,
+                                  size: 17,
+                                ),
+                                label: const Text('Card'),
+                                selected: paymentMethod == 'card',
+                                selectedColor: const Color(0xFFFFEED9),
+                                side: const BorderSide(
+                                  color: Color(0xFFD4DEE8),
+                                ),
+                                onSelected: (_) {
+                                  setModalState(() => paymentMethod = 'card');
+                                },
+                              ),
+                              ChoiceChip(
+                                avatar: const Icon(
+                                  Icons.account_balance_wallet_rounded,
+                                  size: 17,
+                                ),
+                                label: const Text('GCash'),
+                                selected: paymentMethod == 'gcash',
+                                selectedColor: const Color(0xFFE8F3FF),
+                                side: const BorderSide(
+                                  color: Color(0xFFD4DEE8),
+                                ),
+                                onSelected: (_) {
+                                  setModalState(() => paymentMethod = 'gcash');
+                                },
+                              ),
                             ],
                           ),
-                        ),
-                      
-                      SizedBox(
-                        width: double.infinity,
-                        height: 54,
-                        child: ElevatedButton(
-                          onPressed: isProcessing
-                              ? null
-                              : () async {
-                                  setState(() {
-                                    errorMessage = null;
-                                    isProcessing = true;
-                                  });
-
-                                  try {
-                                    final authService = Provider.of<AuthService>(context, listen: false);
-                                    final user = authService.currentUser;
-                                    if (user == null || user['user_id'] == null) {
-                                      setState(() {
-                                        errorMessage = 'User not found. Please log in again.';
-                                        isProcessing = false;
-                                      });
-                                      return;
-                                    }
-                                    
-                                    final userId = user['user_id'];
-                                    final response = await http.post(
-                                      AppConfig.apiUri('subscription/paymongo-checkout/'),
-                                      headers: {"Content-Type": "application/json"},
-                                      body: json.encode({
-                                        "user_id": userId,
-                                        "subscription_years": plan.years
-                                      }),
-                                    );
-                                    
-                                    if (response.statusCode == 200) {
-                                      final data = json.decode(response.body);
-                                      if (data['success'] == true) {
-                                        final checkoutUrl = data['checkout_url'];
-                                        final uri = Uri.parse(checkoutUrl);
-                                        
-                                        if (await canLaunchUrl(uri)) {
-                                          await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                          if (dialogContext.mounted) {
-                                            Navigator.of(dialogContext).pop();
-                                            messenger.showSnackBar(
-                                              const SnackBar(
-                                                content: Text('Redirecting to secure PayMongo checkout...'),
-                                                backgroundColor: Colors.green,
-                                                duration: Duration(seconds: 4),
+                          const SizedBox(height: 12),
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 180),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeInCubic,
+                            child: paymentMethod == 'card'
+                                ? Column(
+                                    key: const ValueKey('card-form'),
+                                    children: [
+                                      TextField(
+                                        controller: cardNumberController,
+                                        keyboardType: TextInputType.number,
+                                        decoration: _modalInputDecoration(
+                                          'Card Number',
+                                          hint: '1234 5678 9012 3456',
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      TextField(
+                                        controller: cardNameController,
+                                        decoration: _modalInputDecoration(
+                                          'Cardholder Name',
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: TextField(
+                                              controller: cardExpiryController,
+                                              decoration: _modalInputDecoration(
+                                                'Expiry (MM/YY)',
                                               ),
-                                            );
-                                          }
-                                        } else {
-                                          setState(() {
-                                            errorMessage = 'Could not launch payment URL';
-                                          });
-                                        }
-                                      } else {
-                                        setState(() {
-                                          errorMessage = 'Checkout failed: ${data['message']}';
-                                        });
-                                      }
-                                    } else {
-                                      setState(() {
-                                        errorMessage = 'Server error: ${response.body}';
-                                      });
-                                    }
-                                  } catch (e) {
-                                    setState(() {
-                                      errorMessage = 'Network error: ' + e.toString();
-                                    });
-                                  } finally {
-                                    setState(() => isProcessing = false);
-                                  }
-                                },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFFF6F00),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: TextField(
+                                              controller: cardCvvController,
+                                              keyboardType:
+                                                  TextInputType.number,
+                                              obscureText: true,
+                                              decoration: _modalInputDecoration(
+                                                'CVV',
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  )
+                                : Column(
+                                    key: const ValueKey('gcash-form'),
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Center(
+                                        child: Column(
+                                          children: [
+                                            Container(
+                                              width: 180,
+                                              height: 180,
+                                              padding: const EdgeInsets.all(12),
+                                              decoration: BoxDecoration(
+                                                color: Colors.white,
+                                                borderRadius:
+                                                    BorderRadius.circular(16),
+                                                border: Border.all(
+                                                  color: Colors.blue.shade200,
+                                                  width: 2,
+                                                ),
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: Colors.blue
+                                                        .withValues(alpha: 0.1),
+                                                    blurRadius: 10,
+                                                    spreadRadius: 2,
+                                                  ),
+                                                ],
+                                              ),
+                                              child: Column(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: const [
+                                                  Icon(
+                                                    Icons.qr_code_2,
+                                                    size: 100,
+                                                    color: Color(0xFF005CEE),
+                                                  ), // GCash Blue
+                                                  SizedBox(height: 8),
+                                                  Text(
+                                                    'AESTRA STRUCTURA',
+                                                    style: TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      fontSize: 12,
+                                                      color: Color(0xFF005CEE),
+                                                    ),
+                                                    textAlign: TextAlign.center,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            const SizedBox(height: 16),
+                                            const Text(
+                                              'Scan this QR code using your GCash app to pay. Once completed, enter the reference number below.',
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                color: Colors.black54,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 16),
+                                      TextField(
+                                        controller: gcashNumberController,
+                                        keyboardType: TextInputType.number,
+                                        decoration: _modalInputDecoration(
+                                          'GCash Ref. No. (e.g. 1000293...)',
+                                          hint: 'Reference Number',
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                           ),
-                          child: isProcessing
-                              ? const SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                                )
-                              : const Text(
-                                  'Proceed to Checkout',
-                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          const SizedBox(height: 18),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton.icon(
+                                onPressed: () =>
+                                    Navigator.of(dialogContext).pop(),
+                                icon: const Icon(
+                                  Icons.arrow_back_rounded,
+                                  size: 18,
                                 ),
-                        ),
+                                label: const Text('Back'),
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  final cardInvalid =
+                                      paymentMethod == 'card' &&
+                                      (cardNumberController.text
+                                              .trim()
+                                              .isEmpty ||
+                                          cardNameController.text
+                                              .trim()
+                                              .isEmpty ||
+                                          cardExpiryController.text
+                                              .trim()
+                                              .isEmpty ||
+                                          cardCvvController.text
+                                              .trim()
+                                              .isEmpty);
+
+                                  final gcashInvalid =
+                                      paymentMethod == 'gcash' &&
+                                      gcashNumberController.text.trim().isEmpty;
+
+                                  if (cardInvalid || gcashInvalid) {
+                                    messenger.showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Please complete all required payment fields.',
+                                        ),
+                                      ),
+                                    );
+                                    return;
+                                  }
+
+                                  Navigator.of(dialogContext).pop();
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Proceeding to ${paymentMethod == 'card' ? 'Card' : 'GCash'} payment for ${plan.amountLabel}.',
+                                      ),
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.lock_rounded, size: 18),
+                                label: const Text('Pay Now'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFFF8C00),
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 18,
+                                    vertical: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -1664,6 +1798,12 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
         );
       },
     );
+
+    cardNumberController.dispose();
+    cardNameController.dispose();
+    cardExpiryController.dispose();
+    cardCvvController.dispose();
+    gcashNumberController.dispose();
   }
 
   InputDecoration _modalInputDecoration(String label, {String? hint}) {
@@ -1748,11 +1888,12 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
 
   Widget _buildTextSection(BuildContext context, bool isMobile) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
+      crossAxisAlignment: isMobile
+          ? CrossAxisAlignment.center
+          : CrossAxisAlignment.start,
       children: [
         const Text(
           "Track every project with clarity",
-          textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.bold,
@@ -1766,23 +1907,21 @@ class _ProjectTrackingSectionState extends State<ProjectTrackingSection> {
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 20),
-        Center(
-          child: ElevatedButton(
-            onPressed: () => _showPlanSelectionModal(context),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+        ElevatedButton(
+          onPressed: () => _showPlanSelectionModal(context),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.orange,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: const Text(
-              "Activate license now!",
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
+          ),
+          child: const Text(
+            "Activate license now!",
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
             ),
           ),
         ),
