@@ -36,6 +36,7 @@ class PMDashboardPage extends StatefulWidget {
 class _PMDashboardPageState extends State<PMDashboardPage> {
   static const Duration _newAccountWindow = Duration(days: 14);
   static const String _pmTutorialStepKey = 'pm_quick_tour_step';
+  static const String _pmTutorialDismissedKey = 'pm_quick_tour_dismissed';
   bool _isCompletingQuickTour = false;
   bool _hasAutoResumedTutorial = false;
 
@@ -133,6 +134,7 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
     if (user == null) return false;
     if (user['role']?.toString() != 'ProjectManager') return false;
     if (user['has_completed_quick_tour'] == true) return false;
+    if (user[_pmTutorialDismissedKey] == true) return false;
     if (totalProjects > 0) return false;
 
     final createdAtRaw = user['created_at']?.toString();
@@ -169,6 +171,7 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
   }
 
   Future<void> _startTutorial() async {
+    await AuthService().updateLocalUserFields({_pmTutorialDismissedKey: false});
     await showNewAccountTutorialDialog(
       context: context,
       roleLabel: 'Project Manager',
@@ -176,6 +179,14 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
       startIndex: _currentTutorialStepIndex(),
       onStepAction: (route) => _advanceTutorialAndNavigate(route),
     );
+  }
+
+  Future<void> _skipTutorialForNow() async {
+    if (_isCompletingQuickTour) return;
+    setState(() => _isCompletingQuickTour = true);
+    await AuthService().updateLocalUserFields({_pmTutorialDismissedKey: true});
+    if (!mounted) return;
+    setState(() => _isCompletingQuickTour = false);
   }
 
   void _maybeAutoResumeTutorial() {
@@ -456,7 +467,7 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
               TextButton(
                 onPressed: _isCompletingQuickTour
                     ? null
-                    : () => _advanceTutorialAndNavigate(null),
+                    : _skipTutorialForNow,
                 child: const Text('Skip for now'),
               ),
               if (_isCompletingQuickTour)
