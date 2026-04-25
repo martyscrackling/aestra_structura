@@ -1131,15 +1131,15 @@ def create_paymongo_checkout(request):
             return Response({
                 'success': False,
                 'message': 'Failed to create checkout session with PayMongo',
-                'paymongo_error': response.json()
+                'paymongo_error': response_data
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
-        checkout_url = response.json()['data']['attributes']['checkout_url']
+        checkout_url = response_data['data']['attributes']['checkout_url']
         
         return Response({
             'success': True,
             'checkout_url': checkout_url,
-            'session_id': response.json()['data']['id']
+            'session_id': response_data['data']['id']
         }, status=status.HTTP_200_OK)
 
 
