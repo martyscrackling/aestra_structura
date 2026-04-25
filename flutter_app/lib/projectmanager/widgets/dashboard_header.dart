@@ -1041,7 +1041,7 @@ class _ProfileMenu extends StatelessWidget {
   const _ProfileMenu();
 
   String _displayName(Map<String, dynamic>? user) {
-    if (user == null) return 'User';
+    if (user == null) return 'Project Manager';
 
     // Try first and last name
     final first = (user['first_name'] as String?)?.trim() ?? '';
@@ -1065,11 +1065,11 @@ class _ProfileMenu extends StatelessWidget {
     final username = (user['username'] as String?)?.trim() ?? '';
     if (username.isNotEmpty) return username;
 
-    return 'User';
+    return 'Project Manager';
   }
 
   String _displayRole(Map<String, dynamic>? user) {
-    if (user == null) return 'Account';
+    if (user == null) return 'Project Manager';
 
     final role = (user['role'] as String?)?.trim();
     if (role != null && role.isNotEmpty) return role;
@@ -1077,7 +1077,7 @@ class _ProfileMenu extends StatelessWidget {
     final type = (user['type'] as String?)?.trim();
     if (type != null && type.isNotEmpty) return type;
 
-    return 'Account';
+    return 'Project Manager';
   }
 
   void _handleAction(BuildContext context, _ProfileAction action) {
