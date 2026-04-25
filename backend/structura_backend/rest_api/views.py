@@ -1043,7 +1043,6 @@ def activate_subscription(request):
         )
 
 
-<<<<<<< HEAD
 @api_view(['POST'])
 def create_paymongo_checkout(request):
     """
@@ -1221,8 +1220,6 @@ def paymongo_webhook(request):
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
 
-=======
->>>>>>> parent of f09fb39 (payment)
 # Address Hierarchy ViewSets
 class RegionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = models.Region.objects.all()
