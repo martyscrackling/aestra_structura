@@ -435,6 +435,7 @@ class Supervisors(models.Model):
     payrate = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
     photo = models.FileField(upload_to='supervisor_images/', null=True, blank=True)
+    has_completed_quick_tour = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -618,6 +619,7 @@ class Client(models.Model):
     barangay = models.ForeignKey(Barangay, on_delete=models.SET_NULL, null=True, blank=True)
 
     photo = models.FileField(upload_to='client_images/', null=True, blank=True)
+    has_completed_quick_tour = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
     status = models.CharField(

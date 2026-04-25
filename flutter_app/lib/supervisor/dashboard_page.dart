@@ -14,6 +14,7 @@ import 'widgets/mobile_bottom_nav.dart';
 import '../services/auth_service.dart';
 import '../services/app_config.dart';
 import '../services/app_theme_tokens.dart';
+import '../services/new_account_tutorial.dart';
 
 class _ProjectProgressPoint {
   const _ProjectProgressPoint({
@@ -39,12 +40,34 @@ class SupervisorDashboardPage extends StatefulWidget {
 }
 
 class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
+  static const Duration _newAccountWindow = Duration(days: 14);
   int? _currentProjectId;
   bool _showMobileDetails = false;
+  bool _isCompletingQuickTour = false;
   final GlobalKey _activeProjectKey = GlobalKey();
   final Color _primary = AppColors.accent;
   List<_ProjectProgressPoint> _projectProgressPoints = const [];
   bool _isLoadingProjectProgress = true;
+  static const List<TutorialStepItem> _supervisorTutorialSteps = [
+    TutorialStepItem(
+      title: 'Step 1: Check assigned projects',
+      description: 'Review active projects and verify scope before daily operations.',
+      actionLabel: 'Open Projects',
+      route: '/supervisor/projects',
+    ),
+    TutorialStepItem(
+      title: 'Step 2: Manage worker assignments',
+      description: 'Assign workers and prepare workforce coverage per project phase.',
+      actionLabel: 'Open Workers',
+      route: '/supervisor/workers',
+    ),
+    TutorialStepItem(
+      title: 'Step 3: Record attendance and reports',
+      description: 'Track attendance and submit updates for project managers.',
+      actionLabel: 'Open Attendance',
+      route: '/supervisor/attendance',
+    ),
+  ];
 
   @override
   void initState() {
@@ -413,6 +436,71 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
     }
   }
 
+  bool _shouldShowQuickTutorialCard() {
+    final user = AuthService().currentUser;
+    if (user == null) return false;
+    if (user['role']?.toString() != 'Supervisor') return false;
+    if (user['has_completed_quick_tour'] == true) return false;
+
+    final createdAtRaw = user['created_at']?.toString();
+    if (createdAtRaw == null || createdAtRaw.trim().isEmpty) return true;
+    final createdAt = DateTime.tryParse(createdAtRaw);
+    if (createdAt == null) return true;
+    return DateTime.now().difference(createdAt.toLocal()) <= _newAccountWindow;
+  }
+
+  Future<void> _completeQuickTourAndGo(String route) async {
+    if (_isCompletingQuickTour) return;
+    setState(() => _isCompletingQuickTour = true);
+    await AuthService().markQuickTourCompleted();
+    if (!mounted) return;
+    setState(() => _isCompletingQuickTour = false);
+    context.go(route);
+  }
+
+  Future<void> _startTutorial() async {
+    await showNewAccountTutorialDialog(
+      context: context,
+      roleLabel: 'Supervisor',
+      steps: _supervisorTutorialSteps,
+      onStepAction: _completeQuickTourAndGo,
+    );
+  }
+
+  Widget _buildQuickTutorialCard() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE3E8F2)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.explore_outlined, color: Color(0xFF0C1935)),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'New account detected. Start Tutorial to quickly learn your Supervisor tools.',
+              style: TextStyle(fontSize: 12.5, color: Color(0xFF334155)),
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton(
+            onPressed: _isCompletingQuickTour ? null : _startTutorial,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0C1935),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Start Tutorial'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _setProjectId(int projectId) {
     setState(() {
       _currentProjectId = projectId;
@@ -507,6 +595,7 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_shouldShowQuickTutorialCard()) _buildQuickTutorialCard(),
           _buildDashboardProgressChart(true),
           const SizedBox(height: 10),
           _buildScrollableActiveProjects(height: activeProjectsHeight),
@@ -633,6 +722,7 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_shouldShowQuickTutorialCard()) _buildQuickTutorialCard(),
           _buildDashboardProgressChart(false),
           const SizedBox(height: 12),
           _buildScrollableActiveProjects(height: activeProjectsHeight),
@@ -657,7 +747,12 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(18, 18, 18, 0),
-          child: _buildDashboardProgressChart(false),
+          child: Column(
+            children: [
+              if (_shouldShowQuickTutorialCard()) _buildQuickTutorialCard(),
+              _buildDashboardProgressChart(false),
+            ],
+          ),
         ),
         const SizedBox(height: 6),
         Row(

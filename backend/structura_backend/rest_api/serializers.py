@@ -352,6 +352,7 @@ class SupervisorsSerializer(serializers.ModelSerializer):
             'pagibig_id',
             'payrate',
             'photo',
+            'has_completed_quick_tour',
             'created_at',
         ]
         extra_kwargs = {
@@ -374,6 +375,7 @@ class SupervisorsSerializer(serializers.ModelSerializer):
             'pagibig_id': {'required': False, 'allow_null': True},
             'payrate': {'required': False, 'allow_null': True},
             'photo': {'required': False, 'allow_null': True},
+            'has_completed_quick_tour': {'required': False},
         }
     
     def create(self, validated_data):
@@ -460,6 +462,7 @@ class SupervisorSerializer(serializers.ModelSerializer):
             'pagibig_id',
             'payrate',
             'photo',
+            'has_completed_quick_tour',
             'created_at',
         ]
         extra_kwargs = {
@@ -482,6 +485,7 @@ class SupervisorSerializer(serializers.ModelSerializer):
             'pagibig_id': {'required': False, 'allow_null': True},
             'payrate': {'required': False, 'allow_null': True},
             'photo': {'required': False, 'allow_null': True},
+            'has_completed_quick_tour': {'required': False},
         }
     
     def create(self, validated_data):
@@ -891,6 +895,7 @@ class ClientSerializer(serializers.ModelSerializer):
             'city',
             'barangay',
             'photo',
+            'has_completed_quick_tour',
             'status',
             'created_at',
         ]
@@ -910,6 +915,7 @@ class ClientSerializer(serializers.ModelSerializer):
             'city': {'required': False, 'allow_null': True},
             'barangay': {'required': False, 'allow_null': True},
             'photo': {'required': False, 'allow_null': True},
+            'has_completed_quick_tour': {'required': False},
         }
     
     def create(self, validated_data):

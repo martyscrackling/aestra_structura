@@ -4,6 +4,9 @@ import 'widgets/projects_grid.dart';
 import 'models/project_item.dart';
 import 'widgets/dashboard_header.dart';
 import '../services/client_dashboard_service.dart';
+import '../services/auth_service.dart';
+import '../services/new_account_tutorial.dart';
+import 'package:go_router/go_router.dart';
 
 class ClDashboardPage extends StatefulWidget {
   const ClDashboardPage({super.key});
@@ -13,8 +16,24 @@ class ClDashboardPage extends StatefulWidget {
 }
 
 class _ClDashboardPageState extends State<ClDashboardPage> {
+  static const Duration _newAccountWindow = Duration(days: 14);
   final _service = ClientDashboardService();
   late Future<List<ProjectItem>> _future;
+  bool _isCompletingQuickTour = false;
+  static const List<TutorialStepItem> _clientTutorialSteps = [
+    TutorialStepItem(
+      title: 'Step 1: View your assigned projects',
+      description: 'Review project cards and overall progress from your dashboard.',
+      actionLabel: 'Open Dashboard',
+      route: '/client',
+    ),
+    TutorialStepItem(
+      title: 'Step 2: Open project details',
+      description: 'Check phase status, subtasks, and completion updates.',
+      actionLabel: 'Stay Here',
+      route: '/client',
+    ),
+  ];
 
   @override
   void initState() {
@@ -39,6 +58,36 @@ class _ClDashboardPageState extends State<ClDashboardPage> {
           ),
         )
         .toList(growable: false);
+  }
+
+  bool _shouldShowQuickTutorialCard() {
+    final user = AuthService().currentUser;
+    if (user == null) return false;
+    if (user['role']?.toString() != 'Client') return false;
+    if (user['has_completed_quick_tour'] == true) return false;
+    final createdAtRaw = user['created_at']?.toString();
+    if (createdAtRaw == null || createdAtRaw.trim().isEmpty) return true;
+    final createdAt = DateTime.tryParse(createdAtRaw);
+    if (createdAt == null) return true;
+    return DateTime.now().difference(createdAt.toLocal()) <= _newAccountWindow;
+  }
+
+  Future<void> _completeQuickTourAndGo(String route) async {
+    if (_isCompletingQuickTour) return;
+    setState(() => _isCompletingQuickTour = true);
+    await AuthService().markQuickTourCompleted();
+    if (!mounted) return;
+    setState(() => _isCompletingQuickTour = false);
+    context.go(route);
+  }
+
+  Future<void> _startTutorial() async {
+    await showNewAccountTutorialDialog(
+      context: context,
+      roleLabel: 'Client',
+      steps: _clientTutorialSteps,
+      onStepAction: _completeQuickTourAndGo,
+    );
   }
 
   @override
@@ -73,6 +122,45 @@ class _ClDashboardPageState extends State<ClDashboardPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        if (_shouldShowQuickTutorialCard()) ...[
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFE3E8F2)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.explore_outlined,
+                                  color: Color(0xFF0C1935),
+                                ),
+                                const SizedBox(width: 10),
+                                const Expanded(
+                                  child: Text(
+                                    'New account detected. Press Start Tutorial to look around your Client dashboard.',
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      color: Color(0xFF334155),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                ElevatedButton(
+                                  onPressed: _startTutorial,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Color(0xFF0C1935),
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  child: Text('Start Tutorial'),
+                                ),
+                              ],
+                            ),
+                          ),
+                          SizedBox(height: isMobile ? 14 : 16),
+                        ],
                         const TopControls(),
                         SizedBox(height: isMobile ? 16 : 18),
                         if (snapshot.connectionState == ConnectionState.waiting)

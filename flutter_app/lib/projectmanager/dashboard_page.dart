@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../services/app_config.dart';
 import '../services/auth_service.dart';
+import '../services/new_account_tutorial.dart';
 import '../services/pm_dashboard_service.dart';
 import 'widgets/sidebar.dart';
 import 'widgets/dashboard_header.dart';
@@ -43,6 +44,26 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
 
   String? _trialStatus;
   int? _trialDaysRemaining;
+  static const List<TutorialStepItem> _pmTutorialSteps = [
+    TutorialStepItem(
+      title: 'Step 1: Set up your client list',
+      description: 'Add your first client profile so projects can be assigned correctly.',
+      actionLabel: 'Open Clients',
+      route: '/clients',
+    ),
+    TutorialStepItem(
+      title: 'Step 2: Build your workforce',
+      description: 'Invite supervisors and add field workers for daily operations.',
+      actionLabel: 'Open Workforce',
+      route: '/workforce',
+    ),
+    TutorialStepItem(
+      title: 'Step 3: Create your first project',
+      description: 'Define schedule, budget, and team to start progress tracking.',
+      actionLabel: 'Open Projects',
+      route: '/projects',
+    ),
+  ];
 
   @override
   void initState() {
@@ -132,6 +153,15 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
     if (route != null) {
       context.go(route);
     }
+  }
+
+  Future<void> _startTutorial() async {
+    await showNewAccountTutorialDialog(
+      context: context,
+      roleLabel: 'Project Manager',
+      steps: _pmTutorialSteps,
+      onStepAction: (route) => _completeQuickTourAndMaybeNavigate(route),
+    );
   }
 
   @override
@@ -375,7 +405,7 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Quick tour for new accounts: follow these steps to set up your workspace in minutes.',
+            'This is a new account. Press Start Tutorial for a guided walkthrough of the key pages.',
             style: TextStyle(
               height: 1.3,
               color: Colors.grey[700],
@@ -383,34 +413,18 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
             ),
           ),
           const SizedBox(height: 16),
-          _buildTourStep(
-            number: 1,
-            title: 'Add your first client',
-            subtitle: 'Create at least one client profile so project ownership is ready.',
-            actionLabel: 'Go to Clients',
-            onTap: () => _completeQuickTourAndMaybeNavigate('/clients'),
-            isPrimary: true,
-          ),
-          const SizedBox(height: 10),
-          _buildTourStep(
-            number: 2,
-            title: 'Add your workforce',
-            subtitle: 'Invite supervisors and add field workers for task assignment.',
-            actionLabel: 'Go to Workforce',
-            onTap: () => _completeQuickTourAndMaybeNavigate('/workforce'),
-          ),
-          const SizedBox(height: 10),
-          _buildTourStep(
-            number: 3,
-            title: 'Create your first project',
-            subtitle: 'Set schedule, budget, and team members to begin tracking progress.',
-            actionLabel: 'Go to Projects',
-            onTap: () => _completeQuickTourAndMaybeNavigate('/projects'),
-          ),
-          const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             children: [
+              ElevatedButton.icon(
+                onPressed: _isCompletingQuickTour ? null : _startTutorial,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0C1935),
+                  foregroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.play_circle_outline),
+                label: const Text('Start Tutorial'),
+              ),
               TextButton(
                 onPressed: _isCompletingQuickTour
                     ? null
@@ -426,81 +440,6 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
             ],
           ),
           if (isMobile) const SizedBox(height: 80),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTourStep({
-    required int number,
-    required String title,
-    required String subtitle,
-    required String actionLabel,
-    required VoidCallback onTap,
-    bool isPrimary = false,
-  }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFD),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE3E8F2)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CircleAvatar(
-            radius: 13,
-            backgroundColor: const Color(0xFF0C1935),
-            child: Text(
-              '$number',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF0C1935),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    color: Colors.grey[700],
-                    fontSize: 12,
-                    height: 1.3,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                if (isPrimary)
-                  ElevatedButton(
-                    onPressed: _isCompletingQuickTour ? null : onTap,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0C1935),
-                      foregroundColor: Colors.white,
-                    ),
-                    child: Text(actionLabel),
-                  )
-                else
-                  OutlinedButton(
-                    onPressed: _isCompletingQuickTour ? null : onTap,
-                    child: Text(actionLabel),
-                  ),
-              ],
-            ),
-          ),
         ],
       ),
     );

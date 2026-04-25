@@ -358,18 +358,25 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  /// Persist quick-tour completion for Project Manager accounts.
+  /// Persist quick-tour completion for any supported account role.
   Future<bool> markQuickTourCompleted() async {
     if (_currentUser == null) return false;
+    final role = _currentUser!['role']?.toString();
     final userId = _currentUser!['user_id'];
-    if (userId == null) return false;
+    final supervisorId = _currentUser!['supervisor_id'];
+    final clientId = _currentUser!['client_id'];
 
     try {
       final response = await http
-          .patch(
-            AppConfig.apiUri('users/$userId/'),
+          .post(
+            AppConfig.apiUri('tutorial/complete/'),
             headers: {"Content-Type": "application/json"},
-            body: jsonEncode({"has_completed_quick_tour": true}),
+            body: jsonEncode({
+              "role": role,
+              "user_id": userId,
+              "supervisor_id": supervisorId,
+              "client_id": clientId,
+            }),
           )
           .timeout(_networkTimeout);
 

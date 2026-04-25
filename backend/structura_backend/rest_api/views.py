@@ -649,6 +649,10 @@ def login_user(request):
                         'photo': _photo_path(getattr(supervisor, 'photo', None)),
                         'photo_url': _photo_path(getattr(supervisor, 'photo', None)),
                         'role': 'Supervisor',
+                        'created_at': supervisor.created_at.isoformat() if supervisor.created_at else None,
+                        'has_completed_quick_tour': bool(
+                            getattr(supervisor, 'has_completed_quick_tour', False)
+                        ),
                         'type': 'Supervisor',
                         'force_password_change': password == 'PASSWORD',
                     }
@@ -680,6 +684,12 @@ def login_user(request):
                             'photo': _photo_path(getattr(client, 'photo', None)) if client else None,
                             'photo_url': _photo_path(getattr(client, 'photo', None)) if client else None,
                             'role': 'Client',
+                            'created_at': user.created_at.isoformat() if user.created_at else None,
+                            'has_completed_quick_tour': bool(
+                                getattr(client, 'has_completed_quick_tour', False)
+                                if client is not None
+                                else getattr(user, 'has_completed_quick_tour', False)
+                            ),
                             'type': 'Client',
                             'force_password_change': password == 'PASSWORD',
                         }
@@ -726,6 +736,10 @@ def login_user(request):
                         'photo': _photo_path(getattr(client, 'photo', None)),
                         'photo_url': _photo_path(getattr(client, 'photo', None)),
                         'role': 'Client',
+                        'created_at': client.created_at.isoformat() if client.created_at else None,
+                        'has_completed_quick_tour': bool(
+                            getattr(client, 'has_completed_quick_tour', False)
+                        ),
                         'type': 'Client',
                         'force_password_change': password == 'PASSWORD',
                     }
@@ -746,6 +760,63 @@ def login_user(request):
         return Response(
             {'success': False, 'message': str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@csrf_exempt
+@api_view(['POST'])
+def mark_quick_tour_completed(request):
+    """Persist quick-tour completion per account type."""
+    try:
+        data = json.loads(request.body)
+        role = (data.get('role') or '').strip()
+
+        if role == 'ProjectManager':
+            user_id = data.get('user_id')
+            user = models.User.objects.filter(user_id=user_id).first()
+            if user is None:
+                return Response(
+                    {'success': False, 'message': 'Project Manager account not found'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            user.has_completed_quick_tour = True
+            user.save(update_fields=['has_completed_quick_tour'])
+        elif role == 'Supervisor':
+            supervisor_id = data.get('supervisor_id') or data.get('user_id')
+            supervisor = models.Supervisors.objects.filter(
+                supervisor_id=supervisor_id
+            ).first()
+            if supervisor is None:
+                return Response(
+                    {'success': False, 'message': 'Supervisor account not found'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            supervisor.has_completed_quick_tour = True
+            supervisor.save(update_fields=['has_completed_quick_tour'])
+        elif role == 'Client':
+            client_id = data.get('client_id') or data.get('user_id')
+            client = models.Client.objects.filter(client_id=client_id).first()
+            if client is None:
+                return Response(
+                    {'success': False, 'message': 'Client account not found'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            client.has_completed_quick_tour = True
+            client.save(update_fields=['has_completed_quick_tour'])
+        else:
+            return Response(
+                {'success': False, 'message': 'Unsupported role'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(
+            {'success': True, 'message': 'Quick tutorial marked as completed'},
+            status=status.HTTP_200_OK,
+        )
+    except Exception as e:
+        return Response(
+            {'success': False, 'message': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
 
