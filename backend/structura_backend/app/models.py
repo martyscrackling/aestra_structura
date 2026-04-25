@@ -99,6 +99,7 @@ class User(models.Model):
     warning_7days_sent = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
+    has_completed_quick_tour = models.BooleanField(default=False)
 
     status = models.CharField(
         max_length=20,

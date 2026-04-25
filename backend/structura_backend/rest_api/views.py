@@ -697,6 +697,10 @@ def login_user(request):
                         'phone': user.phone,
                         'phone_number': user.phone,
                         'role': user.role,
+                        'created_at': user.created_at.isoformat() if user.created_at else None,
+                        'has_completed_quick_tour': bool(
+                            getattr(user, 'has_completed_quick_tour', False)
+                        ),
                         'type': 'user',
                     }
                 }, status=status.HTTP_200_OK)

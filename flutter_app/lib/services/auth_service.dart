@@ -358,6 +358,35 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  /// Persist quick-tour completion for Project Manager accounts.
+  Future<bool> markQuickTourCompleted() async {
+    if (_currentUser == null) return false;
+    final userId = _currentUser!['user_id'];
+    if (userId == null) return false;
+
+    try {
+      final response = await http
+          .patch(
+            AppConfig.apiUri('users/$userId/'),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({"has_completed_quick_tour": true}),
+          )
+          .timeout(_networkTimeout);
+
+      if (response.statusCode == 200) {
+        await updateLocalUserFields({"has_completed_quick_tour": true});
+        return true;
+      }
+      return false;
+    } on TimeoutException catch (e) {
+      print('Mark quick tour completed timeout after ${_networkTimeout.inSeconds}s: $e');
+      return false;
+    } catch (e) {
+      print("Mark quick tour completed error: $e");
+      return false;
+    }
+  }
+
   /// Logout user
   Future<void> logout() async {
     await _clearAuthState();

@@ -94,6 +94,7 @@ class UserSerializer(serializers.ModelSerializer):
             'street',
             'role',
             'created_at',
+            'has_completed_quick_tour',
             'status',
         ]
         read_only_fields = ['user_id', 'created_at']
