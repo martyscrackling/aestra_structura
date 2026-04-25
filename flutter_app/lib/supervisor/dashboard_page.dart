@@ -41,9 +41,11 @@ class SupervisorDashboardPage extends StatefulWidget {
 
 class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
   static const Duration _newAccountWindow = Duration(days: 14);
+  static const String _supervisorTutorialStepKey = 'supervisor_quick_tour_step';
   int? _currentProjectId;
   bool _showMobileDetails = false;
   bool _isCompletingQuickTour = false;
+  bool _hasAutoResumedTutorial = false;
   final GlobalKey _activeProjectKey = GlobalKey();
   final Color _primary = AppColors.accent;
   List<_ProjectProgressPoint> _projectProgressPoints = const [];
@@ -452,10 +454,24 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
   Future<void> _completeQuickTourAndGo(String route) async {
     if (_isCompletingQuickTour) return;
     setState(() => _isCompletingQuickTour = true);
-    await AuthService().markQuickTourCompleted();
+    final authService = AuthService();
+    final nextStep = _currentTutorialStepIndex() + 1;
+    final hasMoreSteps = nextStep < _supervisorTutorialSteps.length;
+    await authService.updateLocalUserFields({
+      _supervisorTutorialStepKey: nextStep,
+    });
+    if (!hasMoreSteps) {
+      await authService.markQuickTourCompleted();
+    }
     if (!mounted) return;
     setState(() => _isCompletingQuickTour = false);
     context.go(route);
+  }
+
+  int _currentTutorialStepIndex() {
+    final raw = AuthService().currentUser?[_supervisorTutorialStepKey];
+    if (raw is int) return raw;
+    return int.tryParse(raw?.toString() ?? '') ?? 0;
   }
 
   Future<void> _startTutorial() async {
@@ -463,8 +479,23 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
       context: context,
       roleLabel: 'Supervisor',
       steps: _supervisorTutorialSteps,
+      startIndex: _currentTutorialStepIndex(),
       onStepAction: _completeQuickTourAndGo,
     );
+  }
+
+  void _maybeAutoResumeTutorial() {
+    if (_hasAutoResumedTutorial) return;
+    final currentStep = _currentTutorialStepIndex();
+    if (currentStep <= 0 || currentStep >= _supervisorTutorialSteps.length) {
+      return;
+    }
+    if (!_shouldShowQuickTutorialCard()) return;
+    _hasAutoResumedTutorial = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _startTutorial();
+    });
   }
 
   Widget _buildQuickTutorialCard() {
@@ -531,6 +562,7 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
 
   @override
   Widget build(BuildContext context) {
+    _maybeAutoResumeTutorial();
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth > 1024;
     final isTablet = screenWidth > 600 && screenWidth <= 1024;

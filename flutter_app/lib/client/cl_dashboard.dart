@@ -17,9 +17,11 @@ class ClDashboardPage extends StatefulWidget {
 
 class _ClDashboardPageState extends State<ClDashboardPage> {
   static const Duration _newAccountWindow = Duration(days: 14);
+  static const String _clientTutorialStepKey = 'client_quick_tour_step';
   final _service = ClientDashboardService();
   late Future<List<ProjectItem>> _future;
   bool _isCompletingQuickTour = false;
+  bool _hasAutoResumedTutorial = false;
   static const List<TutorialStepItem> _clientTutorialSteps = [
     TutorialStepItem(
       title: 'Step 1: View your assigned projects',
@@ -72,10 +74,24 @@ class _ClDashboardPageState extends State<ClDashboardPage> {
     return DateTime.now().difference(createdAt.toLocal()) <= _newAccountWindow;
   }
 
+  int _currentTutorialStepIndex() {
+    final raw = AuthService().currentUser?[_clientTutorialStepKey];
+    if (raw is int) return raw;
+    return int.tryParse(raw?.toString() ?? '') ?? 0;
+  }
+
   Future<void> _completeQuickTourAndGo(String route) async {
     if (_isCompletingQuickTour) return;
     setState(() => _isCompletingQuickTour = true);
-    await AuthService().markQuickTourCompleted();
+    final authService = AuthService();
+    final nextStep = _currentTutorialStepIndex() + 1;
+    final hasMoreSteps = nextStep < _clientTutorialSteps.length;
+    await authService.updateLocalUserFields({
+      _clientTutorialStepKey: nextStep,
+    });
+    if (!hasMoreSteps) {
+      await authService.markQuickTourCompleted();
+    }
     if (!mounted) return;
     setState(() => _isCompletingQuickTour = false);
     context.go(route);
@@ -86,12 +102,26 @@ class _ClDashboardPageState extends State<ClDashboardPage> {
       context: context,
       roleLabel: 'Client',
       steps: _clientTutorialSteps,
+      startIndex: _currentTutorialStepIndex(),
       onStepAction: _completeQuickTourAndGo,
     );
   }
 
+  void _maybeAutoResumeTutorial() {
+    if (_hasAutoResumedTutorial) return;
+    final currentStep = _currentTutorialStepIndex();
+    if (currentStep <= 0 || currentStep >= _clientTutorialSteps.length) return;
+    if (!_shouldShowQuickTutorialCard()) return;
+    _hasAutoResumedTutorial = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _startTutorial();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    _maybeAutoResumeTutorial();
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 600;
 

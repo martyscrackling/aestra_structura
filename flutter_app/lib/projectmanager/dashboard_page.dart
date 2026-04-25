@@ -35,7 +35,9 @@ class PMDashboardPage extends StatefulWidget {
 
 class _PMDashboardPageState extends State<PMDashboardPage> {
   static const Duration _newAccountWindow = Duration(days: 14);
+  static const String _pmTutorialStepKey = 'pm_quick_tour_step';
   bool _isCompletingQuickTour = false;
+  bool _hasAutoResumedTutorial = false;
 
   bool _isLoadingSummary = true;
   String? _summaryError;
@@ -140,12 +142,23 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
     return DateTime.now().difference(createdAt.toLocal()) <= _newAccountWindow;
   }
 
-  Future<void> _completeQuickTourAndMaybeNavigate(String? route) async {
+  int _currentTutorialStepIndex() {
+    final raw = AuthService().currentUser?[_pmTutorialStepKey];
+    if (raw is int) return raw;
+    return int.tryParse(raw?.toString() ?? '') ?? 0;
+  }
+
+  Future<void> _advanceTutorialAndNavigate(String? route) async {
     if (_isCompletingQuickTour) return;
     setState(() => _isCompletingQuickTour = true);
 
     final authService = AuthService();
-    await authService.markQuickTourCompleted();
+    final nextStep = _currentTutorialStepIndex() + 1;
+    final hasMoreSteps = nextStep < _pmTutorialSteps.length;
+    await authService.updateLocalUserFields({_pmTutorialStepKey: nextStep});
+    if (!hasMoreSteps) {
+      await authService.markQuickTourCompleted();
+    }
 
     if (!mounted) return;
     setState(() => _isCompletingQuickTour = false);
@@ -160,8 +173,22 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
       context: context,
       roleLabel: 'Project Manager',
       steps: _pmTutorialSteps,
-      onStepAction: (route) => _completeQuickTourAndMaybeNavigate(route),
+      startIndex: _currentTutorialStepIndex(),
+      onStepAction: (route) => _advanceTutorialAndNavigate(route),
     );
+  }
+
+  void _maybeAutoResumeTutorial() {
+    if (_hasAutoResumedTutorial) return;
+    final currentStep = _currentTutorialStepIndex();
+    if (currentStep <= 0 || currentStep >= _pmTutorialSteps.length) return;
+    final totalProjects = _summary?.totalProjects ?? 0;
+    if (!_shouldShowQuickTour(totalProjects: totalProjects)) return;
+    _hasAutoResumedTutorial = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _startTutorial();
+    });
   }
 
   @override
@@ -356,6 +383,7 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
     }
 
     final totalProjects = _summary?.totalProjects ?? 0;
+    _maybeAutoResumeTutorial();
     if (_shouldShowQuickTour(totalProjects: totalProjects)) {
       return _buildWelcomeEmptyState(layout: layout);
     }
@@ -428,7 +456,7 @@ class _PMDashboardPageState extends State<PMDashboardPage> {
               TextButton(
                 onPressed: _isCompletingQuickTour
                     ? null
-                    : () => _completeQuickTourAndMaybeNavigate(null),
+                    : () => _advanceTutorialAndNavigate(null),
                 child: const Text('Skip for now'),
               ),
               if (_isCompletingQuickTour)
