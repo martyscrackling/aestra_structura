@@ -1043,6 +1043,183 @@ def activate_subscription(request):
         )
 
 
+@api_view(['POST'])
+def create_paymongo_checkout(request):
+    """
+    Create a PayMongo Checkout Session for a subscription.
+    Body: {
+        "user_id": int,
+        "subscription_years": int (default 1)
+    }
+    """
+    import os
+    import requests
+    from requests.auth import HTTPBasicAuth
+    try:
+        data = request.data
+        user_id = data.get('user_id')
+        subscription_years = data.get('subscription_years', 1)
+        
+        if not user_id:
+            return Response(
+                {'success': False, 'message': 'user_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        try:
+            user = models.User.objects.get(user_id=user_id, role='ProjectManager')
+        except models.User.DoesNotExist:
+            return Response(
+                {'success': False, 'message': 'User not found or not a ProjectManager'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Price tiers in centavos (must match Flutter UI prices)
+        # 1 Year = ₱5,000, 3 Years = ₱13,000, 5 Years = ₱22,000
+        price_map = {
+            1: 500000,    # ₱5,000
+            3: 1300000,   # ₱13,000
+            5: 2200000,   # ₱22,000
+        }
+        amount = price_map.get(subscription_years)
+        if amount is None:
+            return Response(
+                {'success': False, 'message': f'Invalid subscription plan: {subscription_years} year(s)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get PayMongo secret key from env
+        paymongo_sk = os.getenv('PAYMONGO_SECRET_KEY')
+        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:8001') # Adjust fallback if needed
+
+        url = "https://api.paymongo.com/v1/checkout_sessions"
+        payload = {
+            "data": {
+                "attributes": {
+                    "send_email_receipt": True,
+                    "show_description": True,
+                    "show_line_items": True,
+                    "line_items": [
+                        {
+                            "currency": "PHP",
+                            "amount": amount,
+                            "description": f"Subscription for {subscription_years} year(s)",
+                            "name": "Structura Sub",
+                            "quantity": 1
+                        }
+                    ],
+                    "payment_method_types": ["gcash", "paymaya", "card"],
+                    "success_url": f"{frontend_url}/payment-success?user_id={user_id}",
+                    "cancel_url": f"{frontend_url}/payment-failed?user_id={user_id}",
+                    "reference_number": f"USER-{user_id}-YRS-{subscription_years}-{timezone.now().timestamp()}",
+                    "metadata": {
+                        "user_id": str(user_id),
+                        "subscription_years": str(subscription_years)
+                    }
+                }
+            }
+        }
+        
+        response = requests.post(
+            url, 
+            json=payload, 
+            auth=HTTPBasicAuth(paymongo_sk, '')
+        )
+        response_data = response.json()
+        
+        if response.status_code != 200:
+            return Response({
+                'success': False,
+                'message': 'Failed to create checkout session with PayMongo',
+                'paymongo_error': response_data
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+        checkout_url = response_data['data']['attributes']['checkout_url']
+        
+        return Response({
+            'success': True,
+            'checkout_url': checkout_url,
+            'session_id': response_data['data']['id']
+        }, status=status.HTTP_200_OK)
+
+
+    except Exception as e:
+        logger.error(f"Error creating PayMongo checkout: {str(e)}")
+        return Response(
+            {'success': False, 'message': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+from django.http import JsonResponse
+
+@csrf_exempt
+def paymongo_webhook(request):
+    """
+    Handle PayMongo webhooks.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Only POST allowed'}, status=405)
+    try:
+        data = json.loads(request.body)
+        event_type = data.get('data', {}).get('attributes', {}).get('type')
+        
+        if event_type == 'checkout_session.payment.paid':
+            event_data = data['data']['attributes']['data']['attributes']
+            metadata = event_data.get('metadata', {})
+            
+            user_id_str = metadata.get('user_id')
+            years_str = metadata.get('subscription_years')
+            
+            if user_id_str and years_str:
+                user_id = int(user_id_str)
+                subscription_years = int(years_str)
+                amount_paid = event_data.get('payments', [{}])[0].get('attributes', {}).get('amount', 0) / 100.0
+                
+                try:
+                    user = models.User.objects.get(user_id=user_id)
+                    # Update subscription
+                    user.subscription_status = 'active'
+                    user.subscription_start_date = timezone.now()
+                    user.subscription_end_date = timezone.now() + timedelta(days=365 * subscription_years)
+                    user.subscription_years = subscription_years
+                    user.payment_date = timezone.now()
+                    user.save()
+                    
+                    # Log payment
+                    from app.models import PaymentHistory
+                    PaymentHistory.objects.create(
+                        user=user,
+                        amount=amount_paid,
+                        subscription_years=subscription_years,
+                        payment_status='completed',
+                        notes=f"Paid via PayMongo checkout webhook. Event ID: {data.get('data', {}).get('id')}"
+                    )
+                    
+                    # Send confirmation email
+                    from app.utils import send_subscription_activated_email
+                    send_subscription_activated_email(user)
+                    
+                    return JsonResponse({'success': True, 'message': 'Subscription updated'})
+                except models.User.DoesNotExist:
+                    logger.error(f"Webhook error: User {user_id} not found.")
+                    return JsonResponse({'success': False, 'message': 'User not found'}, status=404)
+        elif event_type == 'link.payment.paid':
+            # Add support for older link.payment.paid if the user is testing with Links
+            event_data = data['data']['attributes']['data']['attributes']
+            remarks = event_data.get('remarks', '')
+            # If the user put user_id in remarks or metadata
+            logger.info(f"Link Payment Paid: {remarks}")
+            return JsonResponse({'success': True, 'message': 'Link payment received. Ensure checkout sessions are used for automatic activation.'})
+        
+        return JsonResponse({'success': True, 'message': 'Event received'})
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid JSON body'}, status=400)
+    except Exception as e:
+        logger.error(f"PayMongo webhook error: {str(e)}")
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
 # Address Hierarchy ViewSets
 class RegionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = models.Region.objects.all()
