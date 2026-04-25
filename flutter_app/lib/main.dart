@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth/login.dart';
 import 'auth/signup.dart';
@@ -32,6 +33,7 @@ import 'services/app_theme_tokens.dart';
 import 'services/url_strategy/url_strategy.dart';
 
 String _lastKnownValidPath = '/';
+late SharedPreferences _appPrefs;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -55,6 +57,8 @@ void main() async {
 
   configureUrlStrategy();
   await AppTimeService.initialize();
+  _appPrefs = await SharedPreferences.getInstance();
+  _lastKnownValidPath = _appPrefs.getString('last_known_valid_path') ?? '/';
 
   // Initialize auth ONCE before app starts
   final authService = AuthService();
@@ -146,6 +150,7 @@ class StructuraApp extends StatelessWidget {
 
         if (isKnownPath) {
           _lastKnownValidPath = currentPath;
+          _appPrefs.setString('last_known_valid_path', currentPath);
         }
 
         if (!loggedIn && !isPublic) {
@@ -2136,7 +2141,9 @@ class NotFoundPage extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               ElevatedButton.icon(
-                onPressed: () => context.go(lastKnownPath),
+                onPressed: () => context.go(
+                  lastKnownPath.trim().isEmpty ? '/' : lastKnownPath,
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFFF6B2C),
                   foregroundColor: Colors.white,
@@ -2150,7 +2157,7 @@ class NotFoundPage extends StatelessWidget {
                 ),
                 icon: const Icon(Icons.home_rounded),
                 label: const Text(
-                  'Go to home',
+                  'Go back',
                   style: TextStyle(fontWeight: FontWeight.w700),
                 ),
               ),
