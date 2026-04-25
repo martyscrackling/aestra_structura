@@ -48,6 +48,13 @@ _render_external_hostname = os.getenv("RENDER_EXTERNAL_HOSTNAME", "").strip()
 if _render_external_hostname and _render_external_hostname not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(_render_external_hostname)
 
+# Render / reverse proxy: so request.build_absolute_uri() and get_host() use the public
+# hostname (e.g. *.onrender.com) instead of an internal gunicorn address.
+USE_X_FORWARDED_HOST = os.getenv("USE_X_FORWARDED_HOST", "1" if not DEBUG else "0") == "1"
+USE_X_FORWARDED_PORT = os.getenv("USE_X_FORWARDED_PORT", "1" if not DEBUG else "0") == "1"
+# No trailing slash, no /api. Example: https://structura-backend-xxxx.onrender.com
+# If set, user-uploaded file URLs in API JSON are always absolute to this host.
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").strip()
 
 # Application definition
 
