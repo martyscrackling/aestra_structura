@@ -31,6 +31,8 @@ import 'services/app_time_service.dart';
 import 'services/app_theme_tokens.dart';
 import 'services/url_strategy/url_strategy.dart';
 
+String _lastKnownValidPath = '/';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -108,7 +110,8 @@ class StructuraApp extends StatelessWidget {
     final GoRouter router = GoRouter(
       initialLocation: '/',
       refreshListenable: authService,
-      errorBuilder: (context, state) => const NotFoundPage(),
+      errorBuilder: (context, state) =>
+          NotFoundPage(lastKnownPath: _lastKnownValidPath),
       redirect: (context, state) {
         final currentPath = state.uri.path;
         final loggedIn = authService.isLoggedIn;
@@ -136,6 +139,14 @@ class StructuraApp extends StatelessWidget {
         final isSupervisorRole = role == 'Supervisor';
         final isClientRole = role == 'Client';
         final isPmRole = !isSupervisorRole && !isClientRole;
+        final isKnownPath = isPublic ||
+            isPmRoute ||
+            isSupervisorRoute ||
+            isClientRoute;
+
+        if (isKnownPath) {
+          _lastKnownValidPath = currentPath;
+        }
 
         if (!loggedIn && !isPublic) {
           final encodedTarget = Uri.encodeComponent(currentPath);
@@ -2088,7 +2099,9 @@ class FeaturesPage extends StatelessWidget {
 }
 
 class NotFoundPage extends StatelessWidget {
-  const NotFoundPage({super.key});
+  final String lastKnownPath;
+
+  const NotFoundPage({super.key, required this.lastKnownPath});
 
   @override
   Widget build(BuildContext context) {
@@ -2123,7 +2136,7 @@ class NotFoundPage extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               ElevatedButton.icon(
-                onPressed: () => context.go('/'),
+                onPressed: () => context.go(lastKnownPath),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFFF6B2C),
                   foregroundColor: Colors.white,
