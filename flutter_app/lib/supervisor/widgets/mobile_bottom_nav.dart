@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/app_theme_tokens.dart';
+import 'supervisor_user_badge.dart';
 
 enum SupervisorMobileTab { dashboard, projects, workers, more }
 
@@ -89,10 +90,11 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav> {
                 Expanded(
                   child: _buildNavItem(
                     context,
-                    icon: _isMoreExpanded
-                        ? Icons.close_rounded
-                        : Icons.grid_view_rounded,
-                    label: _isMoreExpanded ? 'Close' : 'More',
+                    icon: _isMoreExpanded ? Icons.close_rounded : null,
+                    iconWidget: _isMoreExpanded
+                        ? null
+                        : const SupervisorUserBadge(showName: false, avatarSize: 22),
+                    label: _isMoreExpanded ? 'Close' : 'Profile',
                     isActive:
                         _isMoreExpanded ||
                         widget.activeTab == SupervisorMobileTab.more,
@@ -116,7 +118,8 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav> {
 
   Widget _buildNavItem(
     BuildContext context, {
-    required IconData icon,
+    IconData? icon,
+    Widget? iconWidget,
     required String label,
     required bool isActive,
     required VoidCallback onTap,
@@ -142,7 +145,12 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: textColor, size: 20),
+            if (iconWidget != null)
+              iconWidget
+            else if (icon != null)
+              Icon(icon, color: textColor, size: 20)
+            else
+              const SizedBox(height: 20, width: 20),
             const SizedBox(height: 4),
             Text(
               label,

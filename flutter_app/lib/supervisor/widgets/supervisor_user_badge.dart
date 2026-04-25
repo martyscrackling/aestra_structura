@@ -53,8 +53,10 @@ class _SupervisorUserBadgeState extends State<SupervisorUserBadge> {
       final first = (user?['first_name'] as String? ?? '').trim();
       final last = (user?['last_name'] as String? ?? '').trim();
       final hasName = ('$first $last').trim().isNotEmpty;
+      final hasPhoto = _photoUrl(user) != null;
 
-      if (hasName) {
+      // If local auth cache already has enough data, skip network fetch.
+      if (hasName && hasPhoto) {
         if (!mounted) return;
         setState(() {
           _profileUser = user;
@@ -118,6 +120,8 @@ class _SupervisorUserBadgeState extends State<SupervisorUserBadge> {
           'first_name': profile['first_name'],
           'last_name': profile['last_name'],
           'email': profile['email'],
+          'photo': profile['photo'],
+          'photo_url': profile['photo_url'],
         });
       }
 
@@ -169,11 +173,35 @@ class _SupervisorUserBadgeState extends State<SupervisorUserBadge> {
     return trimmed.substring(0, 1).toUpperCase();
   }
 
+  String? _photoUrl(Map<String, dynamic>? user) {
+    if (user == null) return null;
+    return AppConfig.resolveMediaUrl(
+      user['photo_url'] ??
+          user['photo'] ??
+          user['profile_photo'] ??
+          user['avatar_url'],
+    );
+  }
+
+  Widget _fallbackAvatar(String name) {
+    return Center(
+      child: Text(
+        _avatarLetter(name),
+        style: TextStyle(
+          color: AppColors.accent,
+          fontSize: widget.avatarSize * 0.48,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = AuthService();
     final user = _profileUser ?? auth.currentUser;
     final name = _displayName(user);
+    final photoUrl = _photoUrl(user);
 
     final nameStyle =
         widget.nameStyle ??
@@ -202,15 +230,16 @@ class _SupervisorUserBadgeState extends State<SupervisorUserBadge> {
             border: Border.all(color: AppColors.borderSubtle),
             shape: BoxShape.circle,
           ),
-          child: Center(
-            child: Text(
-              _avatarLetter(name),
-              style: TextStyle(
-                color: AppColors.accent,
-                fontSize: widget.avatarSize * 0.48,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+          child: ClipOval(
+            child: photoUrl == null
+                ? _fallbackAvatar(name)
+                : Image.network(
+                    photoUrl,
+                    fit: BoxFit.cover,
+                    width: widget.avatarSize,
+                    height: widget.avatarSize,
+                    errorBuilder: (_, __, ___) => _fallbackAvatar(name),
+                  ),
           ),
         ),
         if (widget.showName) SizedBox(width: widget.gap),
