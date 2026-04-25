@@ -1,14 +1,96 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import '../cl_notifications.dart';
 import '../cl_settings.dart';
 import '../../services/auth_service.dart';
 import '../../services/client_dashboard_service.dart';
+import '../../services/app_config.dart';
 
-class ClientDashboardHeader extends StatelessWidget {
+class ClientDashboardHeader extends StatefulWidget {
   const ClientDashboardHeader({super.key, this.title = 'Dashboard'});
 
   final String title;
+
+  @override
+  State<ClientDashboardHeader> createState() => _ClientDashboardHeaderState();
+}
+
+class _ClientDashboardHeaderState extends State<ClientDashboardHeader> {
+  Map<String, dynamic>? _profileUser;
+
+  @override
+  void initState() {
+    super.initState();
+    _hydrateClientProfileIfNeeded();
+  }
+
+  Future<void> _hydrateClientProfileIfNeeded() async {
+    try {
+      final auth = AuthService();
+      final user = auth.currentUser;
+      final cachedPhoto = AppConfig.resolveMediaUrl(
+        user?['photo_url'] ?? user?['photo'] ?? user?['avatar_url'],
+      );
+      if (cachedPhoto != null) {
+        if (!mounted) return;
+        setState(() {
+          _profileUser = user;
+        });
+        return;
+      }
+
+      final clientIdRaw = user?['client_id'];
+      final clientId = clientIdRaw is int
+          ? clientIdRaw
+          : int.tryParse(clientIdRaw?.toString() ?? '');
+
+      if (clientId == null) {
+        if (!mounted) return;
+        setState(() {
+          _profileUser = user;
+        });
+        return;
+      }
+
+      final response = await http.get(AppConfig.apiUri('clients/$clientId/'));
+      if (response.statusCode != 200) {
+        if (!mounted) return;
+        setState(() {
+          _profileUser = user;
+        });
+        return;
+      }
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        if (!mounted) return;
+        setState(() {
+          _profileUser = user;
+        });
+        return;
+      }
+
+      await auth.updateLocalUserFields({
+        'first_name': decoded['first_name'],
+        'last_name': decoded['last_name'],
+        'email': decoded['email'],
+        'photo': decoded['photo'],
+        'photo_url': decoded['photo_url'],
+      });
+
+      if (!mounted) return;
+      setState(() {
+        _profileUser = auth.currentUser;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _profileUser = AuthService().currentUser;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -16,12 +98,15 @@ class ClientDashboardHeader extends StatelessWidget {
     final isMobile = screenWidth < 600;
 
     final auth = AuthService();
-    final user = auth.currentUser;
+    final user = _profileUser ?? auth.currentUser;
     final first = (user?['first_name'] as String? ?? '').trim();
     final last = (user?['last_name'] as String? ?? '').trim();
     final fullName = ('$first $last').trim();
     final displayName = fullName.isNotEmpty ? fullName : 'AESTRA';
     final role = (user?['role'] as String? ?? 'Client').trim();
+    final profileImageUrl = AppConfig.resolveMediaUrl(
+      user?['photo_url'] ?? user?['photo'] ?? user?['avatar_url'],
+    );
 
     return Container(
       decoration: BoxDecoration(
@@ -62,6 +147,7 @@ class ClientDashboardHeader extends StatelessWidget {
                 isMobile: isMobile,
                 displayName: displayName,
                 role: role.isEmpty ? 'Client' : role,
+                profileImageUrl: profileImageUrl,
               ),
             ],
           ),
@@ -308,12 +394,14 @@ class _ClientProfileMenu extends StatelessWidget {
   const _ClientProfileMenu({
     required this.displayName,
     required this.role,
+    this.profileImageUrl,
     this.isMobile = false,
   });
 
   final bool isMobile;
   final String displayName;
   final String role;
+  final String? profileImageUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -399,11 +487,16 @@ class _ClientProfileMenu extends StatelessWidget {
           CircleAvatar(
             radius: isMobile ? 16 : 18,
             backgroundColor: const Color(0xFF0C1935),
-            child: Icon(
-              Icons.person,
-              color: Colors.white,
-              size: isMobile ? 18 : 20,
-            ),
+            backgroundImage: profileImageUrl != null
+                ? NetworkImage(profileImageUrl!)
+                : null,
+            child: profileImageUrl == null
+                ? Icon(
+                    Icons.person,
+                    color: Colors.white,
+                    size: isMobile ? 18 : 20,
+                  )
+                : null,
           ),
           if (!isMobile) ...[
             const SizedBox(width: 10),
