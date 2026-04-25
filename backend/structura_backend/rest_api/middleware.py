@@ -27,6 +27,8 @@ class SubscriptionMiddleware:
             '/api/health/',
             '/api/subscription/check/',
             '/api/subscription/activate/',
+            '/api/subscription/paymongo-checkout/',
+            '/api/webhooks/paymongo/',
             '/api/change-password/',
             '/admin/',
         ]
