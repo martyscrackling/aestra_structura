@@ -30,7 +30,6 @@ import 'supervisor/test_time_page.dart' as supervisor;
 import 'supervisor/notification_inbox_page.dart';
 import 'client/cl_dashboard.dart' as client;
 import 'license/plan.dart';
-import 'license/payment_status.dart';
 import 'license/payment.dart';
 import 'services/auth_service.dart';
 import 'services/app_time_service.dart';
