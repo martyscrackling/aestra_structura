@@ -96,8 +96,40 @@ class StructuraApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final authService = AuthService();
+    const publicRoutes = <String>{
+      '/',
+      '/login',
+      '/signup',
+      '/infos',
+      '/change-password',
+    };
+
+    String _defaultRouteForRole(String? role) {
+      if (role == 'Supervisor') return '/supervisor';
+      if (role == 'Client') return '/client';
+      return '/dashboard';
+    }
+
     final GoRouter router = GoRouter(
       initialLocation: '/',
+      refreshListenable: authService,
+      redirect: (context, state) {
+        final currentPath = state.uri.path;
+        final loggedIn = authService.isLoggedIn;
+        final isPublic = publicRoutes.contains(currentPath);
+
+        if (!loggedIn && !isPublic) {
+          final encodedTarget = Uri.encodeComponent(currentPath);
+          return '/login?redirectTo=$encodedTarget';
+        }
+
+        if (loggedIn && (currentPath == '/login' || currentPath == '/signup')) {
+          return _defaultRouteForRole(authService.currentUser?['role']?.toString());
+        }
+
+        return null;
+      },
       routes: [
         GoRoute(
           path: '/',
@@ -106,7 +138,8 @@ class StructuraApp extends StatelessWidget {
         ),
         GoRoute(
           path: '/login',
-          builder: (context, state) => const LoginPage(),
+          builder: (context, state) =>
+              LoginPage(redirectTo: state.uri.queryParameters['redirectTo']),
           name: 'login',
         ),
         GoRoute(

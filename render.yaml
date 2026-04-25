@@ -25,6 +25,12 @@ services:
         value: https://martyscrackling.github.io,https://structura-frontend-jc7s.onrender.com
       - key: CSRF_TRUSTED_ORIGINS
         value: https://martyscrackling.github.io,https://structura-frontend-jc7s.onrender.com
+      # Set in the Render dashboard to your web service's public base (no /api, no trailing slash), e.g.
+      #   https://structura-backend-xxxx.onrender.com
+      # Free web services have no persistent disk: uploads in MEDIA_ROOT are lost on restarts/idle.
+      # With a paid web service, add a disk mounted at /var/data to match structura_backend.settings.
+      - key: PUBLIC_BASE_URL
+        sync: false
 
   - type: web
     name: structura-frontend

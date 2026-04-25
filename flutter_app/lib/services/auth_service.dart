@@ -8,6 +8,8 @@ import 'app_config.dart';
 class AuthService extends ChangeNotifier {
   static final AuthService _instance = AuthService._internal();
   static const Duration _networkTimeout = Duration(seconds: 30);
+  static const Duration _defaultSessionDuration = Duration(hours: 8);
+  static const Duration _rememberedSessionDuration = Duration(days: 30);
 
   factory AuthService() {
     return _instance;
@@ -17,10 +19,21 @@ class AuthService extends ChangeNotifier {
 
   Map<String, dynamic>? _currentUser;
   bool _isLoggedIn = false;
+  DateTime? _sessionExpiresAt;
 
   // Getters
-  bool get isLoggedIn => _isLoggedIn;
+  bool get isLoggedIn => _isLoggedIn && _isSessionActive;
   Map<String, dynamic>? get currentUser => _currentUser;
+  DateTime? get sessionExpiresAt => _sessionExpiresAt;
+  bool get hasRememberedSession =>
+      _sessionExpiresAt != null &&
+      _sessionExpiresAt!.difference(DateTime.now()) >
+          const Duration(days: 7);
+
+  bool get _isSessionActive {
+    if (_sessionExpiresAt == null) return false;
+    return DateTime.now().isBefore(_sessionExpiresAt!);
+  }
 
   /// Update locally cached user fields and persist them.
   Future<void> updateLocalUserFields(Map<String, dynamic> updates) async {
@@ -36,12 +49,23 @@ class AuthService extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final userJson = prefs.getString('current_user');
       final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
+      final sessionExpiresAtMs = prefs.getInt('session_expires_at_ms');
 
-      if (userJson != null && isLoggedIn) {
+      if (userJson != null && isLoggedIn && sessionExpiresAtMs != null) {
         _currentUser = jsonDecode(userJson);
         _isLoggedIn = true;
+        _sessionExpiresAt = DateTime.fromMillisecondsSinceEpoch(sessionExpiresAtMs);
+
+        if (!_isSessionActive) {
+          await _clearAuthState();
+          return;
+        }
+
         notifyListeners();
+        return;
       }
+
+      await _clearAuthState();
     } catch (e) {
       print("Initialize auth error: $e");
     }
@@ -51,20 +75,34 @@ class AuthService extends ChangeNotifier {
   Future<void> _saveAuthState() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      if (_isLoggedIn && _currentUser != null) {
+      if (_isLoggedIn && _currentUser != null && _sessionExpiresAt != null) {
         await prefs.setString('current_user', jsonEncode(_currentUser));
         await prefs.setBool('is_logged_in', true);
+        await prefs.setInt(
+          'session_expires_at_ms',
+          _sessionExpiresAt!.millisecondsSinceEpoch,
+        );
       } else {
-        await prefs.remove('current_user');
-        await prefs.setBool('is_logged_in', false);
+        await _clearAuthState();
       }
     } catch (e) {
       print("Save auth state error: $e");
     }
   }
 
+  Future<void> _clearAuthState() async {
+    _currentUser = null;
+    _isLoggedIn = false;
+    _sessionExpiresAt = null;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('current_user');
+    await prefs.setBool('is_logged_in', false);
+    await prefs.remove('session_expires_at_ms');
+  }
+
   /// Login user (can be ProjectManager or Supervisor)
-  Future<bool> login(String email, String password) async {
+  Future<bool> login(String email, String password, {bool rememberMe = false}) async {
     email = email.trim();
     try {
       print('Attempting login with email: $email');
@@ -85,6 +123,9 @@ class AuthService extends ChangeNotifier {
         if (result['success'] == true) {
           _currentUser = result['user'];
           _isLoggedIn = true;
+          _sessionExpiresAt = DateTime.now().add(
+            rememberMe ? _rememberedSessionDuration : _defaultSessionDuration,
+          );
           await _saveAuthState();
           notifyListeners();
           return true;
@@ -304,9 +345,7 @@ class AuthService extends ChangeNotifier {
 
   /// Logout user
   Future<void> logout() async {
-    _currentUser = null;
-    _isLoggedIn = false;
-    await _saveAuthState();
+    await _clearAuthState();
     notifyListeners();
   }
 }

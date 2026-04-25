@@ -304,7 +304,11 @@ class _LoginPageState extends State<LoginPage> {
 
               try {
                 final authService = context.read<AuthService>();
-                final loginSuccess = await authService.login(email, password);
+                final loginSuccess = await authService.login(
+                  email,
+                  password,
+                  rememberMe: _rememberMe,
+                );
 
                 if (mounted) {
                   Navigator.pop(context); // Close loading dialog
