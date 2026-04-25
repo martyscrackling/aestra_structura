@@ -425,7 +425,6 @@ from .serializers import (
     InventoryUnitMovementSerializer,
     PhaseMaterialPlanSerializer,
 )
-from .media_url import absolute_media_url
 from rest_framework.exceptions import ValidationError
 from decimal import Decimal, InvalidOperation
 
@@ -1049,9 +1048,11 @@ class ProjectViewSet(viewsets.ModelViewSet):
         project.project_image = rel_path
         project.save()
 
-        url = absolute_media_url(
-            request, f"{settings.MEDIA_URL.rstrip('/')}/{rel_path.lstrip('/')}"
-        )
+        # Build absolute URL
+        if hasattr(request, 'build_absolute_uri'):
+            url = request.build_absolute_uri(settings.MEDIA_URL + rel_path)
+        else:
+            url = settings.MEDIA_URL + rel_path
         return Response({'url': url})
 
     @action(detail=True, methods=['post'], url_path='add-supervisor')
@@ -3084,13 +3085,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 'first_name': worker.first_name,
                 'last_name': worker.last_name,
                 'role': worker.role,
-                'photo': (
-                    absolute_media_url(
-                        request,
-                        worker.photo.url,
-                    )
-                    if getattr(worker, 'photo', None) else None
-                ),
+                'photo': worker.photo.url if getattr(worker, 'photo', None) else None,
                 'shift_start': worker_shifts.get(worker.fieldworker_id, {}).get('shift_start'),
                 'shift_end': worker_shifts.get(worker.fieldworker_id, {}).get('shift_end'),
                 'current_project_shift_start': worker_shifts.get(worker.fieldworker_id, {}).get('shift_start'),
@@ -4505,9 +4500,7 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
         item.photo = rel_path
         item.save()
 
-        url = absolute_media_url(
-            request, f"{settings.MEDIA_URL.rstrip('/')}/{rel_path.lstrip('/')}"
-        )
+        url = request.build_absolute_uri(settings.MEDIA_URL + rel_path)
         return Response({'url': url})
 
     @action(detail=True, methods=['post'], url_path='checkout')

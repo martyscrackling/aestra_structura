@@ -39,38 +39,4 @@ class AppConfig {
         : pathAndQuery;
     return Uri.parse('$base$normalized');
   }
-
-  /// Same host as the API, but [MEDIA_URL] is never under `/api/`.
-  static Uri get _serverOrigin {
-    final base = Uri.parse(apiBaseUrl);
-    return Uri(
-      scheme: base.scheme,
-      host: base.host,
-      port: base.hasPort ? base.port : null,
-    );
-  }
-
-  /// Turn API-relative or bare storage paths into a full URL for [Image.network].
-  static String? resolveMediaUrl(dynamic raw) {
-    if (raw == null) return null;
-    final value = raw.toString().trim();
-    if (value.isEmpty || value == 'null') return null;
-    if (value.startsWith('http://') || value.startsWith('https://')) {
-      return value;
-    }
-    final origin = _serverOrigin;
-    if (value.startsWith('/')) {
-      return origin.resolve(value).toString();
-    }
-    if (value.startsWith('media/')) {
-      return origin.resolve('/$value').toString();
-    }
-    if (value.startsWith('project_images/') ||
-        value.startsWith('fieldworker_images/') ||
-        value.startsWith('client_images/') ||
-        value.startsWith('inventory_images/')) {
-      return origin.resolve('/media/$value').toString();
-    }
-    return origin.resolve('/media/$value').toString();
-  }
 }

@@ -8,7 +8,6 @@ from app.services.budget_validation import (
     check_project_budget,
     check_phase_allocation,
 )
-from .media_url import absolute_media_url
 
 
 _TWO_DP = Decimal('0.01')
@@ -198,16 +197,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             if err:
                 raise serializers.ValidationError({'budget': err})
         return attrs
-
-    def to_representation(self, instance):
-        data = super().to_representation(instance)
-        request = self.context.get('request')
-        for key in ('project_image', 'client_photo'):
-            v = data.get(key)
-            if v and isinstance(v, str):
-                data[key] = absolute_media_url(request, v)
-        return data
-
+    
     def create(self, validated_data):
         # Create the project first
         project = models.Project.objects.create(**validated_data)
@@ -635,15 +625,6 @@ class FieldWorkerSerializer(serializers.ModelSerializer):
             'damages_deduction_per_salary': {'required': False, 'allow_null': True},
             'damages_pm_covers': {'required': False},
         }
-
-    def to_representation(self, instance):
-        data = super().to_representation(instance)
-        v = data.get('photo')
-        if v and isinstance(v, str):
-            data['photo'] = absolute_media_url(
-                self.context.get('request'), v
-            )
-        return data
 
     def get_assignment_status(self, obj):
         """
@@ -1100,13 +1081,9 @@ class SubtaskSerializer(serializers.ModelSerializer):
             photo_url = None
             if getattr(worker, 'photo', None):
                 try:
-                    rel = worker.photo.url
+                    photo_url = worker.photo.url
                 except Exception:  # noqa: BLE001
-                    rel = None
-                request = self.context.get('request')
-                photo_url = (
-                    absolute_media_url(request, rel) if rel is not None else None
-                )
+                    photo_url = None
             workers.append({
                 'assignment_id': assignment.assignment_id,
                 # Keep common id aliases for compatibility across app screens.
@@ -1127,13 +1104,9 @@ class SubtaskSerializer(serializers.ModelSerializer):
             photo_path = None
             if getattr(photo, 'photo', None):
                 try:
-                    rel = photo.photo.url
+                    photo_path = photo.photo.url
                 except Exception:  # noqa: BLE001
-                    rel = None
-                request = self.context.get('request')
-                photo_path = (
-                    absolute_media_url(request, rel) if rel is not None else None
-                )
+                    photo_path = None
             created = getattr(photo, 'created_at', None)
             out.append(
                 {
@@ -1823,14 +1796,6 @@ class InventoryItemSerializer(serializers.ModelSerializer):
             'photo': {'read_only': True},
         }
 
-    def to_representation(self, instance):
-        data = super().to_representation(instance)
-        request = self.context.get('request')
-        v = data.get('photo')
-        if v and isinstance(v, str):
-            data['photo'] = absolute_media_url(request, v)
-        return data
-
     def get_created_by_name(self, obj):
         u = obj.created_by
         return f"{u.first_name} {u.last_name}".strip() if u else ''
@@ -2077,9 +2042,8 @@ class InventoryItemSerializer(serializers.ModelSerializer):
 
     def get_photo_url(self, obj):
         if obj.photo and hasattr(obj.photo, 'url'):
-            try:
-                rel = obj.photo.url
-            except Exception:  # noqa: BLE001
-                return None
-            return absolute_media_url(self.context.get('request'), rel)
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.photo.url)
+            return obj.photo.url
         return None

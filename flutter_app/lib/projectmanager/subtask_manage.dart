@@ -420,7 +420,9 @@ class _SubtaskManagePageState extends State<SubtaskManagePage> {
 }
 
 String _subtaskManagerImageUrl(String path) {
-  return AppConfig.resolveMediaUrl(path) ?? path;
+  if (path.startsWith('http')) return path;
+  final baseUri = Uri.parse(AppConfig.apiBaseUrl);
+  return '${baseUri.scheme}://${baseUri.host}${baseUri.hasPort ? ':${baseUri.port}' : ''}$path';
 }
 
 List<Map<String, dynamic>> _subtaskManagerLatestUpdatePhotos(Subtask t) {
