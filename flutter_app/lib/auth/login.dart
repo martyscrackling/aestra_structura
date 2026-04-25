@@ -23,6 +23,17 @@ class _LoginPageState extends State<LoginPage> {
     super.initState();
     _emailController = TextEditingController();
     _passwordController = TextEditingController();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _redirectIfAlreadyAuthenticated();
+    });
+  }
+
+  void _redirectIfAlreadyAuthenticated() {
+    if (!mounted) return;
+    final auth = context.read<AuthService>();
+    if (!auth.isLoggedIn) return;
+    final role = auth.currentUser?['role']?.toString();
+    context.go(auth.homeRouteForRole(role));
   }
 
   @override
@@ -51,7 +62,13 @@ class _LoginPageState extends State<LoginPage> {
               color: Colors.transparent,
               child: InkWell(
                 borderRadius: BorderRadius.circular(30),
-                onTap: () => context.pop(),
+                onTap: () {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go('/');
+                  }
+                },
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(

@@ -105,12 +105,6 @@ class StructuraApp extends StatelessWidget {
       '/change-password',
     };
 
-    String _defaultRouteForRole(String? role) {
-      if (role == 'Supervisor') return '/supervisor';
-      if (role == 'Client') return '/client';
-      return '/dashboard';
-    }
-
     final GoRouter router = GoRouter(
       initialLocation: '/',
       refreshListenable: authService,
@@ -125,7 +119,9 @@ class StructuraApp extends StatelessWidget {
         }
 
         if (loggedIn && (currentPath == '/login' || currentPath == '/signup')) {
-          return _defaultRouteForRole(authService.currentUser?['role']?.toString());
+          return authService.homeRouteForRole(
+            authService.currentUser?['role']?.toString(),
+          );
         }
 
         return null;
@@ -411,14 +407,7 @@ class _NavbarState extends State<Navbar> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const LoginPage(),
-                            ),
-                          );
-                        },
+                        onPressed: () => context.go('/login'),
                         child: const Text(
                           'Get Started',
                           style: TextStyle(color: Colors.white),
@@ -461,14 +450,7 @@ class _NavbarState extends State<Navbar> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const LoginPage(),
-                        ),
-                      );
-                    },
+                    onPressed: () => context.go('/login'),
                     child: const Text(
                       'Get Started',
                       style: TextStyle(color: Colors.white),
@@ -669,12 +651,7 @@ class HeroSection extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const LoginPage()),
-                );
-              },
+              onPressed: () => context.go('/login'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFF5A1F),
                 padding: const EdgeInsets.symmetric(vertical: 14),
@@ -728,12 +705,7 @@ class HeroSection extends StatelessWidget {
           ),
           const SizedBox(width: 20),
           ElevatedButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const LoginPage()),
-              );
-            },
+            onPressed: () => context.go('/login'),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFFF5A1F),
               padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 16),

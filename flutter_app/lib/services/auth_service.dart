@@ -35,6 +35,13 @@ class AuthService extends ChangeNotifier {
     return DateTime.now().isBefore(_sessionExpiresAt!);
   }
 
+  /// App home route for a user role (used after login and for session redirects).
+  String homeRouteForRole(String? role) {
+    if (role == 'Supervisor') return '/supervisor';
+    if (role == 'Client') return '/client';
+    return '/dashboard';
+  }
+
   /// Update locally cached user fields and persist them.
   Future<void> updateLocalUserFields(Map<String, dynamic> updates) async {
     if (_currentUser == null) return;
@@ -51,14 +58,21 @@ class AuthService extends ChangeNotifier {
       final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
       final sessionExpiresAtMs = prefs.getInt('session_expires_at_ms');
 
-      if (userJson != null && isLoggedIn && sessionExpiresAtMs != null) {
+      if (userJson != null && isLoggedIn) {
         _currentUser = jsonDecode(userJson);
         _isLoggedIn = true;
-        _sessionExpiresAt = DateTime.fromMillisecondsSinceEpoch(sessionExpiresAtMs);
-
-        if (!_isSessionActive) {
-          await _clearAuthState();
-          return;
+        if (sessionExpiresAtMs == null) {
+          // Migrated from pre-session storage: start a new expiry window.
+          _sessionExpiresAt = DateTime.now().add(_defaultSessionDuration);
+          await _saveAuthState();
+        } else {
+          _sessionExpiresAt = DateTime.fromMillisecondsSinceEpoch(
+            sessionExpiresAtMs,
+          );
+          if (!_isSessionActive) {
+            await _clearAuthState();
+            return;
+          }
         }
 
         notifyListeners();
@@ -223,6 +237,7 @@ class AuthService extends ChangeNotifier {
         final result = jsonDecode(response.body);
         _currentUser = result;
         _isLoggedIn = true;
+        _sessionExpiresAt = DateTime.now().add(_defaultSessionDuration);
         await _saveAuthState();
         notifyListeners();
         return true;
