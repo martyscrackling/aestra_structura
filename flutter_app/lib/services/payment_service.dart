@@ -33,9 +33,13 @@ class PaymentService {
         // Handle error status codes
         if (contentType.contains('application/json')) {
           final errorData = jsonDecode(response.body);
+          String msg = errorData['message'] ?? 'Server error (${response.statusCode})';
+          if (errorData['debug_success_url'] != null) {
+            msg += "\nAttempted URL: ${errorData['debug_success_url']}";
+          }
           return {
             'success': false,
-            'message': errorData['message'] ?? 'Server error (${response.statusCode})',
+            'message': msg,
           };
         } else {
           // If it's HTML (likely a 404 or 500 from the hosting provider)

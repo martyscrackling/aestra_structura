@@ -1167,6 +1167,7 @@ def create_paymongo_checkout(request):
             return Response({
                 'success': False,
                 'message': f'PayMongo Error: {error_details}',
+                'debug_success_url': f"{frontend_url}/payment-success?user_id={user_id}",
                 'paymongo_error': response_data
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
