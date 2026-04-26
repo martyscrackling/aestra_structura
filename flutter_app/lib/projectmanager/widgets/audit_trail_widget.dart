@@ -374,14 +374,19 @@ class _AuditTrailWidgetState extends State<AuditTrailWidget> {
                 CircleAvatar(
                   radius: 14,
                   backgroundColor: categoryColor.withOpacity(0.15),
-                  child: Text(
-                    initials,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: categoryColor,
-                    ),
-                  ),
+                  backgroundImage: entry.userProfileImage != null
+                      ? NetworkImage(entry.userProfileImage!)
+                      : null,
+                  child: entry.userProfileImage != null
+                      ? null
+                      : Text(
+                          initials,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: categoryColor,
+                          ),
+                        ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
