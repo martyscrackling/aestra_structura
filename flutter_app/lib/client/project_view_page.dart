@@ -149,10 +149,7 @@ class _ProjectViewPageState extends State<ProjectViewPage> {
   }
 
   String _getImageUrl(String path) {
-    if (path.startsWith('http://') || path.startsWith('https://')) return path;
-    final baseUri = Uri.parse(AppConfig.apiBaseUrl);
-    final normalizedPath = path.startsWith('/') ? path : '/$path';
-    return '${baseUri.scheme}://${baseUri.host}${baseUri.hasPort ? ':${baseUri.port}' : ''}$normalizedPath';
+    return AppConfig.resolveMediaUrl(path) ?? path;
   }
 
   Widget _buildProjectHeaderImage({required String raw, required bool isMobile}) {

@@ -53,20 +53,6 @@ class ClientDashboardService {
     return int.tryParse(value.toString());
   }
 
-  String _resolveImageUrl(String raw) {
-    final value = raw.trim();
-    if (value.isEmpty) return '';
-    if (value.startsWith('http://') || value.startsWith('https://')) {
-      return value;
-    }
-
-    final normalizedPath = value.startsWith('/') ? value : '/$value';
-    final baseUri = Uri.parse(AppConfig.apiBaseUrl);
-    final origin =
-        '${baseUri.scheme}://${baseUri.host}${baseUri.hasPort ? ':${baseUri.port}' : ''}';
-    return '$origin$normalizedPath';
-  }
-
   Future<List<ClientProjectCardData>> fetchClientProjects() async {
     final auth = AuthService();
     final user = auth.currentUser;
@@ -123,7 +109,7 @@ class ClientDashboardService {
       projects.map((p) async {
         final projectId = _asInt(p['project_id']) ?? 0;
         final name = (p['project_name'] as String?) ?? 'Untitled project';
-        final image = _resolveImageUrl(p['project_image']?.toString() ?? '');
+        final image = AppConfig.resolveMediaUrl(p['project_image']) ?? '';
 
         final location = _projectLocation(p);
 

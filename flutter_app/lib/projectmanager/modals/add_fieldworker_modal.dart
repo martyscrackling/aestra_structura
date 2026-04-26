@@ -567,7 +567,6 @@ class _AddFieldWorkerModalState extends State<AddFieldWorkerModal> {
 
         final fieldWorkerData = {
           if (currentUserId != null) 'user_id': currentUserId,
-          if (widget.projectId != null) 'project_id': widget.projectId,
           'first_name': _firstNameController.text.trim(),
           'middle_name': _middleNameController.text.trim().isEmpty
               ? null
