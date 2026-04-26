@@ -223,38 +223,56 @@ class _NotificationPageState extends State<NotificationPage> {
     }
   }
 
-  void _openInboxItem(PmInboxItem e) {
+  Future<void> _openInboxItem(PmInboxItem e) async {
+    if (!e.read) {
+      setState(() {
+        _inboxItems = _inboxItems
+            .map(
+              (row) => row.notificationId == e.notificationId
+                  ? PmInboxItem(
+                      notificationId: row.notificationId,
+                      kind: row.kind,
+                      title: row.title,
+                      body: row.body,
+                      read: true,
+                      createdAt: row.createdAt,
+                      subtaskId: row.subtaskId,
+                      projectId: row.projectId,
+                      phaseId: row.phaseId,
+                      supervisorName: row.supervisorName,
+                      target: row.target,
+                    )
+                  : row,
+            )
+            .toList(growable: false);
+      });
+    }
+    invalidatePmNotificationBellCache();
     final goInv = e.target == 'inventory' ||
         e.kind == 'supervisor_inventory_returned';
     if (goInv) {
-      unawaited(
-        openPmInboxInventory(
-          context,
-          notificationId: e.notificationId,
-        ),
+      await openPmInboxInventory(
+        context,
+        notificationId: e.notificationId,
       );
       return;
     }
     final goRep =
         e.target == 'reports' || e.kind == 'supervisor_report_submitted';
     if (goRep) {
-      unawaited(
-        openPmInboxReports(
-          context,
-          notificationId: e.notificationId,
-        ),
+      await openPmInboxReports(
+        context,
+        notificationId: e.notificationId,
       );
       return;
     }
     final sid = e.subtaskId;
     if (sid != null) {
-      unawaited(
-        openPmInboxSubtask(
-          context,
-          notificationId: e.notificationId,
-          subtaskId: sid,
-          phaseId: e.phaseId,
-        ),
+      await openPmInboxSubtask(
+        context,
+        notificationId: e.notificationId,
+        subtaskId: sid,
+        phaseId: e.phaseId,
       );
     }
   }
@@ -449,7 +467,9 @@ class _NotificationPageState extends State<NotificationPage> {
                   child: _InboxMessageCard(
                     item: e,
                     time: _relativeTime(e.createdAt),
-                    onOpen: () => _openInboxItem(e),
+                    onOpen: () {
+                      unawaited(_openInboxItem(e));
+                    },
                   ),
                 ),
               ),

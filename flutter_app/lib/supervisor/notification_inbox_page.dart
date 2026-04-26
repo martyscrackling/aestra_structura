@@ -172,6 +172,7 @@ class _SupervisorNotificationPageState extends State<SupervisorNotificationPage>
           ),
         ),
       );
+      clearSupervisorNotificationMenuCache();
       if (mounted) await _load();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -289,8 +290,9 @@ class _SupervisorNotificationPageState extends State<SupervisorNotificationPage>
                                 padding: const EdgeInsets.only(bottom: 10),
                                 child: _InboxCard(
                                   item: e,
-                                  onTap: () {
-                                    openSupervisorInboxNotification(
+                                  onTap: () async {
+                                    clearSupervisorNotificationMenuCache();
+                                    await openSupervisorInboxNotification(
                                       context,
                                       notificationId: e.notificationId,
                                       target: e.target,

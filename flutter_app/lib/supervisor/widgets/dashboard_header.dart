@@ -71,10 +71,8 @@ class _DashboardHeaderState extends State<DashboardHeader> {
               // AESTRA logo + text (clickable dropdown)
               PopupMenuButton<String>(
                 onSelected: (value) async {
-                  if (value == 'switch') {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Switch Account clicked')),
-                    );
+                  if (value == 'notification') {
+                    context.go('/supervisor/notifications');
                   } else if (value == 'logout') {
                     await AuthService().logout();
                     if (!context.mounted) return;
@@ -88,17 +86,17 @@ class _DashboardHeaderState extends State<DashboardHeader> {
                 ),
                 itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
                   const PopupMenuItem<String>(
-                    value: 'switch',
+                    value: 'notification',
                     height: 48,
                     child: Row(
                       children: [
                         Icon(
-                          Icons.swap_horiz,
+                          Icons.notifications_outlined,
                           size: 18,
                           color: Color(0xFF0C1935),
                         ),
                         SizedBox(width: 12),
-                        Text('Switch Account'),
+                        Text('Notification'),
                       ],
                     ),
                   ),
@@ -345,6 +343,34 @@ class _SupervisorNotificationMenuState
           final nid = value - _kInboxValueBase;
           for (final r in _inboxPreview) {
             if (r.notificationId == nid) {
+              // Optimistically update local unread badge so the count reacts
+              // immediately when opening an unread inbox item.
+              if (!r.read) {
+                setState(() {
+                  _badgeCount = (_badgeCount - 1).clamp(0, 9999);
+                  _inboxPreview = _inboxPreview
+                      .map(
+                        (row) => row.notificationId == r.notificationId
+                            ? _SupervisorInboxRow(
+                                notificationId: row.notificationId,
+                                title: row.title,
+                                body: row.body,
+                                read: true,
+                                time: row.time,
+                                target: row.target,
+                                projectId: row.projectId,
+                                phaseId: row.phaseId,
+                                subtaskId: row.subtaskId,
+                                planId: row.planId,
+                                itemId: row.itemId,
+                                unitId: row.unitId,
+                              )
+                            : row,
+                      )
+                      .toList(growable: false);
+                });
+              }
+
               openSupervisorInboxNotification(
                 context,
                 notificationId: r.notificationId,
@@ -611,4 +637,10 @@ class _SupervisorInboxMenuTile extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Clears the shared supervisor notification cache so badge count refreshes
+/// correctly after "mark all read" or single-item read actions from other pages.
+void clearSupervisorNotificationMenuCache() {
+  _SupervisorNotificationMenuState.clearSharedCache();
 }

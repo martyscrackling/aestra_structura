@@ -48,30 +48,22 @@ def _to_decimal(value, default='0'):
 
 
 def _weekly_statutory_minimums(weekly_salary):
-    """Compute weekly employee-share statutory minimum deductions.
+    """Compute weekly employee-share statutory deductions from gross pay.
 
-    These are intentionally centralized so rates/caps can be updated in one place.
+    This mirrors the mobile payroll rule:
+    - SSS: 5% employee share
+    - PhilHealth: 2.5% employee share
+    - Pag-IBIG: 2% employee share, capped at PHP 200
     """
-    weekly = _to_decimal(weekly_salary)
-    monthly_equivalent = (weekly * Decimal('52')) / Decimal('12')
-
-    # SSS employee share baseline: 5% of monthly equivalent, capped.
-    sss_salary_base = min(monthly_equivalent, Decimal('35000'))
-    sss_monthly_min = sss_salary_base * Decimal('0.05')
-
-    # PhilHealth employee share: half of 5% premium with salary floor/ceiling.
-    philhealth_base = max(Decimal('10000'), min(monthly_equivalent, Decimal('100000')))
-    philhealth_monthly_min = (philhealth_base * Decimal('0.05')) / Decimal('2')
-
-    # Pag-IBIG employee share with common mandatory cap behavior.
-    pagibig_base = min(monthly_equivalent, Decimal('5000'))
-    pagibig_rate = Decimal('0.01') if monthly_equivalent <= Decimal('1500') else Decimal('0.02')
-    pagibig_monthly_min = pagibig_base * pagibig_rate
+    gross_weekly = max(_to_decimal(weekly_salary), Decimal('0'))
+    sss = gross_weekly * Decimal('0.05')
+    philhealth = gross_weekly * Decimal('0.025')
+    pagibig = min(gross_weekly * Decimal('0.02'), Decimal('200'))
 
     return {
-        'sss_weekly_min': _q((sss_monthly_min * Decimal('12')) / Decimal('52')),
-        'philhealth_weekly_min': _q((philhealth_monthly_min * Decimal('12')) / Decimal('52')),
-        'pagibig_weekly_min': _q((pagibig_monthly_min * Decimal('12')) / Decimal('52')),
+        'sss_weekly_min': _q(sss),
+        'philhealth_weekly_min': _q(philhealth),
+        'pagibig_weekly_min': _q(pagibig),
     }
 
 
@@ -1172,7 +1164,18 @@ class SubtaskCompletionRevertRequestCreateSerializer(serializers.Serializer):
         except models.Supervisors.DoesNotExist:
             raise serializers.ValidationError({'supervisor_id': 'Supervisor not found.'})
         project = subtask.phase.project
-        if project is None or sup.project_id_id != project.project_id:
+        sup_primary_project_id = sup.project_id_id
+        project_primary_supervisor_id = (
+            project.supervisor_id if project is not None else None
+        )
+        is_supervisor_assigned_to_project = (
+            project is not None
+            and (
+                sup_primary_project_id == project.project_id
+                or project_primary_supervisor_id == sup.supervisor_id
+            )
+        )
+        if not is_supervisor_assigned_to_project:
             raise serializers.ValidationError(
                 {
                     'supervisor_id': (
@@ -1411,6 +1414,7 @@ class SubtaskFieldWorkerSerializer(serializers.ModelSerializer):
                         subtask__phase_id=phase_obj.phase_id,
                     )
                     .exclude(subtask_id=subtask_pk)
+                    .exclude(subtask__status='completed')
                     .select_related('subtask')
                 )
                 if self.instance is not None:

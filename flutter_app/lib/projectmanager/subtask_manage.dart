@@ -166,6 +166,74 @@ class _SubtaskManagePageState extends State<SubtaskManagePage> {
     }
   }
 
+  Future<void> _addSubtask() async {
+    final controller = TextEditingController();
+    final title = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add Subtask'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: 'Enter subtask name'),
+          autofocus: true,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (value) => Navigator.pop(context, value.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF7A18),
+            ),
+            child: const Text('Add', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    final subtaskTitle = (title ?? '').trim();
+    if (subtaskTitle.isEmpty) return;
+
+    try {
+      final response = await http.post(
+        AppConfig.apiUri('subtasks/'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'phase': _phase.phaseId, 'title': subtaskTitle}),
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        await _refreshPhase();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Subtask added')),
+        );
+      } else {
+        String detail = 'Failed to add subtask (${response.statusCode})';
+        try {
+          final decoded = jsonDecode(response.body);
+          if (decoded is Map) {
+            final raw = decoded['detail'] ?? decoded['error'];
+            if (raw != null) detail = raw.toString();
+          }
+        } catch (_) {}
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(detail)),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error adding subtask: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -290,13 +358,33 @@ class _SubtaskManagePageState extends State<SubtaskManagePage> {
                           const SizedBox(height: 24),
 
                           // Subtasks section
-                          Text(
-                            'Subtasks / ${_phase.subtasks.length}',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF0C1935),
-                            ),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Subtasks / ${_phase.subtasks.length}',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF0C1935),
+                                  ),
+                                ),
+                              ),
+                              if (!_viewOnly)
+                                ElevatedButton.icon(
+                                  onPressed: _addSubtask,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFFFF7A18),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.add, size: 18),
+                                  label: const Text('Add Subtask'),
+                                ),
+                            ],
                           ),
                           const SizedBox(height: 12),
 
@@ -959,6 +1047,8 @@ class _SubtaskTile extends StatelessWidget {
     final latestUpdatePhotos = _subtaskManagerLatestUpdatePhotos(subtask);
     final hasProgress = _subtaskHasMeaningfulFieldContent(subtask);
     final assignmentLocked = phase.isWorkerAssignmentLocked;
+    final isCompletedSubtask = subtask.status.toLowerCase().trim() == 'completed';
+    final canManageWorkers = !assignmentLocked && !viewOnly && !isCompletedSubtask;
 
     return Container(
       decoration: highlight
@@ -1015,11 +1105,14 @@ class _SubtaskTile extends StatelessWidget {
                 IconButton(
                   style: _iconActionStyle(),
                   onPressed: () {
+                    final readOnlyWorkforceView =
+                        assignmentLocked ||
+                        subtask.status.toLowerCase().trim() == 'completed';
                     showDialog(
                       context: context,
                       builder: (context) => ViewWorkForceModal(
                         subtask: subtask,
-                        readOnly: assignmentLocked,
+                        readOnly: readOnlyWorkforceView,
                       ),
                     );
                   },
@@ -1029,7 +1122,7 @@ class _SubtaskTile extends StatelessWidget {
                     : 'View work force',
                 color: const Color(0xFF0C1935),
               ),
-              if (!assignmentLocked && !viewOnly)
+              if (canManageWorkers)
                 IconButton(
                   style: _iconActionStyle(),
                   onPressed: () {

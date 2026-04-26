@@ -313,33 +313,148 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
   int? _currentSupervisorId() {
     final auth = Provider.of<AuthService>(context, listen: false);
     final u = auth.currentUser ?? <String, dynamic>{};
-    final t = (u['type'] ?? u['role'] ?? '').toString().toLowerCase();
-    return _toInt(u['supervisor_id']) ?? (t == 'supervisor' ? _toInt(u['user_id']) : null);
+    return _toInt(u['supervisor_id']);
+  }
+
+  int? _currentUserId() {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final u = auth.currentUser ?? <String, dynamic>{};
+    return _toInt(u['user_id']);
+  }
+
+  Future<int?> _resolveSupervisorIdForProject() async {
+    final direct = _currentSupervisorId();
+    if (direct != null && direct > 0) return direct;
+
+    final uid = _currentUserId();
+    if (uid == null || uid <= 0) return null;
+
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final currentProjectId =
+        _toInt(widget.projectId ?? auth.currentUser?['project_id']);
+
+    try {
+      final response = await http.get(AppConfig.apiUri('supervisors/?user_id=$uid'));
+      if (response.statusCode != 200) return null;
+      final decoded = jsonDecode(response.body);
+      if (decoded is! List) return null;
+
+      Map<String, dynamic>? matched;
+      for (final raw in decoded.whereType<Map>()) {
+        final item = Map<String, dynamic>.from(raw);
+        final pid = _toInt(item['project_id'] ?? item['project']);
+        if (currentProjectId != null && pid == currentProjectId) {
+          matched = item;
+          break;
+        }
+      }
+      matched ??= decoded.whereType<Map>().isNotEmpty
+          ? Map<String, dynamic>.from(decoded.whereType<Map>().first)
+          : null;
+      if (matched == null) return null;
+
+      return _toInt(matched['supervisor_id'] ?? matched['id']);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<int?> _resolveSupervisorIdForSubtask(int subtaskId) async {
+    final uid = _currentUserId();
+    if (uid == null || uid <= 0) return null;
+
+    int? projectId;
+    try {
+      final subtaskRes = await http.get(AppConfig.apiUri('subtasks/$subtaskId/'));
+      if (subtaskRes.statusCode == 200) {
+        final subtaskJson = jsonDecode(subtaskRes.body);
+        if (subtaskJson is Map<String, dynamic>) {
+          final phaseId = _toInt(subtaskJson['phase']);
+          if (phaseId != null && phaseId > 0) {
+            final phaseRes = await http.get(AppConfig.apiUri('phases/$phaseId/'));
+            if (phaseRes.statusCode == 200) {
+              final phaseJson = jsonDecode(phaseRes.body);
+              if (phaseJson is Map<String, dynamic>) {
+                projectId = _toInt(phaseJson['project'] ?? phaseJson['project_id']);
+              }
+            }
+          }
+        }
+      }
+    } catch (_) {
+      // Fall back to project-scoped/user-scoped resolution below.
+    }
+
+    if (projectId != null && projectId > 0) {
+      try {
+        final scoped = await http.get(
+          AppConfig.apiUri('supervisors/?project_id=$projectId&user_id=$uid'),
+        );
+        if (scoped.statusCode == 200) {
+          final decoded = jsonDecode(scoped.body);
+          if (decoded is List && decoded.isNotEmpty) {
+            final first = decoded.first;
+            if (first is Map<String, dynamic>) {
+              final sid = _toInt(first['supervisor_id'] ?? first['id']);
+              if (sid != null && sid > 0) return sid;
+            } else if (first is Map) {
+              final map = Map<String, dynamic>.from(first);
+              final sid = _toInt(map['supervisor_id'] ?? map['id']);
+              if (sid != null && sid > 0) return sid;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    return _resolveSupervisorIdForProject();
   }
 
   /// Returns created request JSON, or null on failure.
-  Future<Map<String, dynamic>?> _submitCompletionRevertRequest({
+  Future<Map<String, dynamic>> _submitCompletionRevertRequest({
     required int subtaskId,
     required int supervisorId,
     required String reason,
   }) async {
+    final uid = _currentUserId();
+    final path = uid != null
+        ? 'subtask-completion-revert-requests/?user_id=$uid'
+        : 'subtask-completion-revert-requests/';
+    final r = await http.post(
+      AppConfig.apiUri(path),
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'subtask_id': subtaskId,
+        'supervisor_id': supervisorId,
+        'reason': reason,
+      }),
+    );
+    if (r.statusCode == 201) {
+      final d = jsonDecode(r.body);
+      if (d is Map<String, dynamic>) return d;
+      if (d is Map) return Map<String, dynamic>.from(d);
+      throw Exception('Unexpected server response.');
+    }
+
+    String message = 'Request failed (${r.statusCode}).';
     try {
-      final r = await http.post(
-        AppConfig.apiUri('subtask-completion-revert-requests/'),
-        headers: const {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'subtask_id': subtaskId,
-          'supervisor_id': supervisorId,
-          'reason': reason,
-        }),
-      );
-      if (r.statusCode == 201) {
-        final d = jsonDecode(r.body);
-        if (d is Map<String, dynamic>) return d;
-        if (d is Map) return Map<String, dynamic>.from(d);
+      final decoded = jsonDecode(r.body);
+      if (decoded is Map) {
+        final detail = decoded['detail'] ?? decoded['error'] ?? decoded['message'];
+        if (detail != null) {
+          message = detail.toString();
+        } else {
+          message = decoded.toString();
+        }
+      } else if (decoded is List && decoded.isNotEmpty) {
+        message = decoded.first.toString();
       }
-    } catch (_) {}
-    return null;
+    } catch (_) {
+      if (r.body.trim().isNotEmpty) {
+        message = r.body.trim();
+      }
+    }
+    throw Exception(message);
   }
 
   String _statusBadgeLabel(Subtask subtask) {
@@ -656,9 +771,21 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                                       if (reason == null) {
                                         return;
                                       }
-                                      final sid = _currentSupervisorId();
                                       final subId = int.tryParse(st.id);
-                                      if (sid == null || subId == null) {
+                                      if (subId == null) {
+                                        if (!context.mounted) return;
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Could not determine subtask id. Please refresh and try again.',
+                                            ),
+                                          ),
+                                        );
+                                        return;
+                                      }
+                                      final sid = await _resolveSupervisorIdForSubtask(subId);
+                                      if (sid == null) {
                                         if (!context.mounted) return;
                                         ScaffoldMessenger.of(context)
                                             .showSnackBar(
@@ -679,12 +806,18 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                                         ),
                                       );
                                       Map<String, dynamic>? res;
+                                      String? requestError;
                                       try {
                                         res =
                                             await _submitCompletionRevertRequest(
                                           subtaskId: subId,
                                           supervisorId: sid,
                                           reason: reason,
+                                        );
+                                      } catch (e) {
+                                        requestError = e.toString().replaceFirst(
+                                          'Exception: ',
+                                          '',
                                         );
                                       } finally {
                                         if (context.mounted) {
@@ -698,9 +831,11 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                                       if (res == null) {
                                         ScaffoldMessenger.of(context)
                                             .showSnackBar(
-                                          const SnackBar(
+                                          SnackBar(
                                             content: Text(
-                                              'Could not send request. Check your connection or try again.',
+                                              requestError?.isNotEmpty == true
+                                                  ? requestError!
+                                                  : 'Could not send request. Check your connection or try again.',
                                             ),
                                             backgroundColor: Colors.red,
                                           ),

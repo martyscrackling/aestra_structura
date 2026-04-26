@@ -19,6 +19,37 @@ const double _dailyRegularHoursCap = 8.0;
 const double _overtimeRateMultiplier = 1.5;
 const double _regularHolidayMultiplier = 2.0; // 200% pay for worked hours
 const double _specialHolidayMultiplier = 1.3; // 130% pay for worked hours
+const double _sssEmployeeRate = 0.05; // 5% employee share
+const double _philhealthEmployeeRate = 0.025; // 2.5% employee share
+const double _pagibigEmployeeRate = 0.02; // 2% employee share
+const double _pagibigEmployeeMaxDeduction = 200.0; // capped at PHP 200
+
+class _GovernmentDeductions {
+  const _GovernmentDeductions({
+    required this.sss,
+    required this.philhealth,
+    required this.pagibig,
+  });
+
+  final double sss;
+  final double philhealth;
+  final double pagibig;
+}
+
+_GovernmentDeductions _governmentDeductionsFromGross(double grossPay) {
+  final normalizedGross = grossPay < 0 ? 0.0 : grossPay;
+  final sss = normalizedGross * _sssEmployeeRate;
+  final philhealth = normalizedGross * _philhealthEmployeeRate;
+  final pagibig = (normalizedGross * _pagibigEmployeeRate).clamp(
+    0.0,
+    _pagibigEmployeeMaxDeduction,
+  );
+  return _GovernmentDeductions(
+    sss: sss,
+    philhealth: philhealth,
+    pagibig: pagibig,
+  );
+}
 
 class AttendanceReport {
   AttendanceReport({
@@ -1234,26 +1265,6 @@ class _ReportsPageState extends State<ReportsPage> {
       final fullName = ('$firstName $lastName').trim();
       final hourlyRate = _toDouble(worker['payrate']);
 
-      final periodDays = _inclusiveDays(start, end);
-      final periodFactor = periodDays / 7.0;
-
-      final sssWeekly = _resolveWeeklyDeduction(
-        worker,
-        'sss_weekly_total',
-        'sss_weekly_min',
-      );
-      final philhealthWeekly = _resolveWeeklyDeduction(
-        worker,
-        'philhealth_weekly_total',
-        'philhealth_weekly_min',
-      );
-      final pagibigWeekly = _resolveWeeklyDeduction(
-        worker,
-        'pagibig_weekly_total',
-        'pagibig_weekly_min',
-      );
-
-      // Fallback for older worker records that don't have computed deduction fields yet.
       // totalHours is regular-only (non-holiday); OT is stored in overtimeHours.
       final regularHours = totals.totalHours < 0 ? 0.0 : totals.totalHours;
       final regHolPay =
@@ -1273,16 +1284,10 @@ class _ReportsPageState extends State<ReportsPage> {
           totals.overtimeHours * hourlyRate * _overtimeRateMultiplier +
           regHolPay +
           spcHolPay;
-      final sssDeduction = sssWeekly > 0
-          ? sssWeekly * periodFactor
-          : grossPayEstimate * 0.0323;
-      final philhealthDeduction = philhealthWeekly > 0
-          ? philhealthWeekly * periodFactor
-          : grossPayEstimate * 0.0115;
-      final pagibigDeduction = pagibigWeekly > 0
-          ? pagibigWeekly * periodFactor
-          : ((grossPayEstimate > 1154.73 ? 1154.73 : grossPayEstimate) *
-                0.0046);
+      final gov = _governmentDeductionsFromGross(grossPayEstimate);
+      final sssDeduction = gov.sss;
+      final philhealthDeduction = gov.philhealth;
+      final pagibigDeduction = gov.pagibig;
 
       reports.add(
         AttendanceReport(
@@ -1652,8 +1657,15 @@ class _ReportsPageState extends State<ReportsPage> {
       _isSalaryDayMode ? r.deduction : 0.0;
   double _effectiveDamages(AttendanceReport r) =>
       _isSalaryDayMode ? r.damagesDeduction : 0.0;
+  double _effectiveSss(AttendanceReport r) => _isSalaryDayMode ? r.sssDeduction : 0.0;
+  double _effectivePhilhealth(AttendanceReport r) =>
+      _isSalaryDayMode ? r.philhealthDeduction : 0.0;
+  double _effectivePagibig(AttendanceReport r) =>
+      _isSalaryDayMode ? r.pagibigDeduction : 0.0;
+  double _effectiveGovernmentDeductions(AttendanceReport r) =>
+      _effectiveSss(r) + _effectivePhilhealth(r) + _effectivePagibig(r);
   double _effectiveTotalDeductions(AttendanceReport r) =>
-      r.totalGovernmentDeductions +
+      _effectiveGovernmentDeductions(r) +
       _effectiveDeduction(r) +
       _effectiveDamages(r);
   double _effectiveNetSalary(AttendanceReport r) =>
@@ -1667,10 +1679,10 @@ class _ReportsPageState extends State<ReportsPage> {
       _rows.fold(0.0, (t, r) => t + r.totalAllOvertimeHours);
   double get _totalHours =>
       _rows.fold(0.0, (t, r) => t + r.totalAllHours);
-  double get _totalSSS => _rows.fold(0.0, (t, r) => t + r.sssDeduction);
+  double get _totalSSS => _rows.fold(0.0, (t, r) => t + _effectiveSss(r));
   double get _totalPhilhealth =>
-      _rows.fold(0.0, (t, r) => t + r.philhealthDeduction);
-  double get _totalPagibig => _rows.fold(0.0, (t, r) => t + r.pagibigDeduction);
+      _rows.fold(0.0, (t, r) => t + _effectivePhilhealth(r));
+  double get _totalPagibig => _rows.fold(0.0, (t, r) => t + _effectivePagibig(r));
   double get _totalDamages =>
       _rows.fold(0.0, (t, r) => t + _effectiveDamages(r));
   double get _totalHolidayPay =>
@@ -2314,7 +2326,9 @@ class _ReportsPageState extends State<ReportsPage> {
                                             ),
                                           )
                                         : ListView.builder(
-                                            itemCount: _rows.length + 1,
+                                            itemCount:
+                                                _rows.length +
+                                                (_isSalaryDayMode ? 1 : 0),
                                             itemBuilder: (context, i) {
                                               if (i == _rows.length) {
                                                 return Container(
@@ -2811,42 +2825,45 @@ class _ReportsPageState extends State<ReportsPage> {
                                               textAlign: TextAlign.right,
                                             ),
                                           ),
-                                          Expanded(
-                                            flex: 2,
-                                            child: Text(
-                                              'SSS',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.w700,
-                                                color: Colors.grey[800],
-                                                fontSize: 13,
+                                          if (_isSalaryDayMode)
+                                            Expanded(
+                                              flex: 2,
+                                              child: Text(
+                                                'SSS',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w700,
+                                                  color: Colors.grey[800],
+                                                  fontSize: 13,
+                                                ),
+                                                textAlign: TextAlign.right,
                                               ),
-                                              textAlign: TextAlign.right,
                                             ),
-                                          ),
-                                          Expanded(
-                                            flex: 2,
-                                            child: Text(
-                                              'PhilHealth',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.w700,
-                                                color: Colors.grey[800],
-                                                fontSize: 13,
+                                          if (_isSalaryDayMode)
+                                            Expanded(
+                                              flex: 2,
+                                              child: Text(
+                                                'PhilHealth',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w700,
+                                                  color: Colors.grey[800],
+                                                  fontSize: 13,
+                                                ),
+                                                textAlign: TextAlign.right,
                                               ),
-                                              textAlign: TextAlign.right,
                                             ),
-                                          ),
-                                          Expanded(
-                                            flex: 2,
-                                            child: Text(
-                                              'Pag-IBIG',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.w700,
-                                                color: Colors.grey[800],
-                                                fontSize: 13,
+                                          if (_isSalaryDayMode)
+                                            Expanded(
+                                              flex: 2,
+                                              child: Text(
+                                                'Pag-IBIG',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w700,
+                                                  color: Colors.grey[800],
+                                                  fontSize: 13,
+                                                ),
+                                                textAlign: TextAlign.right,
                                               ),
-                                              textAlign: TextAlign.right,
                                             ),
-                                          ),
                                           if (_isSalaryDayMode)
                                             Expanded(
                                               flex: 2,
@@ -3145,68 +3162,75 @@ class _ReportsPageState extends State<ReportsPage> {
                                                         ),
                                                       ),
 
-                                                      // SSS Deduction
-                                                      Expanded(
-                                                        flex: 2,
-                                                        child: Text(
-                                                          _money.format(
-                                                            r.sssDeduction,
+                                                      if (_isSalaryDayMode)
+                                                        // SSS Deduction
+                                                        Expanded(
+                                                          flex: 2,
+                                                          child: Text(
+                                                            _money.format(
+                                                              _effectiveSss(r),
+                                                            ),
+                                                            style:
+                                                                const TextStyle(
+                                                                  color: Colors
+                                                                      .blue,
+                                                                  fontSize: 12,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w600,
+                                                                ),
+                                                            textAlign:
+                                                                TextAlign.right,
                                                           ),
-                                                          style:
-                                                              const TextStyle(
-                                                                color:
-                                                                    Colors.blue,
-                                                                fontSize: 12,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w600,
-                                                              ),
-                                                          textAlign:
-                                                              TextAlign.right,
                                                         ),
-                                                      ),
 
-                                                      // PhilHealth Deduction
-                                                      Expanded(
-                                                        flex: 2,
-                                                        child: Text(
-                                                          _money.format(
-                                                            r.philhealthDeduction,
-                                                          ),
-                                                          style:
-                                                              const TextStyle(
-                                                                color:
-                                                                    Colors.blue,
-                                                                fontSize: 12,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w600,
+                                                      if (_isSalaryDayMode)
+                                                        // PhilHealth Deduction
+                                                        Expanded(
+                                                          flex: 2,
+                                                          child: Text(
+                                                            _money.format(
+                                                              _effectivePhilhealth(
+                                                                r,
                                                               ),
-                                                          textAlign:
-                                                              TextAlign.right,
+                                                            ),
+                                                            style:
+                                                                const TextStyle(
+                                                                  color: Colors
+                                                                      .blue,
+                                                                  fontSize: 12,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w600,
+                                                                ),
+                                                            textAlign:
+                                                                TextAlign.right,
+                                                          ),
                                                         ),
-                                                      ),
 
-                                                      // Pag-IBIG Deduction
-                                                      Expanded(
-                                                        flex: 2,
-                                                        child: Text(
-                                                          _money.format(
-                                                            r.pagibigDeduction,
-                                                          ),
-                                                          style:
-                                                              const TextStyle(
-                                                                color: Colors
-                                                                    .lightBlue,
-                                                                fontSize: 12,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w600,
+                                                      if (_isSalaryDayMode)
+                                                        // Pag-IBIG Deduction
+                                                        Expanded(
+                                                          flex: 2,
+                                                          child: Text(
+                                                            _money.format(
+                                                              _effectivePagibig(
+                                                                r,
                                                               ),
-                                                          textAlign:
-                                                              TextAlign.right,
+                                                            ),
+                                                            style:
+                                                                const TextStyle(
+                                                                  color: Colors
+                                                                      .lightBlue,
+                                                                  fontSize: 12,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w600,
+                                                                ),
+                                                            textAlign:
+                                                                TextAlign.right,
+                                                          ),
                                                         ),
-                                                      ),
 
                                                       // Other Deductions (Cash Advance + Other)
                                                       if (_isSalaryDayMode)
@@ -3290,26 +3314,27 @@ class _ReportsPageState extends State<ReportsPage> {
                                             ),
                                     ),
 
-                                    // Totals summary footer
-                                    Container(
-                                      padding: const EdgeInsets.all(16),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius: const BorderRadius.only(
-                                          bottomLeft: Radius.circular(12),
-                                          bottomRight: Radius.circular(12),
-                                        ),
-                                        border: Border(
-                                          top: BorderSide(
-                                            color: Colors.grey.shade300,
-                                            width: 2,
+                                    if (_isSalaryDayMode)
+                                      // Totals summary footer
+                                      Container(
+                                        padding: const EdgeInsets.all(16),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: const BorderRadius.only(
+                                            bottomLeft: Radius.circular(12),
+                                            bottomRight: Radius.circular(12),
+                                          ),
+                                          border: Border(
+                                            top: BorderSide(
+                                              color: Colors.grey.shade300,
+                                              width: 2,
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.end,
-                                        children: [
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.end,
+                                          children: [
                                           Column(
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.end,
@@ -3472,9 +3497,9 @@ class _ReportsPageState extends State<ReportsPage> {
                                               ),
                                             ],
                                           ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
-                                    ),
                                   ],
                                 ),
                               ),
@@ -3626,9 +3651,12 @@ class _ReportsPageState extends State<ReportsPage> {
         builder: (context, setModalState) {
           final effectiveDeduction = isSalaryDay ? editableDeduction : 0.0;
           final effectiveDamages = isSalaryDay ? r.damagesDeduction : 0.0;
+          final effectiveSss = isSalaryDay ? r.sssDeduction : 0.0;
+          final effectivePhilhealth = isSalaryDay ? r.philhealthDeduction : 0.0;
+          final effectivePagibig = isSalaryDay ? r.pagibigDeduction : 0.0;
           final hasDamage = r.hasRecordedDamage;
           final liveTotalDeductions =
-              r.totalGovernmentDeductions +
+              effectiveSss + effectivePhilhealth + effectivePagibig +
               effectiveDeduction +
               effectiveDamages;
           final liveNetSalary = r.grossPay - liveTotalDeductions;
@@ -4355,17 +4383,17 @@ class _ReportsPageState extends State<ReportsPage> {
                     const SizedBox(height: 8),
                     _salaryRow(
                       'SSS',
-                      '- ${_money.format(r.sssDeduction)}',
+                      '- ${_money.format(effectiveSss)}',
                       Colors.blue,
                     ),
                     _salaryRow(
                       'PhilHealth',
-                      '- ${_money.format(r.philhealthDeduction)}',
+                      '- ${_money.format(effectivePhilhealth)}',
                       Colors.blue,
                     ),
                     _salaryRow(
                       'Pag-IBIG',
-                      '- ${_money.format(r.pagibigDeduction)}',
+                      '- ${_money.format(effectivePagibig)}',
                       Colors.lightBlue,
                     ),
                     _salaryRow(

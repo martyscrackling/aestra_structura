@@ -426,6 +426,30 @@ class _NotificationMenuState extends State<_NotificationMenu> {
       final nid = value - _kInboxValueBase;
       for (final e in _inboxItems) {
         if (e.notificationId == nid) {
+          if (!e.read) {
+            setState(() {
+              _badgeCount = (_badgeCount - 1).clamp(0, 9999);
+              _inboxItems = _inboxItems
+                  .map(
+                    (row) => row.notificationId == e.notificationId
+                        ? PmInboxItem(
+                            notificationId: row.notificationId,
+                            kind: row.kind,
+                            title: row.title,
+                            body: row.body,
+                            read: true,
+                            createdAt: row.createdAt,
+                            subtaskId: row.subtaskId,
+                            projectId: row.projectId,
+                            phaseId: row.phaseId,
+                            supervisorName: row.supervisorName,
+                            target: row.target,
+                          )
+                        : row,
+                  )
+                  .toList(growable: false);
+            });
+          }
           final goInventory = e.target == 'inventory' ||
               e.kind == 'supervisor_inventory_returned';
           if (goInventory) {

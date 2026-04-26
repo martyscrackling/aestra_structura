@@ -51,6 +51,8 @@ class Worker {
   final bool isAssignedToOtherSubtaskInThisPhase;
   /// Title of the other subtask in the same phase when [isAssignedToOtherSubtaskInThisPhase] is true.
   final String? otherSubtaskTitle;
+  /// Title of a completed subtask this worker was previously assigned to.
+  final String? completedSubtaskTitle;
   final String? imageUrl;
 
   Worker({
@@ -62,6 +64,7 @@ class Worker {
     this.assignedProjectNames = const [],
     this.isAssignedToOtherSubtaskInThisPhase = false,
     this.otherSubtaskTitle,
+    this.completedSubtaskTitle,
     this.imageUrl,
   });
 
@@ -157,6 +160,7 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
 
       if (response.statusCode == 200) {
         final Map<int, String> otherSubtaskByWorker = {};
+        final Map<int, String> completedSubtaskByWorker = {};
         final Set<int> preSelectedForThisSubtask = {};
         TimeOfDay? existingShiftStart;
         TimeOfDay? existingShiftEnd;
@@ -169,6 +173,10 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
                       ? decodedA['results'] as List<dynamic>
                       : <dynamic>[]);
             final currentSubId = widget.subtask.subtaskId;
+            final completedSubtaskIds = widget.phase.subtasks
+                .where((s) => s.status.toLowerCase() == 'completed')
+                .map((s) => s.subtaskId)
+                .toSet();
             for (final row in listA) {
               if (row is! Map<String, dynamic>) continue;
               final stId = _idFromJsonField(row['subtask']);
@@ -186,6 +194,21 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
                       existingShiftEnd = b;
                     }
                   }
+                }
+                continue;
+              }
+              // Workers assigned only to completed subtasks should remain available
+              // for reassignment to active subtasks in this phase.
+              if (completedSubtaskIds.contains(stId)) {
+                if (!completedSubtaskByWorker.containsKey(fwId)) {
+                  String completedTitle = 'Completed subtask';
+                  for (final s in widget.phase.subtasks) {
+                    if (s.subtaskId == stId) {
+                      completedTitle = s.title;
+                      break;
+                    }
+                  }
+                  completedSubtaskByWorker[fwId] = completedTitle;
                 }
                 continue;
               }
@@ -258,6 +281,7 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
                     assignmentStatus.toLowerCase() == 'assigned';
 
                 final onOtherSubtask = otherSubtaskByWorker[workerId];
+                final onCompletedSubtask = completedSubtaskByWorker[workerId];
 
                 return Worker(
                   workerId: workerId,
@@ -268,6 +292,7 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
                   assignedProjectNames: assignedProjectNames,
                   isAssignedToOtherSubtaskInThisPhase: onOtherSubtask != null,
                   otherSubtaskTitle: onOtherSubtask,
+                  completedSubtaskTitle: onCompletedSubtask,
                 );
               })
               .where((worker) => worker.workerId > 0)
@@ -944,6 +969,7 @@ class _WorkerChecklistItem extends StatelessWidget {
     final assignedProjectsText = worker.assignedProjectNames.join(' • ');
     final blockedOtherSubtask = worker.isAssignedToOtherSubtaskInThisPhase;
     final hasOtherProject = worker.isAssignedToOtherProject;
+    final hasCompletedHistory = (worker.completedSubtaskTitle ?? '').isNotEmpty;
     final isBusy = worker.isSelectionBlocked;
     final String statusLabel;
     if (blockedOtherSubtask) {
@@ -980,6 +1006,26 @@ class _WorkerChecklistItem extends StatelessWidget {
         ),
       ),
     );
+
+    final completedHistoryBadge = hasCompletedHistory
+        ? Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFF6FF),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              'Previously assigned (completed): ${worker.completedSubtaskTitle}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF1D4ED8),
+              ),
+            ),
+          )
+        : null;
 
     return Opacity(
       opacity: isBusy && !isSelected ? 0.6 : 1,
@@ -1042,7 +1088,7 @@ class _WorkerChecklistItem extends StatelessWidget {
                           message: statusLabel,
                           child: statusBadge,
                         )
-                      : statusBadge,
+                      : (completedHistoryBadge ?? statusBadge),
                 ),
               ),
             ),
