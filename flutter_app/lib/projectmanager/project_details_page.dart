@@ -703,40 +703,6 @@ class _ProjectTaskDetailsPageState extends State<ProjectTaskDetailsPage> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                if (widget.budget != null) ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE8F5E9),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.account_balance_wallet_outlined,
-                          size: 16,
-                          color: Color(0xFF2E7D32),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          '₱ ${widget.budget}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF2E7D32),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                ],
                 CircleAvatar(
                   radius: 20,
                   backgroundImage: AssetImage(widget.projectImage),

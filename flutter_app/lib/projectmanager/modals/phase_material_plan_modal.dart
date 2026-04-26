@@ -3,10 +3,55 @@ import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../services/app_config.dart';
+import '../../services/app_theme_tokens.dart';
 import '../../services/budget_service.dart';
 import '../../services/inventory_service.dart';
 import 'add_inventory_item_modal.dart';
 import '../widgets/planned_vs_actual_panel.dart';
+
+const Color _kModalNavy = Color(0xFF0C1935);
+const Color _kBorder = Color(0xFFE5E7EB);
+const Color _kMuted = Color(0xFF6B7280);
+const Color _kSection = Color(0xFF374151);
+
+InputDecoration _modalInputDecoration(
+  String labelText, {
+  bool dense = true,
+}) {
+  return InputDecoration(
+    labelText: labelText,
+    labelStyle: const TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+      color: _kMuted,
+    ),
+    filled: true,
+    fillColor: Colors.white,
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(color: _kBorder),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(color: _kBorder),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: BorderSide(color: AppColors.accent, width: 1.2),
+    ),
+    isDense: dense,
+  );
+}
+
+ButtonStyle _primaryModalButton() {
+  return ElevatedButton.styleFrom(
+    backgroundColor: AppColors.accent,
+    foregroundColor: Colors.white,
+    elevation: 0,
+    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+  );
+}
 
 /// PM modal to manage material plans for one phase:
 ///  - list existing plans (edit qty / delete)
@@ -200,16 +245,47 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete plan?'),
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: const Text(
+          'Delete plan?',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: _kModalNavy,
+          ),
+        ),
         content: const Text(
           'Removing this plan does not delete any recorded usage.',
+          style: TextStyle(
+            color: _kMuted,
+            fontSize: 14,
+            height: 1.4,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(
+                color: _kMuted,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
-          FilledButton(
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFB91C1C),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Delete'),
           ),
@@ -298,7 +374,14 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
     final dialogWidth = screenWidth < 560 ? screenWidth - 32 : 560.0;
 
     return Dialog(
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
       insetPadding: const EdgeInsets.all(16),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      clipBehavior: Clip.antiAlias,
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxWidth: dialogWidth,
@@ -308,7 +391,7 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
           mainAxisSize: MainAxisSize.min,
           children: [
             _buildHeader(),
-            const Divider(height: 1),
+            const Divider(height: 1, color: _kBorder),
             Flexible(
               child: _loading
                   ? const Padding(
@@ -325,8 +408,15 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
                             style: const TextStyle(color: Color(0xFFB91C1C)),
                           ),
                           const SizedBox(height: 8),
-                          FilledButton.tonal(
+                          OutlinedButton(
                             onPressed: _loadAll,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _kSection,
+                              side: const BorderSide(color: _kBorder),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
                             child: const Text('Retry'),
                           ),
                         ],
@@ -337,16 +427,17 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
                       child: _buildBody(),
                     ),
             ),
-            const Divider(height: 1),
+            const Divider(height: 1, color: _kBorder),
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: 16,
-                vertical: 10,
+                vertical: 12,
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  FilledButton(
+                  ElevatedButton(
+                    style: _primaryModalButton(),
                     onPressed: () => Navigator.of(context).pop(_changed),
                     child: const Text('Done'),
                   ),
@@ -361,26 +452,40 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 8, 12),
+      padding: const EdgeInsets.fromLTRB(20, 18, 4, 12),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF3F4F6),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: _kBorder),
+            ),
+            child: Icon(Icons.inventory_2_outlined, color: AppColors.accent, size: 22),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Material Plan',
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: 18,
                     fontWeight: FontWeight.w700,
-                    color: Colors.grey.shade900,
+                    color: _kModalNavy,
+                    height: 1.25,
                   ),
                 ),
+                const SizedBox(height: 2),
                 Text(
                   widget.phaseName,
                   style: const TextStyle(
                     fontSize: 12,
-                    color: Color(0xFF6B7280),
+                    color: _kMuted,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
@@ -388,7 +493,8 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
           ),
           IconButton(
             onPressed: () => Navigator.of(context).pop(_changed),
-            icon: const Icon(Icons.close),
+            icon: const Icon(Icons.close, color: Color(0xFF6B7280)),
+            tooltip: 'Close',
           ),
         ],
       ),
@@ -404,7 +510,7 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF374151),
+            color: _kModalNavy,
           ),
         ),
         const SizedBox(height: 6),
@@ -437,7 +543,7 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
         const SizedBox(height: 14),
         _buildAddForm(),
         const SizedBox(height: 20),
-        const Divider(),
+        const Divider(color: _kBorder),
         const SizedBox(height: 10),
         PlannedVsActualPanel(key: _reportKey, phaseId: widget.phaseId),
       ],
@@ -449,9 +555,16 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _kBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -461,18 +574,14 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF374151),
+              color: _kModalNavy,
             ),
           ),
           const SizedBox(height: 8),
           DropdownButtonFormField<int>(
             initialValue: _selectedSubtaskId,
             isExpanded: true,
-            decoration: const InputDecoration(
-              labelText: 'Subtask destination',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
+            decoration: _modalInputDecoration('Subtask destination'),
             items: _subtasks.map((s) {
               final id = s['subtask_id'] as int?;
               final title = (s['title'] ?? '').toString().trim();
@@ -497,11 +606,7 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
           DropdownButtonFormField<int>(
             initialValue: _selectedItemId,
             isExpanded: true,
-            decoration: const InputDecoration(
-              labelText: 'Material',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
+            decoration: _modalInputDecoration('Material'),
             items: available.map((i) {
               final label =
                   '${i['name']}  •  ₱${i['price'] ?? 0}  •  stock ${i['quantity'] ?? 0}';
@@ -524,11 +629,8 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
             controller: _qtyCtrl,
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            decoration: const InputDecoration(
-              labelText: 'Planned quantity',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
+            cursorColor: AppColors.accent,
+            decoration: _modalInputDecoration('Planned quantity'),
           ),
           if (_addError != null) ...[
             const SizedBox(height: 6),
@@ -542,19 +644,34 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
             children: [
               OutlinedButton.icon(
                 onPressed: _openAddMaterialModal,
-                icon: const Icon(Icons.playlist_add, size: 16),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _kModalNavy,
+                  side: const BorderSide(color: _kBorder),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                icon: const Icon(Icons.add_circle_outline, size: 18),
                 label: const Text('New Material'),
               ),
               const Spacer(),
-              FilledButton.icon(
+              ElevatedButton.icon(
+                style: _primaryModalButton(),
                 onPressed: _submittingAdd ? null : _addPlan,
                 icon: _submittingAdd
                     ? const SizedBox(
                         width: 14,
                         height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
                       )
-                    : const Icon(Icons.add),
+                    : const Icon(Icons.add, size: 18),
                 label: const Text('Add to plan'),
               ),
             ],
@@ -663,13 +780,27 @@ class _PlanRowState extends State<_PlanRow> {
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               textAlign: TextAlign.center,
-              decoration: const InputDecoration(
+              cursorColor: AppColors.accent,
+              decoration: InputDecoration(
                 isDense: true,
-                contentPadding: EdgeInsets.symmetric(
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(
                   horizontal: 8,
                   vertical: 8,
                 ),
-                border: OutlineInputBorder(),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: _kBorder),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: _kBorder),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: AppColors.accent, width: 1.2),
+                ),
               ),
               onSubmitted: (_) => _save(),
             ),

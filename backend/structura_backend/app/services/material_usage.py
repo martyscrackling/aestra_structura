@@ -227,7 +227,9 @@ def project_budget_summary(project):
         "project_id": project.project_id,
         "total_budget": _as_decimal(project.budget),
         "total_allocated": project.total_allocated_budget,
-        "total_used": project.total_used_budget,
+        "total_used_materials": project.total_used_budget,
+        "total_used_payroll": _as_decimal(project.payroll_used_budget),
+        "total_used": _as_decimal(project.total_used_budget) + _as_decimal(project.payroll_used_budget),
         "remaining_budget": project.remaining_budget,
         "phases": phases,
     }

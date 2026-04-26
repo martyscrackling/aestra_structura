@@ -1,14 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-// Import your pages
-import '../dashboard_page.dart';
-import '../all_projects.dart';
-import '../workers_management.dart';
-import '../attendance_page.dart';
-import '../reports.dart';
-import '../inventory.dart';
-
 class Sidebar extends StatefulWidget {
   final String activePage;
   final bool? keepVisible;
@@ -54,6 +46,9 @@ class _SidebarState extends State<Sidebar> {
         break;
       case "Test Time":
         context.go('/supervisor/test-time');
+        break;
+      case "Settings":
+        context.go('/supervisor/settings');
         break;
       default:
         context.go('/supervisor');
@@ -195,7 +190,7 @@ class _SidebarState extends State<Sidebar> {
                   padding: EdgeInsets.zero,
                   iconSize: 18,
                   icon: const Icon(Icons.settings, color: Colors.white70),
-                  onPressed: () {},
+                  onPressed: () => context.go('/supervisor/settings'),
                 ),
               ),
             ),

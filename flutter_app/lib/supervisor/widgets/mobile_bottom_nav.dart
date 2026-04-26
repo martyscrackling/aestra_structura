@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/app_theme_tokens.dart';
-import 'supervisor_user_badge.dart';
 
 enum SupervisorMobileTab { dashboard, projects, workers, more }
 
@@ -90,11 +89,10 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav> {
                 Expanded(
                   child: _buildNavItem(
                     context,
-                    icon: _isMoreExpanded ? Icons.close_rounded : null,
-                    iconWidget: _isMoreExpanded
-                        ? null
-                        : const SupervisorUserBadge(showName: false, avatarSize: 22),
-                    label: _isMoreExpanded ? 'Close' : 'Profile',
+                    icon: _isMoreExpanded
+                        ? Icons.close_rounded
+                        : Icons.more_horiz_rounded,
+                    label: _isMoreExpanded ? 'Close' : 'More',
                     isActive:
                         _isMoreExpanded ||
                         widget.activeTab == SupervisorMobileTab.more,
@@ -186,6 +184,12 @@ class _SupervisorMobileBottomNavState extends State<SupervisorMobileBottomNav> {
           ),
           _buildMoreChip(context, Icons.file_copy, 'Reports', 'Reports'),
           _buildMoreChip(context, Icons.inventory, 'Inventory', 'Inventory'),
+          _buildMoreChip(
+            context,
+            Icons.settings_outlined,
+            'Settings',
+            'Settings',
+          ),
         ],
       ),
     );

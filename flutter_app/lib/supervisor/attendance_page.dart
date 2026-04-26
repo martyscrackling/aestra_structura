@@ -1081,6 +1081,9 @@ class _AttendancePageState extends State<AttendancePage> {
       case 'Inventory':
         context.go('/supervisor/inventory');
         break;
+      case 'Settings':
+        context.go('/supervisor/settings');
+        break;
       default:
         return;
     }

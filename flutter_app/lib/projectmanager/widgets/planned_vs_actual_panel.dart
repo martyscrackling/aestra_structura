@@ -94,7 +94,7 @@ class PlannedVsActualPanelState extends State<PlannedVsActualPanel> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF374151),
+                color: Color(0xFF0C1935),
               ),
             ),
             if (isPhaseCompleted) ...[

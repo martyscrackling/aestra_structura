@@ -394,6 +394,9 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
       case 'Inventory':
         context.go('/supervisor/inventory');
         break;
+      case 'Settings':
+        context.go('/supervisor/settings');
+        break;
       default:
         return;
     }
@@ -727,201 +730,251 @@ class _WorkerManagementPageState extends State<WorkerManagementPage> {
         final fieldWorkerId = (worker['fieldworker_id'] as num?)?.toInt();
 
         return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
           backgroundColor: Colors.white,
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 640),
-            child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header with role accent
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640, maxHeight: 760),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 12, 14),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: roleColor.withOpacity(0.95),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          "Worker Profile",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF0F172A),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                        splashRadius: 20,
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 48,
-                              decoration: BoxDecoration(
-                                color: roleColor.withOpacity(0.95),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            const Text(
-                              "Worker Profile",
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () => Navigator.pop(context),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-
-                    // Profile
-                    Center(
-                      child: Column(
-                        children: [
-                          Container(
-                            width: 110,
-                            height: 110,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              border: Border.all(
-                                color: const Color(0xFFE5E7EB),
-                              ),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: workerPhotoUrl == null
-                                ? Icon(Icons.person, size: 56, color: roleColor)
-                                : ClipRRect(
-                                    borderRadius: BorderRadius.circular(20),
-                                    child: Image.network(
-                                      workerPhotoUrl,
-                                      fit: BoxFit.cover,
-                                      errorBuilder:
-                                          (context, error, stackTrace) {
+                        // Profile summary card
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: const Color(0xFFE5E7EB)),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 78,
+                                height: 78,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: workerPhotoUrl == null
+                                    ? Icon(Icons.person, size: 42, color: roleColor)
+                                    : ClipRRect(
+                                        borderRadius: BorderRadius.circular(16),
+                                        child: Image.network(
+                                          workerPhotoUrl,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (context, error, stackTrace) {
                                             return Icon(
                                               Icons.person,
-                                              size: 56,
+                                              size: 42,
                                               color: roleColor,
                                             );
                                           },
+                                        ),
+                                      ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      workerName,
+                                      style: const TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w800,
+                                        color: Color(0xFF0F172A),
+                                      ),
                                     ),
-                                  ),
-                          ),
-                          const SizedBox(height: 14),
-                          Text(
-                            workerName,
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              border: Border.all(
-                                color: const Color(0xFFE5E7EB),
+                                    const SizedBox(height: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        border: Border.all(
+                                          color: const Color(0xFFE5E7EB),
+                                        ),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Text(
+                                        worker["role"] ?? 'Worker',
+                                        style: TextStyle(
+                                          color: roleColor,
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 12.5,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              worker["role"] ?? 'Worker',
-                              style: TextStyle(
-                                color: roleColor,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-                    const Divider(),
-                    const SizedBox(height: 12),
-
-                    // Details
-                    const Text(
-                      "Personal Information",
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _buildDetailRow("Phone", phoneNumber),
-                    _buildDetailRow("Birthdate", birthdate),
-                    _buildDetailRow("SSS Deduction (Weekly)", sssDeduction),
-                    _buildDetailRow(
-                      "PhilHealth Deduction (Weekly)",
-                      philhealthDeduction,
-                    ),
-                    _buildDetailRow(
-                      "Pag-IBIG Deduction (Weekly)",
-                      pagibigDeduction,
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      "Work Details",
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _buildDetailRow("Date Hired", dateHired),
-                    _buildDetailRow("Payrate (Hourly)", payrate),
-                    _buildDetailRow("Shift Schedule", shiftSchedule),
-                    _buildDetailRow("Weekly Salary", weeklySalary),
-                    _buildDetailRow(
-                      "Total Weekly Deduction",
-                      totalWeeklyDeduction,
-                    ),
-                    _buildDetailRow("Net Weekly Pay", netWeeklyPay),
-                    _buildDetailRowWithStatus(
-                      "Status",
-                      "Active",
-                      getStatusColor("Active"),
-                    ),
-                    const SizedBox(height: 18),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: fieldWorkerId == null
-                                ? null
-                                : () => _showWorkerQrDialog(
-                                    context,
-                                    workerName: workerName,
-                                    fieldWorkerId: fieldWorkerId,
-                                  ),
-                            icon: const Icon(Icons.qr_code),
-                            label: const Text("Download QR"),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              side: const BorderSide(color: Color(0xFF1396E9)),
-                            ),
+                            ],
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        ElevatedButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text("Close"),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1396E9),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
+                        const SizedBox(height: 14),
+
+                        Container(
+                          padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE5E7EB)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                "Personal Information",
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF111827),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              _buildDetailRow("Phone", phoneNumber),
+                              _buildDetailRow("Birthdate", birthdate),
+                              _buildDetailRow("SSS Deduction (Weekly)", sssDeduction),
+                              _buildDetailRow(
+                                "PhilHealth Deduction (Weekly)",
+                                philhealthDeduction,
+                              ),
+                              _buildDetailRow(
+                                "Pag-IBIG Deduction (Weekly)",
+                                pagibigDeduction,
+                              ),
+                            ],
                           ),
                         ),
+                        const SizedBox(height: 12),
+
+                        Container(
+                          padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE5E7EB)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                "Work Details",
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF111827),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              _buildDetailRow("Date Hired", dateHired),
+                              _buildDetailRow("Payrate (Hourly)", payrate),
+                              _buildDetailRow("Shift Schedule", shiftSchedule),
+                              _buildDetailRow("Weekly Salary", weeklySalary),
+                              _buildDetailRow(
+                                "Total Weekly Deduction",
+                                totalWeeklyDeduction,
+                              ),
+                              _buildDetailRow("Net Weekly Pay", netWeeklyPay),
+                              _buildDetailRowWithStatus(
+                                "Status",
+                                "Active",
+                                getStatusColor("Active"),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                  ],
+                  ),
                 ),
-              ),
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: fieldWorkerId == null
+                              ? null
+                              : () => _showWorkerQrDialog(
+                                  context,
+                                  workerName: workerName,
+                                  fieldWorkerId: fieldWorkerId,
+                                ),
+                          icon: const Icon(Icons.qr_code_2_rounded),
+                          label: const Text("Download QR"),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF1396E9),
+                            padding: const EdgeInsets.symmetric(vertical: 13),
+                            side: const BorderSide(color: Color(0xFF1396E9)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF1396E9),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 13,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: const Text("Close"),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         );

@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 
 import '../../services/app_config.dart';
+import '../../services/app_theme_tokens.dart';
 import '../../services/auth_service.dart';
 import '../../services/pm_dashboard_service.dart';
 import '../pm_subtask_notification_nav.dart';
@@ -951,7 +952,45 @@ class _PmRevertRequestDialogState extends State<_PmRevertRequestDialog> {
     final headline = project.isNotEmpty ? '$project · $title' : title;
 
     return AlertDialog(
-      title: const Text('Supervisor asked to uncheck a subtask'),
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      titlePadding: const EdgeInsets.fromLTRB(24, 20, 16, 8),
+      contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+      actionsPadding: const EdgeInsets.fromLTRB(12, 0, 16, 16),
+      title: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF3F4F6),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+            ),
+            child: Icon(
+              Icons.assignment_late_outlined,
+              color: AppColors.accent,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Supervisor asked to uncheck a subtask',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF0C1935),
+                height: 1.3,
+              ),
+            ),
+          ),
+        ],
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -985,7 +1024,7 @@ class _PmRevertRequestDialogState extends State<_PmRevertRequestDialog> {
                 ),
               ),
             ],
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             const Text(
               'Reason',
               style: TextStyle(
@@ -994,13 +1033,22 @@ class _PmRevertRequestDialogState extends State<_PmRevertRequestDialog> {
                 color: Color(0xFF6B7280),
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              reason,
-              style: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF374151),
-                height: 1.35,
+            const SizedBox(height: 6),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FAFB),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Color(0xFFE5E7EB)),
+              ),
+              child: Text(
+                reason.isEmpty ? '—' : reason,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF374151),
+                  height: 1.4,
+                ),
               ),
             ),
           ],
@@ -1009,7 +1057,13 @@ class _PmRevertRequestDialogState extends State<_PmRevertRequestDialog> {
       actions: [
         TextButton(
           onPressed: _busy ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: const Text(
+            'Cancel',
+            style: TextStyle(
+              color: Color(0xFF6B7280),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ),
         OutlinedButton(
           onPressed: _busy
@@ -1024,6 +1078,14 @@ class _PmRevertRequestDialogState extends State<_PmRevertRequestDialog> {
                     setState(() => _busy = false);
                   }
                 },
+          style: OutlinedButton.styleFrom(
+            foregroundColor: const Color(0xFF0C1935),
+            side: const BorderSide(color: Color(0xFFE5E7EB)),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
           child: const Text('Dismiss'),
         ),
         ElevatedButton(
@@ -1040,8 +1102,13 @@ class _PmRevertRequestDialogState extends State<_PmRevertRequestDialog> {
                   }
                 },
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFFEA580C),
+            backgroundColor: AppColors.accent,
             foregroundColor: Colors.white,
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
           child: _busy
               ? const SizedBox(

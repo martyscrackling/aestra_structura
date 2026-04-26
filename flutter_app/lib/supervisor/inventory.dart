@@ -258,6 +258,9 @@ class _InventoryPageState extends State<InventoryPage> {
         break;
       case 'Inventory':
         return; // Already on inventory page
+      case 'Settings':
+        context.go('/supervisor/settings');
+        break;
       default:
         return;
     }

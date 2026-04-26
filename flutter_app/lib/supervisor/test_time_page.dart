@@ -118,6 +118,9 @@ class _TestTimePageState extends State<TestTimePage> {
         break;
       case 'Test Time':
         return;
+      case 'Settings':
+        context.go('/supervisor/settings');
+        break;
       default:
         return;
     }

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:http/http.dart' as http;
 import 'package:go_router/go_router.dart';
@@ -50,6 +51,8 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
   bool _showMobileDetails = false;
   bool _isCompletingQuickTour = false;
   bool _hasAutoResumedTutorial = false;
+  /// How many times this user had opened the supervisor dashboard before this session (persisted). Null while loading.
+  int? _supervisorPriorVisitCount;
   final GlobalKey _activeProjectKey = GlobalKey();
   final Color _primary = AppColors.accent;
   List<_ProjectProgressPoint> _projectProgressPoints = const [];
@@ -78,7 +81,32 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
   @override
   void initState() {
     super.initState();
+    _bumpSupervisorDashboardVisit();
     Future.microtask(_loadProjectProgress);
+  }
+
+  /// Counts app opens: after the first time the dashboard loads, the next session should not get the "new account" tour banner.
+  Future<void> _bumpSupervisorDashboardVisit() async {
+    final idRaw = AuthService().currentUser?['user_id'];
+    if (idRaw == null) {
+      if (mounted) setState(() => _supervisorPriorVisitCount = 0);
+      return;
+    }
+    final id = idRaw is int ? idRaw : int.tryParse(idRaw.toString());
+    if (id == null) {
+      if (mounted) setState(() => _supervisorPriorVisitCount = 0);
+      return;
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'supervisor_dash_open_count_$id';
+      final prior = prefs.getInt(key) ?? 0;
+      if (!mounted) return;
+      setState(() => _supervisorPriorVisitCount = prior);
+      await prefs.setInt(key, prior + 1);
+    } catch (_) {
+      if (mounted) setState(() => _supervisorPriorVisitCount = 0);
+    }
   }
 
   Future<void> _loadProjectProgress() async {
@@ -437,12 +465,20 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
       case 'Inventory':
         context.go('/supervisor/inventory');
         break;
+      case 'Settings':
+        context.go('/supervisor/settings');
+        break;
       default:
         return;
     }
   }
 
   bool _shouldShowQuickTutorialCard() {
+    if (_supervisorPriorVisitCount == null) return false;
+    if (_supervisorPriorVisitCount! >= 1) {
+      // Second+ time opening the supervisor home — never re-show the welcome tour.
+      return false;
+    }
     final user = AuthService().currentUser;
     if (user == null) return false;
     if (user['role']?.toString() != 'Supervisor') return false;
@@ -450,9 +486,15 @@ class _SupervisorDashboardPageState extends State<SupervisorDashboardPage> {
     if (user[_supervisorTutorialDismissedKey] == true) return false;
 
     final createdAtRaw = user['created_at']?.toString();
-    if (createdAtRaw == null || createdAtRaw.trim().isEmpty) return true;
+    if (createdAtRaw == null || createdAtRaw.trim().isEmpty) {
+      // No server date: allow one in-app nudge on the very first dashboard open only
+      // (we already excluded prior open count >= 1 above; avoids endless banner for old logins without created_at).
+      return true;
+    }
     final createdAt = DateTime.tryParse(createdAtRaw);
-    if (createdAt == null) return true;
+    if (createdAt == null) {
+      return true;
+    }
     return DateTime.now().difference(createdAt.toLocal()) <= _newAccountWindow;
   }
 

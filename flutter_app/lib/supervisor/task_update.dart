@@ -118,6 +118,9 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
       case 'Inventory':
         context.go('/supervisor/inventory');
         break;
+      case 'Settings':
+        context.go('/supervisor/settings');
+        break;
       default:
         return;
     }
@@ -625,9 +628,47 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
       builder: (dCtx) => StatefulBuilder(
         builder: (sCtx, setS) {
           return AlertDialog(
-            title: const Text('Request to uncheck completed subtask'),
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+            contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+            actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            title: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF3F4F6),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFE5E7EB)),
+                  ),
+                  child: Icon(
+                    Icons.mark_email_unread_outlined,
+                    color: primary,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Request to uncheck completed subtask',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF0C1935),
+                      height: 1.3,
+                    ),
+                  ),
+                ),
+              ],
+            ),
             content: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 400),
+              constraints: const BoxConstraints(maxWidth: 440),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -636,20 +677,63 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                     '“$subtaskTitle” is marked complete. To change that, the project '
                     'manager must approve. Explain why it should be unchecked—your PM '
                     'will get a request and can authorize the change from their account.',
-                    style: TextStyle(color: Colors.grey[800], fontSize: 14),
+                    style: const TextStyle(
+                      color: Color(0xFF5C6B7A),
+                      fontSize: 14,
+                      height: 1.45,
+                    ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Reason for unchecking',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF6B7280),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
                   TextField(
                     onChanged: (v) {
                       text = v;
                     },
-                    decoration: const InputDecoration(
-                      labelText: 'Reason for unchecking',
-                      border: OutlineInputBorder(),
-                      alignLabelWithHint: true,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFF0C1935),
                     ),
-                    minLines: 2,
-                    maxLines: 5,
+                    cursorColor: primary,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      hintText: 'Describe why this should be unchecked…',
+                      hintStyle: TextStyle(
+                        color: Colors.grey[500],
+                        fontSize: 14,
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(
+                          color: Color(0xFFE5E7EB),
+                        ),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(
+                          color: Color(0xFFE5E7EB),
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: primary, width: 1.2),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                    ),
+                    minLines: 3,
+                    maxLines: 6,
                     autofocus: true,
                   ),
                 ],
@@ -658,7 +742,13 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop<String>(dCtx, null),
-                child: const Text('Cancel'),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(
+                    color: Color(0xFF6B7280),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
               ElevatedButton(
                 onPressed: () {
@@ -672,7 +762,18 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                   }
                   Navigator.pop<String>(dCtx, text.trim());
                 },
-                style: ElevatedButton.styleFrom(backgroundColor: primary),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primary,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
                 child: const Text('Send request to project manager'),
               ),
             ],
@@ -699,14 +800,39 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setModalState) {
           return AlertDialog(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
             ),
+            titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+            contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+            actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             title: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.update, color: primary),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF3F4F6),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFE5E7EB)),
+                  ),
+                  child: Icon(Icons.update_rounded, color: primary, size: 22),
+                ),
                 const SizedBox(width: 12),
-                Expanded(child: Text(phase.title)),
+                Expanded(
+                  child: Text(
+                    phase.title,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF0C1935),
+                      height: 1.3,
+                    ),
+                  ),
+                ),
               ],
             ),
             content: SingleChildScrollView(
@@ -719,16 +845,16 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 12,
-                      color: Colors.grey,
+                      color: Color(0xFF6B7280),
                     ),
                   ),
                   const SizedBox(height: 8),
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.grey[50],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.grey[200]!),
+                      color: const Color(0xFFF9FAFB),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFE5E7EB)),
                     ),
                     child: Column(
                       children: [
@@ -945,7 +1071,7 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 12,
-                      color: Colors.grey,
+                      color: Color(0xFF6B7280),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -955,9 +1081,9 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                         margin: const EdgeInsets.only(bottom: 10),
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: Colors.grey[50],
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.grey[200]!),
+                          color: const Color(0xFFF9FAFB),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFE5E7EB)),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -983,8 +1109,23 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
                                         !phase.subtasks[sIndex].completed
                                     ? 'Reason for unchecking (required)…'
                                     : 'Progress note for this subtask...',
+                                filled: true,
+                                fillColor: Colors.white,
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFFE5E7EB),
+                                  ),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFFE5E7EB),
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(color: primary),
                                 ),
                                 contentPadding: const EdgeInsets.all(10),
                                 isDense: true,
@@ -1062,10 +1203,27 @@ class _TaskProgressPageState extends State<TaskProgressPage> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel'),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(
+                    color: Color(0xFF6B7280),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
               ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: primary),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primary,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
                 onPressed: () async {
                   for (var st in phase.subtasks) {
                     if (!st.completed && st.status == 'Completed' &&

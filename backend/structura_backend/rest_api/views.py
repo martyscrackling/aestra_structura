@@ -2464,6 +2464,33 @@ def _supervisor_assigned_to_project(project, supervisor_pk: int) -> bool:
     return False
 
 
+def _report_total_salary_amount(report_data) -> Decimal:
+    """Extract submitted total salary amount from supervisor report payload."""
+    if not isinstance(report_data, dict):
+        return Decimal('0')
+    totals = report_data.get('totals')
+    if not isinstance(totals, dict):
+        return Decimal('0')
+    raw = totals.get('total_salary')
+    try:
+        value = Decimal(str(raw))
+    except (InvalidOperation, TypeError, ValueError):
+        return Decimal('0')
+    if value < Decimal('0'):
+        return Decimal('0')
+    return value.quantize(Decimal('0.01'))
+
+
+def _apply_project_payroll_budget_delta(project: models.Project, delta: Decimal) -> None:
+    """Apply payroll spend delta to project budget accounting safely."""
+    current = project.payroll_used_budget or Decimal('0')
+    next_value = current + delta
+    if next_value < Decimal('0'):
+        next_value = Decimal('0')
+    project.payroll_used_budget = next_value.quantize(Decimal('0.01'))
+    project.save(update_fields=['payroll_used_budget'])
+
+
 def _flatten_supervisor_report_for_client(instance: models.SupervisorReportSubmission) -> dict:
     """Merge stored JSON with server id for mobile clients."""
     payload = instance.report_data if isinstance(instance.report_data, dict) else {}
@@ -2473,6 +2500,10 @@ def _flatten_supervisor_report_for_client(instance: models.SupervisorReportSubmi
     out['project_id'] = instance.project_id
     if instance.supervisor_id:
         out['supervisor_id'] = instance.supervisor_id
+    try:
+        out['project_budget_summary'] = project_budget_summary(instance.project)
+    except Exception:
+        pass
     return out
 
 
@@ -2559,14 +2590,27 @@ class SupervisorReportSubmissionViewSet(viewsets.ViewSet):
             )
         sup = models.Supervisors.objects.filter(supervisor_id=sup_id).first()
 
-        obj, created = models.SupervisorReportSubmission.objects.update_or_create(
+        existing = models.SupervisorReportSubmission.objects.filter(
             submission_id=str(submission_id),
-            defaults={
-                'project': project,
-                'supervisor': sup,
-                'report_data': data,
-            },
-        )
+        ).select_related('project').first()
+        old_total_salary = _report_total_salary_amount(existing.report_data) if existing else Decimal('0')
+        old_project = existing.project if existing is not None else None
+        new_total_salary = _report_total_salary_amount(data)
+
+        with transaction.atomic():
+            obj, created = models.SupervisorReportSubmission.objects.update_or_create(
+                submission_id=str(submission_id),
+                defaults={
+                    'project': project,
+                    'supervisor': sup,
+                    'report_data': data,
+                },
+            )
+            if old_project is not None and old_project.project_id != project.project_id:
+                _apply_project_payroll_budget_delta(old_project, -old_total_salary)
+                _apply_project_payroll_budget_delta(project, new_total_salary)
+            else:
+                _apply_project_payroll_budget_delta(project, new_total_salary - old_total_salary)
         if project.user_id is not None:
             _create_pm_inbox_supervisor_report_submitted(
                 project, sup, obj, is_new=created
@@ -2606,7 +2650,12 @@ class SupervisorReportSubmissionViewSet(viewsets.ViewSet):
                 {'detail': 'You can only delete reports for your own projects.'},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        inst.delete()
+        with transaction.atomic():
+            _apply_project_payroll_budget_delta(
+                inst.project,
+                -_report_total_salary_amount(inst.report_data),
+            )
+            inst.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -3600,16 +3649,25 @@ def pm_dashboard_summary(request):
 
     tasks_today = recent_open_items[:5]
 
+    # Exclude "subtask created" style inbox items per PM requirement.
+    excluded_pm_inbox_kinds = [
+        'pm_subtask_created',
+        'pm_subtask_added',
+        'subtask_created',
+        'subtask_added',
+    ]
+
     inbox_unread = models.InAppNotification.objects.filter(
         recipient_kind=models.InAppNotification.KIND_PM,
         recipient_user_id=user_id,
         read_at__isnull=True,
-    ).count()
+    ).exclude(kind__in=excluded_pm_inbox_kinds).count()
     inbox_qs = (
         models.InAppNotification.objects.filter(
             recipient_kind=models.InAppNotification.KIND_PM,
             recipient_user_id=user_id,
         )
+        .exclude(kind__in=excluded_pm_inbox_kinds)
         .order_by('-created_at')[:25]
     )
     inbox_items = []

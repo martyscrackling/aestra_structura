@@ -205,6 +205,9 @@ class _SupervisorNotificationPageState extends State<SupervisorNotificationPage>
       case 'Inventory':
         context.go('/supervisor/inventory');
         break;
+      case 'Settings':
+        context.go('/supervisor/settings');
+        break;
     }
   }
 

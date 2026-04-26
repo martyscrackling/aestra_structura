@@ -274,6 +274,7 @@ class Project(models.Model):
     client = models.ForeignKey('Client', on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_projects')
     supervisor = models.ForeignKey('Supervisors', on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_projects')
     budget = models.DecimalField(max_digits=12, decimal_places=2)
+    payroll_used_budget = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0'))
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Active')
     on_hold_reason = models.TextField(blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -382,8 +383,12 @@ class Project(models.Model):
 
     @property
     def remaining_budget(self):
-        """Project budget minus total used_budget across phases."""
-        return (self.budget or Decimal('0')) - self.total_used_budget
+        """Project budget minus material usage and payroll usage."""
+        return (
+            (self.budget or Decimal('0'))
+            - self.total_used_budget
+            - (self.payroll_used_budget or Decimal('0'))
+        )
 
     @property
     def total_allocated_budget(self):

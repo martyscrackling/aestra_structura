@@ -98,6 +98,17 @@ String buildSupervisorReportCsv(Map<String, dynamic> report) {
   sb.writeln('Total OT (summary),${totals['total_ot'] ?? ''}');
   sb.writeln('Total deductions (summary),${totals['total_deductions'] ?? ''}');
   sb.writeln('Total computed salary (summary),${totals['total_salary'] ?? ''}');
+  final budgetSummary = report['project_budget_summary'] is Map
+      ? Map<String, dynamic>.from(report['project_budget_summary'] as Map)
+      : <String, dynamic>{};
+  if (budgetSummary.isNotEmpty) {
+    sb.writeln('Project total budget,${budgetSummary['total_budget'] ?? ''}');
+    sb.writeln(
+      'Project used materials,${budgetSummary['total_used_materials'] ?? ''}',
+    );
+    sb.writeln('Project used payroll,${budgetSummary['total_used_payroll'] ?? ''}');
+    sb.writeln('Project remaining budget,${budgetSummary['remaining_budget'] ?? ''}');
+  }
   sb.writeln();
   sb.writeln(
     'Name,Role,Days,Hours,OT hours,Hourly rate,Gross pay,Total deductions,Cash advance,Computed salary (net)',
@@ -1326,6 +1337,12 @@ class _SubmissionDetailsPageState extends State<SubmissionDetailsPage> {
     return double.tryParse(value?.toString() ?? '') ?? 0;
   }
 
+  Map<String, dynamic> _budgetSummary() {
+    final raw = widget.report['project_budget_summary'];
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    return <String, dynamic>{};
+  }
+
   /// Fills available width (no horizontal scroll) via flex column widths.
   Widget _buildCompactWorkerSalaryTable(
     List<Map<String, dynamic>> workers,
@@ -1628,6 +1645,11 @@ class _SubmissionDetailsPageState extends State<SubmissionDetailsPage> {
     final totalOt = _asDouble(totalsMap['total_ot']);
     final totalSalary = _asDouble(totalsMap['total_salary']);
     final totalDeductions = _asDouble(totalsMap['total_deductions']);
+    final budgetSummary = _budgetSummary();
+    final totalBudget = _asDouble(budgetSummary['total_budget']);
+    final usedMaterials = _asDouble(budgetSummary['total_used_materials']);
+    final usedPayroll = _asDouble(budgetSummary['total_used_payroll']);
+    final remainingBudget = _asDouble(budgetSummary['remaining_budget']);
 
     return ResponsivePageLayout(
       currentPage: 'Reports',
@@ -1722,6 +1744,73 @@ class _SubmissionDetailsPageState extends State<SubmissionDetailsPage> {
                     ),
                   ),
                   const SizedBox(height: 16),
+
+                  if (budgetSummary.isNotEmpty) ...[
+                    _SectionCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Budget Impact',
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 19,
+                              fontWeight: FontWeight.w600,
+                              color: _textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 210,
+                                  child: _StatCard(
+                                    icon: Icons.account_balance_wallet_outlined,
+                                    label: 'Project Budget',
+                                    value: money.format(totalBudget),
+                                    color: _primary,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                SizedBox(
+                                  width: 210,
+                                  child: _StatCard(
+                                    icon: Icons.inventory_2_outlined,
+                                    label: 'Used Materials',
+                                    value: money.format(usedMaterials),
+                                    color: _overtime,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                SizedBox(
+                                  width: 210,
+                                  child: _StatCard(
+                                    icon: Icons.payments_outlined,
+                                    label: 'Used Payroll',
+                                    value: money.format(usedPayroll),
+                                    color: _danger,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                SizedBox(
+                                  width: 210,
+                                  child: _StatCard(
+                                    icon: Icons.savings_outlined,
+                                    label: 'Remaining Budget',
+                                    value: money.format(remainingBudget),
+                                    color: _success,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
 
                   _SectionCard(
                     child: Column(

@@ -39,6 +39,9 @@ class _AllProjectsPageState extends State<AllProjectsPage> {
       case 'Inventory':
         context.go('/supervisor/inventory');
         break;
+      case 'Settings':
+        context.go('/supervisor/settings');
+        break;
       default:
         return;
     }

@@ -277,6 +277,9 @@ class _ReportsPageState extends State<ReportsPage> {
       case 'Inventory':
         context.go('/supervisor/inventory');
         break;
+      case 'Settings':
+        context.go('/supervisor/settings');
+        break;
       default:
         return;
     }
