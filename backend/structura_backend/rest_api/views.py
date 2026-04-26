@@ -2820,18 +2820,21 @@ class PhaseViewSet(viewsets.ModelViewSet):
             if not field_worker:
                 return Response({'error': 'field_worker not found'}, status=404)
 
-        # If this phase has an active material plan for the selected item,
-        # enforce the remaining assigned quantity (planned - actual) as the
-        # stock ceiling and skip central inventory deduction on usage save.
+        # If this phase has active material plan(s) for the selected item,
+        # enforce the remaining assigned quantity (sum(planned) - actual) as the
+        # ceiling and skip central inventory deduction on usage save.
         enforce_inventory = True
-        plan = models.PhaseMaterialPlan.objects.filter(
+        plan_qs = models.PhaseMaterialPlan.objects.filter(
             phase_id=phase.phase_id,
             inventory_item_id=item.item_id,
             status=models.PhaseMaterialPlan.STATUS_ACTIVE,
-        ).first()
-        if plan is not None:
+        )
+        if plan_qs.exists():
             from django.db.models import Sum as _Sum
 
+            total_planned = (
+                plan_qs.aggregate(s=_Sum('planned_quantity'))['s'] or 0
+            )
             used_qty = (
                 models.InventoryUsage.objects.filter(
                     phase_id=phase.phase_id,
@@ -2839,7 +2842,7 @@ class PhaseViewSet(viewsets.ModelViewSet):
                 ).aggregate(total=_Sum('quantity_used'))['total']
                 or 0
             )
-            remaining_qty = max(0, int(plan.planned_quantity or 0) - int(used_qty or 0))
+            remaining_qty = max(0, int(total_planned) - int(used_qty or 0))
             if qty > remaining_qty:
                 return Response(
                     {
@@ -2903,39 +2906,67 @@ class PhaseViewSet(viewsets.ModelViewSet):
             row['inventory_item_id']: row for row in actual_rows
         }
 
+        from collections import defaultdict
+
+        plan_qs = list(
+            phase.material_plans.select_related('inventory_item', 'subtask').all()
+        )
+        by_item = defaultdict(list)
+        for p in plan_qs:
+            by_item[p.inventory_item_id].append(p)
+
         results = []
         seen_item_ids = set()
-        for plan in phase.material_plans.select_related('inventory_item').all():
-            item = plan.inventory_item
+        for item_id, plist in by_item.items():
+            item = plist[0].inventory_item
+            total_planned = sum(int(p.planned_quantity or 0) for p in plist)
+            total_planned_cost = sum((p.planned_cost for p in plist), start=Decimal('0'))
             actual = actual_by_item.get(item.item_id, {})
-            planned_cost = plan.planned_cost
-            actual_qty = actual.get('actual_quantity') or 0
+            actual_qty = int(actual.get('actual_quantity') or 0)
             actual_cost = actual.get('actual_cost') or Decimal('0')
-            if plan.status == models.PhaseMaterialPlan.STATUS_CLOSED:
-                # Freeze the numbers at close time so the auditing view
-                # keeps showing what actually happened; "remaining" is
-                # always 0 because leftovers have been returned.
+            all_closed = all(
+                p.status == models.PhaseMaterialPlan.STATUS_CLOSED for p in plist
+            )
+            if all_closed:
                 remaining = 0
             else:
-                remaining = max(0, int(plan.planned_quantity or 0) - int(actual_qty or 0))
+                remaining = max(0, total_planned - actual_qty)
             results.append({
                 'inventory_item_id': item.item_id,
                 'inventory_item_name': item.name,
                 'unit_of_measure': item.unit_of_measure or 'pcs',
                 'unit_price': str(item.price or Decimal('0')),
-                'planned_quantity': plan.planned_quantity,
-                'planned_cost': str(planned_cost),
+                'planned_quantity': total_planned,
+                'planned_cost': str(total_planned_cost),
                 'actual_quantity': actual_qty,
                 'actual_cost': str(actual_cost),
                 'remaining_quantity': remaining,
-                'quantity_variance': actual_qty - plan.planned_quantity,
-                'cost_variance': str(Decimal(str(actual_cost)) - Decimal(str(planned_cost))),
+                'quantity_variance': actual_qty - total_planned,
+                'cost_variance': str(
+                    Decimal(str(actual_cost)) - total_planned_cost
+                ),
                 'has_plan': True,
-                'plan_status': plan.status,
-                'leftover_quantity': plan.leftover_quantity,
-                'closed_at': plan.closed_at,
+                'plan_status': (
+                    models.PhaseMaterialPlan.STATUS_CLOSED
+                    if all_closed
+                    else models.PhaseMaterialPlan.STATUS_ACTIVE
+                ),
+                'leftover_quantity': sum(int(p.leftover_quantity or 0) for p in plist),
+                'closed_at': plist[0].closed_at if len(plist) == 1 else None,
+                'subtask_plans': [
+                    {
+                        'plan_id': p.plan_id,
+                        'subtask_id': p.subtask_id,
+                        'subtask_title': (p.subtask.title if p.subtask else None),
+                        'planned_quantity': p.planned_quantity,
+                    }
+                    for p in sorted(
+                        plist,
+                        key=lambda x: (x.subtask_id or 0, x.plan_id or 0),
+                    )
+                ],
             })
-            seen_item_ids.add(item.item_id)
+            seen_item_ids.add(int(item_id))
 
         # Materials that were consumed but never planned
         for row in actual_rows:
@@ -5190,16 +5221,16 @@ class PhaseMaterialPlanViewSet(viewsets.ModelViewSet):
     Query params:
         phase_id     - filter by phase
         project_id   - filter by project (joined through phase)
-    Creating a plan entry for an (phase, inventory_item) pair that already
-    exists will return 400 because of unique_together; clients should PATCH
-    the existing plan_id instead.
+    The same (phase, material) may have multiple plan rows for different
+    subtasks, until on-hand stock is reserved. Duplicate (phase, item, subtask)
+    returns 400; update the plan_id instead.
     """
     serializer_class = PhaseMaterialPlanSerializer
 
     def get_queryset(self):
         qs = models.PhaseMaterialPlan.objects.select_related(
             'phase', 'inventory_item', 'subtask'
-        ).order_by('phase_id', 'inventory_item_id')
+        ).order_by('phase_id', 'inventory_item_id', 'subtask_id')
         phase_id = self.request.query_params.get('phase_id')
         project_id = self.request.query_params.get('project_id')
         if phase_id:

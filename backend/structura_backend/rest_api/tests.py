@@ -393,6 +393,47 @@ class PhaseMaterialPlanCRUDTests(BudgetTestMixin, APITestCase):
         )
         self.assertEqual(r.status_code, 400)
 
+    def test_create_two_plans_same_item_different_subtasks(self):
+        st1 = models.Subtask.objects.create(
+            phase=self.phase_1,
+            title='Subtask A',
+            status='pending',
+        )
+        st2 = models.Subtask.objects.create(
+            phase=self.phase_1,
+            title='Subtask B',
+            status='pending',
+        )
+        r1 = self.client.post(
+            self._list_url(),
+            {
+                'phase': self.phase_1.pk,
+                'inventory_item': self.cement.pk,
+                'planned_quantity': 10,
+                'subtask': st1.subtask_id,
+            },
+            format='json',
+        )
+        self.assertEqual(r1.status_code, 201, r1.data)
+        r2 = self.client.post(
+            self._list_url(),
+            {
+                'phase': self.phase_1.pk,
+                'inventory_item': self.cement.pk,
+                'planned_quantity': 20,
+                'subtask': st2.subtask_id,
+            },
+            format='json',
+        )
+        self.assertEqual(r2.status_code, 201, r2.data)
+        self.assertEqual(
+            models.PhaseMaterialPlan.objects.filter(
+                phase=self.phase_1,
+                inventory_item=self.cement,
+            ).count(),
+            2,
+        )
+
     def test_plan_zero_or_negative_quantity_rejected(self):
         for q in (0, -3):
             r = self.client.post(

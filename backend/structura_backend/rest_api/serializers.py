@@ -1679,14 +1679,25 @@ class PhaseMaterialPlanSerializer(serializers.ModelSerializer):
         item = attrs.get('inventory_item') or (self.instance.inventory_item if self.instance else None)
         if phase is None or item is None:
             return attrs
-        # Prevent duplicate (phase, item) via a nicer error than the DB IntegrityError.
+        # Prevent duplicate (phase, item, subtask) — same material can appear on multiple
+        # subtasks in the same phase when stock allows (separate plan rows).
+        subtask = attrs.get('subtask', serializers.empty)
+        if subtask is serializers.empty and self.instance is not None:
+            subtask = self.instance.subtask
         existing = models.PhaseMaterialPlan.objects.filter(phase=phase, inventory_item=item)
+        if subtask is not None and subtask is not serializers.empty:
+            st_id = getattr(subtask, 'subtask_id', subtask)
+            if hasattr(st_id, 'pk'):
+                st_id = st_id.pk
+            existing = existing.filter(subtask_id=int(st_id))
+        else:
+            existing = existing.filter(subtask__isnull=True)
         if self.instance is not None:
             existing = existing.exclude(pk=self.instance.pk)
         if existing.exists():
             raise serializers.ValidationError(
-                "A material plan for this phase/item already exists. "
-                "Update the existing plan instead."
+                "A plan for this phase, item, and subtask already exists. "
+                "Update that line, pick another subtask, or add stock first."
             )
         item_type = (item.item_type or '').strip().lower()
         item_category = (item.category or '').strip().lower().rstrip('s')
