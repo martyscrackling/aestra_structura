@@ -1118,7 +1118,14 @@ def create_paymongo_checkout(request):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         
-        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:8001') # Adjust fallback if needed
+        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:8001').strip()
+        # Remove trailing slash if present to avoid double slashes in the final URL
+        if frontend_url.endswith('/'):
+            frontend_url = frontend_url[:-1]
+            
+        if not frontend_url.startswith('http'):
+            # Fallback for common error where user forgets the protocol
+            frontend_url = f"https://{frontend_url}"
 
         url = "https://api.paymongo.com/v1/checkout_sessions"
         payload = {
