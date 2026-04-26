@@ -1112,6 +1112,12 @@ def create_paymongo_checkout(request):
         
         # Get PayMongo secret key from env
         paymongo_sk = os.getenv('PAYMONGO_SECRET_KEY')
+        if not paymongo_sk:
+            return Response(
+                {'success': False, 'message': 'Backend configuration error: PayMongo Secret Key is not set in Render Environment Variables.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
         frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:8001') # Adjust fallback if needed
 
         url = "https://api.paymongo.com/v1/checkout_sessions"
@@ -1150,10 +1156,11 @@ def create_paymongo_checkout(request):
         response_data = response.json()
         
         if response.status_code != 200:
+            error_details = response_data.get('errors', [{}])[0].get('detail', 'Unknown PayMongo error')
             return Response({
                 'success': False,
-                'message': 'Failed to create checkout session with PayMongo',
-                'paymongo_error': response.json()
+                'message': f'PayMongo Error: {error_details}',
+                'paymongo_error': response_data
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
         checkout_url = response.json()['data']['attributes']['checkout_url']
