@@ -2012,19 +2012,26 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      _projectDetailCard(
-                        icon: Icons.event,
-                        title: 'Start Date',
-                        value: (_projectInfo?['start_date'] ?? 'N/A')
-                            .toString(),
-                        color: const Color(0xFF4CAF50),
-                      ),
-                      const SizedBox(height: 12),
-                      _projectDetailCard(
-                        icon: Icons.event_available,
-                        title: 'Expected Date to End',
-                        value: (_projectInfo?['end_date'] ?? 'N/A').toString(),
-                        color: const Color(0xFFF44336),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _projectDetailCard(
+                              icon: Icons.event_available,
+                              title: 'Expected Date to End',
+                              value: (_projectInfo?['end_date'] ?? 'N/A').toString(),
+                              color: const Color(0xFFF44336),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _projectDetailCard(
+                              icon: Icons.attach_money,
+                              title: 'Budget',
+                              value: widget.budget ?? 'N/A',
+                              color: const Color(0xFF9C27B0),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   )
@@ -2070,6 +2077,15 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
                           value: (_projectInfo?['end_date'] ?? 'N/A')
                               .toString(),
                           color: const Color(0xFFF44336),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _projectDetailCard(
+                          icon: Icons.attach_money,
+                          title: 'Budget',
+                          value: widget.budget ?? 'N/A',
+                          color: const Color(0xFF9C27B0),
                         ),
                       ),
                     ],
