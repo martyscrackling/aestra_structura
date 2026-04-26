@@ -18,19 +18,37 @@ class PaymentService {
         }),
       );
 
+      final contentType = response.headers['content-type'] ?? '';
+      
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        if (contentType.contains('application/json')) {
+          return jsonDecode(response.body);
+        } else {
+          return {
+            'success': false,
+            'message': 'Server returned non-JSON response (Status ${response.statusCode})',
+          };
+        }
       } else {
-        final errorData = jsonDecode(response.body);
-        return {
-          'success': false,
-          'message': errorData['message'] ?? 'Failed to create checkout session',
-        };
+        // Handle error status codes
+        if (contentType.contains('application/json')) {
+          final errorData = jsonDecode(response.body);
+          return {
+            'success': false,
+            'message': errorData['message'] ?? 'Server error (${response.statusCode})',
+          };
+        } else {
+          // If it's HTML (likely a 404 or 500 from the hosting provider)
+          return {
+            'success': false,
+            'message': 'Server Error (${response.statusCode}). The requested resource might not be found or the server is down.',
+          };
+        }
       }
     } catch (e) {
       return {
         'success': false,
-        'message': 'Network error: ${e.toString()}',
+        'message': 'Connection error: ${e.toString()}',
       };
     }
   }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:flutter_app/projectmanager/modals/upgrade_plan_modal.dart';
+
 void main() {
   runApp(const MyApp());
 }
@@ -233,10 +235,10 @@ class LicenseActivationPage extends StatelessWidget {
           height: screenWidth < 360 ? 48 : 50,
           child: ElevatedButton(
             onPressed: () {
-              context.go('/dashboard');
+              UpgradePlanModal.show(context);
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF6B2C),
+              backgroundColor: const Color(0xFF0A173D),
               padding: EdgeInsets.symmetric(
                 vertical: screenWidth < 360 ? 12 : 14,
                 horizontal: 16,
@@ -248,11 +250,42 @@ class LicenseActivationPage extends StatelessWidget {
             child: FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
-                "Start your 14 days trial",
+                "Activate license now!",
                 style: TextStyle(
                   fontSize: buttonFont,
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          height: screenWidth < 360 ? 48 : 50,
+          child: OutlinedButton(
+            onPressed: () {
+              context.go('/dashboard');
+            },
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: Color(0xFFFF6B2C)),
+              padding: EdgeInsets.symmetric(
+                vertical: screenWidth < 360 ? 12 : 14,
+                horizontal: 16,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(30),
+              ),
+            ),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                "Continue to Dashboard (Trial)",
+                style: TextStyle(
+                  fontSize: buttonFont,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFFFF6B2C),
                 ),
               ),
             ),

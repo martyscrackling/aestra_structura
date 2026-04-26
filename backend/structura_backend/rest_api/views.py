@@ -1067,11 +1067,33 @@ def create_paymongo_checkout(request):
             )
             
         try:
-            user = models.User.objects.get(user_id=user_id, role='ProjectManager')
-        except models.User.DoesNotExist:
+            # Be flexible with user retrieval
+            user = models.User.objects.filter(user_id=user_id).first()
+            if not user:
+                return Response(
+                    {'success': False, 'message': f'User with ID {user_id} not found.'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            # Ensure it's a ProjectManager or similar role that can subscribe
+            if user.role not in ['ProjectManager', 'SuperAdmin', 'projectmanager', 'superadmin']:
+                 return Response(
+                    {'success': False, 'message': 'This account type is not eligible for a subscription plan.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        except Exception as e:
             return Response(
-                {'success': False, 'message': 'User not found or not a ProjectManager'},
-                status=status.HTTP_404_NOT_FOUND
+                {'success': False, 'message': f'Database error: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        # Ensure years is an integer (in case it was sent as a string)
+        try:
+            subscription_years = int(subscription_years)
+        except (ValueError, TypeError):
+             return Response(
+                {'success': False, 'message': 'Invalid subscription period format.'},
+                status=status.HTTP_400_BAD_REQUEST
             )
 
         # Price tiers in centavos (must match Flutter UI prices)
@@ -1194,6 +1216,8 @@ def paymongo_webhook(request):
                         payment_status='completed',
                         notes=f"Paid via PayMongo checkout webhook. Event ID: {data.get('data', {}).get('id')}"
                     )
+                    
+                    logger.info(f"Successfully activated subscription for user {user_id} for {subscription_years} years.")
                     
                     # Send confirmation email
                     from app.utils import send_subscription_activated_email
