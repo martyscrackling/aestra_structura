@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Q
 from django.contrib.auth.hashers import make_password
 from django.utils import timezone
 from datetime import timedelta
@@ -1116,8 +1117,22 @@ class PhaseMaterialPlan(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('phase', 'inventory_item')
-        ordering = ['phase_id', 'inventory_item_id']
+        ordering = ['phase_id', 'inventory_item_id', 'subtask_id']
+        constraints = [
+            # Same material can be planned to multiple subtasks in one phase, as long
+            # as on-hand stock allows (each create reserves from inventory). At most one
+            # legacy row with no subtask per (phase, item).
+            models.UniqueConstraint(
+                fields=['phase', 'inventory_item', 'subtask'],
+                name='phmatplan_uniq_phase_item_subtask_set',
+                condition=Q(subtask__isnull=False),
+            ),
+            models.UniqueConstraint(
+                fields=['phase', 'inventory_item'],
+                name='phmatplan_uniq_phase_item_subtask_null',
+                condition=Q(subtask__isnull=True),
+            ),
+        ]
 
     @property
     def is_active(self):

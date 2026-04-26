@@ -393,6 +393,47 @@ class PhaseMaterialPlanCRUDTests(BudgetTestMixin, APITestCase):
         )
         self.assertEqual(r.status_code, 400)
 
+    def test_create_two_plans_same_item_different_subtasks(self):
+        st1 = models.Subtask.objects.create(
+            phase=self.phase_1,
+            title='Subtask A',
+            status='pending',
+        )
+        st2 = models.Subtask.objects.create(
+            phase=self.phase_1,
+            title='Subtask B',
+            status='pending',
+        )
+        r1 = self.client.post(
+            self._list_url(),
+            {
+                'phase': self.phase_1.pk,
+                'inventory_item': self.cement.pk,
+                'planned_quantity': 10,
+                'subtask': st1.subtask_id,
+            },
+            format='json',
+        )
+        self.assertEqual(r1.status_code, 201, r1.data)
+        r2 = self.client.post(
+            self._list_url(),
+            {
+                'phase': self.phase_1.pk,
+                'inventory_item': self.cement.pk,
+                'planned_quantity': 20,
+                'subtask': st2.subtask_id,
+            },
+            format='json',
+        )
+        self.assertEqual(r2.status_code, 201, r2.data)
+        self.assertEqual(
+            models.PhaseMaterialPlan.objects.filter(
+                phase=self.phase_1,
+                inventory_item=self.cement,
+            ).count(),
+            2,
+        )
+
     def test_plan_zero_or_negative_quantity_rejected(self):
         for q in (0, -3):
             r = self.client.post(
@@ -405,6 +446,23 @@ class PhaseMaterialPlanCRUDTests(BudgetTestMixin, APITestCase):
                 format='json',
             )
             self.assertEqual(r.status_code, 400, f'quantity {q} should be rejected')
+
+    def test_create_plan_rejected_when_planned_cost_exceeds_phase_budget(self):
+        self.phase_1.allocated_budget = Decimal('200')
+        self.phase_1.save(update_fields=['allocated_budget'])
+        self.cement.price = Decimal('100')
+        self.cement.save(update_fields=['price'])
+        r = self.client.post(
+            self._list_url(),
+            {
+                'phase': self.phase_1.pk,
+                'inventory_item': self.cement.pk,
+                'planned_quantity': 3,  # 300 > 200
+            },
+            format='json',
+        )
+        self.assertEqual(r.status_code, 400, r.data)
+        self.assertIn('planned', str(r.data).lower())
 
     def test_list_plans_filtered_by_phase(self):
         models.PhaseMaterialPlan.objects.create(

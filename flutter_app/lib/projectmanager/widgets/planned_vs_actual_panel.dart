@@ -244,6 +244,22 @@ class _ItemRow extends StatelessWidget {
     final leftover = (item['leftover_quantity'] ?? 0) as num;
     final overUsed = hasAssignment && usedQty > assignedQty;
     final depleted = hasAssignment && remainingQty <= 0 && assignedQty > 0;
+    final stPlans = item['subtask_plans'];
+    String? stPlanLine;
+    if (stPlans is List && stPlans.isNotEmpty) {
+      stPlanLine = stPlans
+          .map((e) {
+            if (e is! Map) return '';
+            final t = (e['subtask_title'] ?? '').toString().trim();
+            final q = (e['planned_quantity'] ?? 0);
+            if (t.isEmpty) {
+              return '$q';
+            }
+            return '$q → $t';
+          })
+          .where((s) => s.isNotEmpty)
+          .join('  ·  ');
+    }
 
     final Color remainingColor;
     if (isClosed) {
@@ -285,6 +301,19 @@ class _ItemRow extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
+                if (stPlanLine != null && stPlanLine.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    stPlanLine,
+                    style: const TextStyle(
+                      fontSize: 9,
+                      color: Color(0xFF6B7280),
+                      height: 1.2,
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
                 if (isClosed)
                   Container(
                     margin: const EdgeInsets.only(top: 2),

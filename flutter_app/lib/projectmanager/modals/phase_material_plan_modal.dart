@@ -134,9 +134,6 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
     }
   }
 
-  Set<int> get _plannedItemIds =>
-      _plans.map((p) => p['inventory_item'] as int).toSet();
-
   bool _isMaterial(Map<String, dynamic> item) {
     final type = item['item_type'];
     if (type is String && type.trim().toLowerCase() == 'material') {
@@ -156,12 +153,12 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
     return int.tryParse(q?.toString() ?? '0') ?? 0;
   }
 
+  /// Items with remaining on-hand stock. The same material can appear in several
+  /// subtask plan lines; availability is limited only by [InventoryItem].quantity
+  /// (reduced on each create), not "already in a plan" for the phase.
   List<Map<String, dynamic>> get _unplannedInventory => _inventory
       .where(
-        (i) =>
-            _isMaterial(i) &&
-            !_plannedItemIds.contains(i['item_id']) &&
-            _stockQuantity(i) > 0,
+        (i) => _isMaterial(i) && _stockQuantity(i) > 0,
       )
       .toList();
 
@@ -309,10 +306,14 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
 
   Future<void> _refreshLists() async {
     try {
-      final plans = await BudgetService.listPhasePlans(phaseId: widget.phaseId);
+      final results = await Future.wait([
+        BudgetService.listPhasePlans(phaseId: widget.phaseId),
+        InventoryService.getInventoryItems(userId: widget.pmUserId),
+      ]);
       if (!mounted) return;
       setState(() {
-        _plans = plans;
+        _plans = results[0];
+        _inventory = results[1];
         _dropInvalidMaterialSelection();
       });
       _reportKey.currentState?.reload();
