@@ -1119,6 +1119,11 @@ def create_paymongo_checkout(request):
             )
         
         frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:8001').strip()
+        
+        # If there are multiple URLs (separated by comma), take only the first one
+        if ',' in frontend_url:
+            frontend_url = frontend_url.split(',')[0].strip()
+            
         # Remove trailing slash if present to avoid double slashes in the final URL
         if frontend_url.endswith('/'):
             frontend_url = frontend_url[:-1]
