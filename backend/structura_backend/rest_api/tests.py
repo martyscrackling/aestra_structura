@@ -447,6 +447,23 @@ class PhaseMaterialPlanCRUDTests(BudgetTestMixin, APITestCase):
             )
             self.assertEqual(r.status_code, 400, f'quantity {q} should be rejected')
 
+    def test_create_plan_rejected_when_planned_cost_exceeds_phase_budget(self):
+        self.phase_1.allocated_budget = Decimal('200')
+        self.phase_1.save(update_fields=['allocated_budget'])
+        self.cement.price = Decimal('100')
+        self.cement.save(update_fields=['price'])
+        r = self.client.post(
+            self._list_url(),
+            {
+                'phase': self.phase_1.pk,
+                'inventory_item': self.cement.pk,
+                'planned_quantity': 3,  # 300 > 200
+            },
+            format='json',
+        )
+        self.assertEqual(r.status_code, 400, r.data)
+        self.assertIn('planned', str(r.data).lower())
+
     def test_list_plans_filtered_by_phase(self):
         models.PhaseMaterialPlan.objects.create(
             phase=self.phase_1, inventory_item=self.cement, planned_quantity=10

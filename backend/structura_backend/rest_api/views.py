@@ -5290,8 +5290,61 @@ class PhaseMaterialPlanViewSet(viewsets.ModelViewSet):
         item.quantity = next_qty
         item.save(update_fields=['quantity', 'updated_at'])
 
+    @staticmethod
+    def _phase_plan_line_cost(item: models.InventoryItem, qty: int) -> Decimal:
+        return Decimal(str(item.price or Decimal('0'))) * Decimal(int(qty or 0))
+
+    @classmethod
+    def _ensure_phase_plan_cost_within_budget(
+        cls,
+        *,
+        phase: models.Phase,
+        item: models.InventoryItem,
+        qty: int,
+        exclude_plan_id: int | None = None,
+    ) -> None:
+        """
+        Planned material cost for ACTIVE plans must stay within phase allocation.
+        """
+        allocated = Decimal(str(phase.allocated_budget or Decimal('0')))
+        active_plans = models.PhaseMaterialPlan.objects.select_for_update().filter(
+            phase_id=phase.phase_id,
+            status=models.PhaseMaterialPlan.STATUS_ACTIVE,
+        )
+        if exclude_plan_id is not None:
+            active_plans = active_plans.exclude(pk=exclude_plan_id)
+
+        current_cost = sum(
+            (
+                cls._phase_plan_line_cost(
+                    p.inventory_item,
+                    int(p.planned_quantity or 0),
+                )
+                for p in active_plans.select_related('inventory_item')
+            ),
+            start=Decimal('0'),
+        )
+        next_cost = current_cost + cls._phase_plan_line_cost(item, int(qty or 0))
+        if next_cost > allocated:
+            raise ValidationError(
+                {
+                    'planned_quantity': (
+                        'Planned materials exceed this phase allocation. '
+                        f'Allocated: ₱{allocated}. Planned total would be: ₱{next_cost}.'
+                    )
+                }
+            )
+
     @transaction.atomic
     def perform_create(self, serializer):
+        phase = serializer.validated_data.get('phase')
+        item = serializer.validated_data.get('inventory_item')
+        qty = int(serializer.validated_data.get('planned_quantity') or 0)
+        self._ensure_phase_plan_cost_within_budget(
+            phase=phase,
+            item=item,
+            qty=qty,
+        )
         plan = serializer.save()
         # Reserve planned material quantity from inventory stock.
         self._adjust_inventory_quantity(
@@ -5310,6 +5363,16 @@ class PhaseMaterialPlanViewSet(viewsets.ModelViewSet):
         old_qty = int(old_plan.planned_quantity)
         old_item_id = int(old_plan.inventory_item_id)
         old_reserved = bool(old_plan.inventory_reserved)
+
+        phase = serializer.validated_data.get('phase', old_plan.phase)
+        item = serializer.validated_data.get('inventory_item', old_plan.inventory_item)
+        qty = int(serializer.validated_data.get('planned_quantity', old_plan.planned_quantity) or 0)
+        self._ensure_phase_plan_cost_within_budget(
+            phase=phase,
+            item=item,
+            qty=qty,
+            exclude_plan_id=old_plan.pk,
+        )
 
         plan = serializer.save()
         new_qty = int(plan.planned_quantity)

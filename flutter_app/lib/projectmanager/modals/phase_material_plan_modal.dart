@@ -306,10 +306,14 @@ class _PhaseMaterialPlanModalState extends State<PhaseMaterialPlanModal> {
 
   Future<void> _refreshLists() async {
     try {
-      final plans = await BudgetService.listPhasePlans(phaseId: widget.phaseId);
+      final results = await Future.wait([
+        BudgetService.listPhasePlans(phaseId: widget.phaseId),
+        InventoryService.getInventoryItems(userId: widget.pmUserId),
+      ]);
       if (!mounted) return;
       setState(() {
-        _plans = plans;
+        _plans = results[0];
+        _inventory = results[1];
         _dropInvalidMaterialSelection();
       });
       _reportKey.currentState?.reload();
