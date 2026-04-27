@@ -1030,7 +1030,7 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
 
   int _phaseProgressPercent(Map<String, dynamic> phaseMap) {
     final subtasks = (phaseMap['subtasks'] as List<dynamic>? ?? []);
-    if (subtasks.isEmpty) return 0;
+    if (subtasks.isEmpty) return 100;
     final completed = subtasks.where((subtask) {
       final map = subtask as Map<String, dynamic>;
       return (map['status'] ?? '').toString().toLowerCase() == 'completed';
@@ -1381,7 +1381,9 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
     final focusForExpand = _resolvedFocusPhaseId();
 
     return Column(
-      children: _phases!.map((phase) {
+      children: _phases!.asMap().entries.map((entry) {
+        final index = entry.key;
+        final phase = entry.value;
         final phaseMap = phase as Map<String, dynamic>;
         final phaseName = (phaseMap['phase_name'] ?? 'Untitled Phase')
             .toString();
@@ -1390,6 +1392,11 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
         final phaseId = _asIntId(phaseMap['phase_id']);
         final expandPhase =
             focusForExpand != null && phaseId != null && focusForExpand == phaseId;
+
+        // Sequential locking: Phase N-1 must be 100% completed
+        final bool isLockedByPrevious = index > 0 &&
+            _phaseProgressPercent(_phases![index - 1] as Map<String, dynamic>) <
+                100;
 
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
@@ -1743,7 +1750,7 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
                 ),
                 if (phaseMap['phase_id'] is int)
                   _buildPhaseMaterialsPanel(phaseMap['phase_id'] as int),
-                _buildRecordUsageAction(phaseMap),
+                _buildRecordUsageAction(phaseMap, isLockedByPrevious),
               ],
             ),
           ),
@@ -1752,7 +1759,7 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
     );
   }
 
-  Widget _buildRecordUsageAction(Map<String, dynamic> phaseMap) {
+  Widget _buildRecordUsageAction(Map<String, dynamic> phaseMap, bool isLockedByPrevious) {
     final phaseId = phaseMap['phase_id'] as int?;
     if (phaseId == null) return const SizedBox.shrink();
 
@@ -1793,6 +1800,39 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
       );
     }
 
+    if (isLockedByPrevious) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF2E8),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.lock_outline, size: 14, color: Color(0xFFFF7A18)),
+                  SizedBox(width: 6),
+                  Text(
+                    'Complete Previous Phase to Unlock',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFFFF7A18),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
       child: Row(
@@ -1809,6 +1849,7 @@ class _ProjectInfosPageState extends State<ProjectInfosPage> {
                         phaseName:
                             (phaseMap['phase_name'] ?? '') as String,
                         supervisorId: supervisorId,
+                        projectId: widget.projectId,
                       ),
                     );
                     if (recorded == true && mounted) {
