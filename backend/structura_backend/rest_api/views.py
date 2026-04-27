@@ -2734,6 +2734,12 @@ class PhaseViewSet(viewsets.ModelViewSet):
                         'leftovers': leftovers,
                     })
                     response.data = data
+            
+            # Refresh project overdue status respecting test time
+            as_of = _as_of_date_from_request(request)
+            if phase.project:
+                phase.project.refresh_overdue_status(as_of_date=as_of)
+
         return response
 
     @action(detail=True, methods=['post'], url_path='close-materials')
@@ -3015,7 +3021,7 @@ class SubtaskViewSet(viewsets.ModelViewSet):
         return queryset
 
     @staticmethod
-    def _sync_parent_project_status(subtask) -> None:
+    def _sync_parent_project_status(subtask, as_of_date=None) -> None:
         try:
             phase = subtask.phase
             project = phase.project
@@ -3028,10 +3034,12 @@ class SubtaskViewSet(viewsets.ModelViewSet):
         except models.Project.DoesNotExist:  # noqa: BLE001
             return
         proj.update_status_based_on_progress()
+        proj.refresh_overdue_status(as_of_date=as_of_date)
 
     def perform_create(self, serializer):
         super().perform_create(serializer)
-        self._sync_parent_project_status(serializer.instance)
+        as_of = _as_of_date_from_request(self.request)
+        self._sync_parent_project_status(serializer.instance, as_of_date=as_of)
 
     def perform_destroy(self, instance):
         try:
@@ -3048,6 +3056,8 @@ class SubtaskViewSet(viewsets.ModelViewSet):
             except models.Project.DoesNotExist:  # noqa: BLE001
                 return
             proj.update_status_based_on_progress()
+            as_of = _as_of_date_from_request(self.request)
+            proj.refresh_overdue_status(as_of_date=as_of)
 
     def perform_update(self, serializer):
         instance = serializer.instance
@@ -3172,7 +3182,8 @@ class SubtaskViewSet(viewsets.ModelViewSet):
         ):
             _create_pm_inbox_supervisor_completion(updated_subtask, request)
 
-        self._sync_parent_project_status(updated_subtask)
+        as_of = _as_of_date_from_request(request)
+        self._sync_parent_project_status(updated_subtask, as_of_date=as_of)
 
         return Response(serializer.data)
 
