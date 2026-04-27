@@ -1197,40 +1197,6 @@ class _ProjectsHeader extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: SizedBox(
-                  height: 36,
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      side: const BorderSide(color: Color(0xFFFF7A18), width: 1.5),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const ProjectArchiveSv()),
-                      );
-                    },
-                    icon: const Icon(Icons.archive, size: 16, color: Color(0xFFFF7A18)),
-                    label: const Text(
-                      'Archived',
-                      style: TextStyle(
-                        color: Color(0xFFFF7A18),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
                 flex: 2,
                 child: _SearchField(
                   controller: searchController,
@@ -1290,33 +1256,6 @@ class _ProjectsHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 12),
-        SizedBox(
-          height: 40,
-          child: OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              backgroundColor: Colors.transparent,
-              side: const BorderSide(color: Color(0xFFFF7A18), width: 1.5),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-            ),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ProjectArchiveSv()),
-              );
-            },
-            icon: const Icon(Icons.archive, size: 18, color: Color(0xFFFF7A18)),
-            label: const Text(
-              'Archived',
-              style: TextStyle(
-                color: Color(0xFFFF7A18),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 16),
         _SearchField(controller: searchController, isMobile: false),
         const SizedBox(width: 12),
         _ProjectTypeFilterDropdown(
