@@ -233,12 +233,31 @@ def _get_request_pm_user_id(request):
     Note: This project currently does not use auth tokens, so scoping relies on a
     `user_id` being supplied by the client app.
     """
+    data = getattr(request, 'data', None)
+    body_user_id = None
+    if isinstance(data, dict):
+        body_user_id = (
+            data.get('user_id')
+            or data.get('created_by')
+            or data.get('created_by_id')
+        )
+    elif isinstance(data, list):
+        # Bulk POST payload (e.g. subtask-assignments create many).
+        for row in data:
+            if not isinstance(row, dict):
+                continue
+            body_user_id = (
+                row.get('user_id')
+                or row.get('created_by')
+                or row.get('created_by_id')
+            )
+            if body_user_id not in (None, ''):
+                break
+
     raw = (
         request.query_params.get('user_id')
         or request.headers.get('X-User-Id')
-        or request.data.get('user_id')
-        or request.data.get('created_by')
-        or request.data.get('created_by_id')
+        or body_user_id
     )
     try:
         return int(raw) if raw is not None and raw != '' else None

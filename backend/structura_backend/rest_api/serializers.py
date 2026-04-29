@@ -1403,36 +1403,6 @@ class SubtaskFieldWorkerSerializer(serializers.ModelSerializer):
         if worker is None or subtask is None:
             return attrs
 
-        phase_obj = getattr(subtask, 'phase', None)
-        if phase_obj is not None:
-            subtask_pk = getattr(subtask, 'pk', None) or getattr(subtask, 'subtask_id', None)
-            if subtask_pk is not None:
-                other_qs = (
-                    models.SubtaskFieldWorker.objects
-                    .filter(
-                        field_worker=worker,
-                        subtask__phase_id=phase_obj.phase_id,
-                    )
-                    .exclude(subtask_id=subtask_pk)
-                    .exclude(subtask__status='completed')
-                    .select_related('subtask')
-                )
-                if self.instance is not None:
-                    other_qs = other_qs.exclude(pk=self.instance.pk)
-                other = other_qs.first()
-                if other is not None:
-                    other_title = other.subtask.title
-                    raise serializers.ValidationError(
-                        {
-                            'non_field_errors': [
-                                (
-                                    f'This field worker is already assigned to the subtask '
-                                    f'"{other_title}" in this phase. Remove that assignment first.'
-                                )
-                            ],
-                        }
-                    )
-
         # Require complete shift boundaries when one side is provided.
         if (shift_start is None) != (shift_end is None):
             raise serializers.ValidationError(
@@ -1461,10 +1431,6 @@ class SubtaskFieldWorkerSerializer(serializers.ModelSerializer):
             existing_project = getattr(getattr(existing_subtask, 'phase', None), 'project', None)
             existing_project_id = getattr(existing_project, 'project_id', None)
 
-            # Restrict only across different projects.
-            if existing_project_id == current_project_id:
-                continue
-
             existing_segments = self._to_segments(assignment.shift_start, assignment.shift_end)
             if not self._segments_overlap(incoming_segments, existing_segments):
                 continue
@@ -1472,12 +1438,21 @@ class SubtaskFieldWorkerSerializer(serializers.ModelSerializer):
             existing_project_name = (
                 getattr(existing_project, 'project_name', None) or 'another project'
             )
+            existing_subtask = assignment.subtask
+            existing_subtask_title = (
+                getattr(existing_subtask, 'title', None) or 'another subtask'
+            )
+            existing_phase_name = (
+                getattr(getattr(existing_subtask, 'phase', None), 'phase_name', None)
+                or 'another phase'
+            )
             raise serializers.ValidationError(
                 {
                     'non_field_errors': [
                         (
                             'Shift conflict detected. This worker already has '
-                            f'a shift on "{existing_project_name}" '
+                            f'a shift on "{existing_subtask_title}" '
+                            f'({existing_phase_name}, {existing_project_name}) '
                             f'({assignment.shift_start.strftime("%I:%M %p")} - '
                             f'{assignment.shift_end.strftime("%I:%M %p")}).'
                         )

@@ -1239,6 +1239,141 @@ class _ViewWorkForceModalState extends State<ViewWorkForceModal> {
     return '${_formatApiTime(shiftStart)} - ${_formatApiTime(shiftEnd)}';
   }
 
+  bool _isMorningShift(Map<String, dynamic> worker) {
+    final start = (worker['shift_start'] ?? '').toString();
+    final end = (worker['shift_end'] ?? '').toString();
+    return start.startsWith('08:00') && end.startsWith('12:00');
+  }
+
+  bool _isAfternoonShift(Map<String, dynamic> worker) {
+    final start = (worker['shift_start'] ?? '').toString();
+    final end = (worker['shift_end'] ?? '').toString();
+    return start.startsWith('12:00') && end.startsWith('16:00');
+  }
+
+  Widget _buildAssignedWorkersList(List<Map<String, dynamic>> workers) {
+    if (workers.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Text(
+            'No workers in this shift.',
+            style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+          ),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.all(24),
+      itemCount: workers.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final worker = workers[index];
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF9FAFB),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: const Color(0xFFFF7A18),
+                child: Text(
+                  worker['name'].toString().substring(0, 1).toUpperCase(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      worker['name'],
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF0C1935),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.construction, size: 14, color: Colors.grey[600]),
+                        const SizedBox(width: 6),
+                        Text(
+                          worker['role'],
+                          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.phone, size: 14, color: Colors.grey[600]),
+                        const SizedBox(width: 6),
+                        Text(
+                          worker['phone'],
+                          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.schedule, size: 14, color: Colors.grey[600]),
+                        const SizedBox(width: 6),
+                        Text(
+                          worker['shift_label'] ?? 'No shift schedule set',
+                          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE5F8ED),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  'Assigned',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF10B981),
+                  ),
+                ),
+              ),
+              if (!widget.readOnly) ...[
+                const SizedBox(width: 8),
+                IconButton(
+                  tooltip: 'Remove worker',
+                  onPressed: () => _removeAssignedWorker(worker),
+                  icon: const Icon(
+                    Icons.person_remove,
+                    color: Colors.red,
+                    size: 20,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1286,6 +1421,8 @@ class _ViewWorkForceModalState extends State<ViewWorkForceModal> {
               'name': '${workerData['first_name']} ${workerData['last_name']}',
               'role': workerData['role'] ?? 'Field Worker',
               'phone': workerData['phone_number'] ?? 'N/A',
+              'shift_start': assignment['shift_start'],
+              'shift_end': assignment['shift_end'],
               'shift_label': _buildShiftLabel(assignment),
             });
           }
@@ -1375,6 +1512,9 @@ class _ViewWorkForceModalState extends State<ViewWorkForceModal> {
 
   @override
   Widget build(BuildContext context) {
+    final morningWorkers = _assignedWorkers.where(_isMorningShift).toList();
+    final afternoonWorkers = _assignedWorkers.where(_isAfternoonShift).toList();
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Container(
@@ -1504,143 +1644,28 @@ class _ViewWorkForceModalState extends State<ViewWorkForceModal> {
                         ),
                       ),
                     )
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(24),
-                      itemCount: _assignedWorkers.length,
-                      separatorBuilder: (context, index) =>
-                          const SizedBox(height: 12),
-                      itemBuilder: (context, index) {
-                        final worker = _assignedWorkers[index];
-                        return Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF9FAFB),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: const Color(0xFFE5E7EB)),
-                          ),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 24,
-                                backgroundColor: const Color(0xFFFF7A18),
-                                child: Text(
-                                  worker['name']
-                                      .toString()
-                                      .substring(0, 1)
-                                      .toUpperCase(),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 18,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      worker['name'],
-                                      style: const TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w600,
-                                        color: Color(0xFF0C1935),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      children: [
-                                        Icon(
-                                          Icons.construction,
-                                          size: 14,
-                                          color: Colors.grey[600],
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          worker['role'],
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            color: Colors.grey[600],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      children: [
-                                        Icon(
-                                          Icons.phone,
-                                          size: 14,
-                                          color: Colors.grey[600],
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          worker['phone'],
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            color: Colors.grey[600],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      children: [
-                                        Icon(
-                                          Icons.schedule,
-                                          size: 14,
-                                          color: Colors.grey[600],
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          worker['shift_label'] ??
-                                              'No shift schedule set',
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            color: Colors.grey[600],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFE5F8ED),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: const Text(
-                                  'Assigned',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF10B981),
-                                  ),
-                                ),
-                              ),
-                              if (!widget.readOnly) ...[
-                                const SizedBox(width: 8),
-                                IconButton(
-                                  tooltip: 'Remove worker',
-                                  onPressed: () =>
-                                      _removeAssignedWorker(worker),
-                                  icon: const Icon(
-                                    Icons.person_remove,
-                                    color: Colors.red,
-                                    size: 20,
-                                  ),
-                                ),
-                              ],
+                  : DefaultTabController(
+                      length: 3,
+                      child: Column(
+                        children: [
+                          const TabBar(
+                            tabs: [
+                              Tab(text: 'All'),
+                              Tab(text: 'Morning'),
+                              Tab(text: 'Afternoon'),
                             ],
                           ),
-                        );
-                      },
+                          Expanded(
+                            child: TabBarView(
+                              children: [
+                                _buildAssignedWorkersList(_assignedWorkers),
+                                _buildAssignedWorkersList(morningWorkers),
+                                _buildAssignedWorkersList(afternoonWorkers),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
             ),
             // Footer
