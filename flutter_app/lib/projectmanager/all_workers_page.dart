@@ -1372,26 +1372,6 @@ class _AllWorkersPageState extends State<AllWorkersPage> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    // Status Badge (Purple)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF7C3AED).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Text(
-                        'Supervisor',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF7C3AED),
-                        ),
-                      ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 6),

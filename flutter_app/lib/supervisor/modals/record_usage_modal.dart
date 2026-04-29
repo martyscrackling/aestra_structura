@@ -18,12 +18,14 @@ class RecordUsageModal extends StatefulWidget {
   final int phaseId;
   final String phaseName;
   final int supervisorId;
+  final int projectId;
 
   const RecordUsageModal({
     super.key,
     required this.phaseId,
     required this.phaseName,
     required this.supervisorId,
+    required this.projectId,
   });
 
   @override
@@ -65,6 +67,8 @@ class _RecordUsageModalState extends State<RecordUsageModal> {
     try {
       final items = await InventoryService.getInventoryItemsForSupervisor(
         supervisorId: widget.supervisorId,
+        projectId: widget.projectId,
+        phaseId: widget.phaseId,
       );
       // Only bulk materials can be consumed through the material-usage flow.
       // Tools and machines are checked out via the separate unit flow.

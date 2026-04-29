@@ -26,10 +26,13 @@ class InventoryService {
   // ── List items visible to a supervisor ──────────────────────────────────
   static Future<List<Map<String, dynamic>>> getInventoryItemsForSupervisor({
     required dynamic supervisorId,
+    int? projectId,
+    int? phaseId,
   }) async {
-    final uri = AppConfig.apiUri(
-      'inventory-items/?supervisor_id=$supervisorId',
-    );
+    String qp = 'supervisor_id=$supervisorId';
+    if (projectId != null) qp += '&project_id=$projectId';
+    if (phaseId != null) qp += '&phase_id=$phaseId';
+    final uri = AppConfig.apiUri('inventory-items/?$qp');
     final response = await http.get(uri).timeout(const Duration(seconds: 30));
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);

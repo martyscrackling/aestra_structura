@@ -23,6 +23,7 @@ else — always go through record_material_usage / reverse_material_usage.
 from decimal import Decimal
 
 from django.db import transaction
+from django.db.models import Q
 from django.core.exceptions import ValidationError
 
 from app.models import (
@@ -86,6 +87,26 @@ def record_material_usage(
     )
     phase = Phase.objects.select_for_update().get(pk=phase.pk)
     project = phase.project
+
+    # Sequential phase check: Previous phase must have all subtasks completed
+    # Tie-break with ID if created_at is identical (matches frontend sorting)
+    previous_phases = (
+        Phase.objects.filter(project=project)
+        .filter(
+            Q(created_at__lt=phase.created_at)
+            | Q(created_at=phase.created_at, phase_id__lt=phase.phase_id)
+        )
+        .order_by("-created_at", "-phase_id")
+    )
+
+    if previous_phases.exists():
+        prev = previous_phases.first()
+        incomplete_subtasks = prev.subtasks.exclude(status="completed")
+        if incomplete_subtasks.exists():
+            raise MaterialUsageError(
+                f"You cannot record usage for '{phase.phase_name}' until "
+                f"'{prev.phase_name}' is 100% completed."
+            )
 
     # Rule 1 — inventory (optional in reservation-based flows)
     if enforce_inventory and inventory_item.quantity < quantity:

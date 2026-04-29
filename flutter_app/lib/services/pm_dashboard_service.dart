@@ -318,6 +318,7 @@ class PmAuditTrailEntry {
   final String newValue;
   final String module;
   final String statusResult;
+  final String? userProfileImage;
 
   const PmAuditTrailEntry({
     required this.userName,
@@ -330,6 +331,7 @@ class PmAuditTrailEntry {
     required this.newValue,
     required this.module,
     required this.statusResult,
+    this.userProfileImage,
   });
 
   factory PmAuditTrailEntry.fromJson(Map<String, dynamic> json) {
@@ -353,6 +355,7 @@ class PmAuditTrailEntry {
       newValue: _readString('new_value'),
       module: _readString('module', fallback: 'General'),
       statusResult: _readString('status_result', fallback: 'Success'),
+      userProfileImage: json['user_profile_image'] as String?,
     );
   }
 }
