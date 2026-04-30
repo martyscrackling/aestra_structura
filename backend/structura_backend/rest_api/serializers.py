@@ -88,8 +88,25 @@ class UserSerializer(serializers.ModelSerializer):
             'created_at',
             'has_completed_quick_tour',
             'status',
+            'payment_date',
+            'subscription_start_date',
+            'subscription_end_date',
+            'subscription_status',
+            'subscription_years',
+            'trial_start_date',
+            'trial_end_date',
         ]
-        read_only_fields = ['user_id', 'created_at']
+        read_only_fields = [
+            'user_id',
+            'created_at',
+            'payment_date',
+            'subscription_start_date',
+            'subscription_end_date',
+            'subscription_status',
+            'subscription_years',
+            'trial_start_date',
+            'trial_end_date',
+        ]
     
     def create(self, validated_data):
         user = models.User(**validated_data)

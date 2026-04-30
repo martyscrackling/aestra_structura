@@ -73,16 +73,6 @@ class Worker {
       isAssignedToOtherProject;
 }
 
-enum ShiftPreset { morning, afternoon, fullShift, custom }
-
-class WorkerShiftSelection {
-  ShiftPreset preset;
-  TimeOfDay? start;
-  TimeOfDay? end;
-
-  WorkerShiftSelection({required this.preset, this.start, this.end});
-}
-
 class ManageWorkersModal extends StatefulWidget {
   final Subtask subtask;
   final Phase phase;
@@ -101,16 +91,13 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
   late List<Worker> _availableWorkers;
   late List<Worker> _filteredWorkers;
   late Set<int> _selectedWorkerIds;
-  late Set<int> _appliedWorkerIds;
   bool _isLoading = true;
   String? _error;
   bool _isSavingAssignments = false;
   String _searchQuery = '';
   String _selectedRole = 'All';
-  final Map<int, WorkerShiftSelection> _workerShiftSelections = {};
-  ShiftPreset _bulkPreset = ShiftPreset.morning;
-  TimeOfDay _bulkCustomStart = const TimeOfDay(hour: 8, minute: 0);
-  TimeOfDay _bulkCustomEnd = const TimeOfDay(hour: 16, minute: 0);
+  TimeOfDay? _shiftStart;
+  TimeOfDay? _shiftEnd;
 
   final List<String> _roles = [
     'All',
@@ -124,7 +111,6 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
   void initState() {
     super.initState();
     _selectedWorkerIds = {};
-    _appliedWorkerIds = {};
     _availableWorkers = [];
     _filteredWorkers = [];
     _fetchFieldWorkers();
@@ -177,7 +163,8 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
         final Map<int, String> otherSubtaskByWorker = {};
         final Map<int, String> completedSubtaskByWorker = {};
         final Set<int> preSelectedForThisSubtask = {};
-        final Map<int, WorkerShiftSelection> existingShiftByWorker = {};
+        TimeOfDay? existingShiftStart;
+        TimeOfDay? existingShiftEnd;
         if (assignResponse.statusCode == 200) {
           try {
             final decodedA = jsonDecode(assignResponse.body);
@@ -202,13 +189,8 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
                   preSelectedForThisSubtask.add(fwId);
                   final a = _timeOfDayFromAssignmentField(row['shift_start']);
                   final b = _timeOfDayFromAssignmentField(row['shift_end']);
-                  if (a != null && b != null) {
-                    existingShiftByWorker[fwId] = WorkerShiftSelection(
-                      preset: _inferShiftPreset(a, b),
-                      start: a,
-                      end: b,
-                    );
-                  }
+                  existingShiftStart ??= a;
+                  existingShiftEnd ??= b;
                 }
                 continue;
               }
@@ -255,17 +237,9 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
         print('📊 Field workers fetched: ${parsed.length}');
 
         setState(() {
-          _selectedWorkerIds = <int>{};
-          _appliedWorkerIds = Set<int>.from(preSelectedForThisSubtask);
-          _workerShiftSelections
-            ..clear()
-            ..addAll(existingShiftByWorker);
-          for (final workerId in _appliedWorkerIds) {
-            _workerShiftSelections.putIfAbsent(
-              workerId,
-              () => _defaultShiftSelection(),
-            );
-          }
+          _selectedWorkerIds = Set<int>.from(preSelectedForThisSubtask);
+          _shiftStart = existingShiftStart;
+          _shiftEnd = existingShiftEnd;
           _availableWorkers = parsed
               .map((json) {
                 final rawId = json['fieldworker_id'] ?? json['id'];
@@ -318,9 +292,7 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
               })
               .where((worker) => worker.workerId > 0)
               .toList();
-          _filteredWorkers = _availableWorkers
-              .where((w) => !_appliedWorkerIds.contains(w.workerId))
-              .toList();
+          _filteredWorkers = _availableWorkers;
           _isLoading = false;
         });
       } else {
@@ -345,13 +317,8 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
     setState(() {
       if (_selectedWorkerIds.contains(worker.workerId)) {
         _selectedWorkerIds.remove(worker.workerId);
-        _workerShiftSelections.remove(worker.workerId);
       } else {
         _selectedWorkerIds.add(worker.workerId);
-        _workerShiftSelections.putIfAbsent(
-          worker.workerId,
-          () => _defaultShiftSelection(),
-        );
       }
     });
   }
@@ -364,8 +331,7 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
             worker.role.toLowerCase().contains(_searchQuery.toLowerCase());
         final matchesRole =
             _selectedRole == 'All' || worker.role == _selectedRole;
-        final notApplied = !_appliedWorkerIds.contains(worker.workerId);
-        return matchesSearch && matchesRole && notApplied;
+        return matchesSearch && matchesRole;
       }).toList();
     });
   }
@@ -377,7 +343,7 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
     return '$hour:$minute $period';
   }
 
-  String _formatTimeForApi(TimeOfDay time) {
+  String _formatApiTime(TimeOfDay time) {
     final hour = time.hour.toString().padLeft(2, '0');
     final minute = time.minute.toString().padLeft(2, '0');
     return '$hour:$minute:00';
@@ -401,169 +367,36 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
     return endMinutes < startMinutes;
   }
 
-  ShiftPreset _inferShiftPreset(TimeOfDay start, TimeOfDay end) {
-    if (start.hour == 8 &&
-        start.minute == 0 &&
-        end.hour == 12 &&
-        end.minute == 0) {
-      return ShiftPreset.morning;
-    }
-    if (start.hour == 12 &&
-        start.minute == 0 &&
-        end.hour == 16 &&
-        end.minute == 0) {
-      return ShiftPreset.afternoon;
-    }
-    if (start.hour == 8 &&
-        start.minute == 0 &&
-        end.hour == 16 &&
-        end.minute == 0) {
-      return ShiftPreset.fullShift;
-    }
-    return ShiftPreset.custom;
-  }
-
-  WorkerShiftSelection _defaultShiftSelection() {
-    return WorkerShiftSelection(
-      preset: ShiftPreset.morning,
-      start: const TimeOfDay(hour: 8, minute: 0),
-      end: const TimeOfDay(hour: 12, minute: 0),
-    );
-  }
-
-  String _presetLabel(ShiftPreset preset) {
-    switch (preset) {
-      case ShiftPreset.morning:
-        return 'Morning (8:00 AM - 12:00 PM)';
-      case ShiftPreset.afternoon:
-        return 'Afternoon (12:00 PM - 4:00 PM)';
-      case ShiftPreset.fullShift:
-        return 'Full Shift (8:00 AM - 4:00 PM)';
-      case ShiftPreset.custom:
-        return 'Custom';
-    }
-  }
-
-  void _setPresetForWorker(int workerId, ShiftPreset preset) {
-    final current =
-        _workerShiftSelections[workerId] ?? _defaultShiftSelection();
-    switch (preset) {
-      case ShiftPreset.morning:
-        _workerShiftSelections[workerId] = WorkerShiftSelection(
-          preset: preset,
-          start: const TimeOfDay(hour: 8, minute: 0),
-          end: const TimeOfDay(hour: 12, minute: 0),
-        );
-        break;
-      case ShiftPreset.afternoon:
-        _workerShiftSelections[workerId] = WorkerShiftSelection(
-          preset: preset,
-          start: const TimeOfDay(hour: 12, minute: 0),
-          end: const TimeOfDay(hour: 16, minute: 0),
-        );
-        break;
-      case ShiftPreset.fullShift:
-        _workerShiftSelections[workerId] = WorkerShiftSelection(
-          preset: preset,
-          start: const TimeOfDay(hour: 8, minute: 0),
-          end: const TimeOfDay(hour: 16, minute: 0),
-        );
-        break;
-      case ShiftPreset.custom:
-        _workerShiftSelections[workerId] = WorkerShiftSelection(
-          preset: preset,
-          start: current.start ?? const TimeOfDay(hour: 8, minute: 0),
-          end: current.end ?? const TimeOfDay(hour: 16, minute: 0),
-        );
-        break;
-    }
-  }
-
-  Future<void> _pickCustomShiftTime({
-    required int workerId,
-    required bool isStart,
-  }) async {
-    final current = _workerShiftSelections[workerId] ?? _defaultShiftSelection();
+  Future<void> _pickTime(bool isStart) async {
     final initialTime = isStart
-        ? (current.start ?? const TimeOfDay(hour: 8, minute: 0))
-        : (current.end ?? const TimeOfDay(hour: 16, minute: 0));
-    final picked = await showTimePicker(context: context, initialTime: initialTime);
-    if (picked == null || !mounted) return;
-    setState(() {
-      final next = _workerShiftSelections[workerId] ?? _defaultShiftSelection();
-      _workerShiftSelections[workerId] = WorkerShiftSelection(
-        preset: ShiftPreset.custom,
-        start: isStart ? picked : next.start,
-        end: isStart ? next.end : picked,
-      );
-    });
-  }
-
-  Future<void> _pickBulkCustomTime({required bool isStart}) async {
-    final initialTime = isStart ? _bulkCustomStart : _bulkCustomEnd;
+        ? (_shiftStart ?? const TimeOfDay(hour: 8, minute: 0))
+        : (_shiftEnd ?? const TimeOfDay(hour: 16, minute: 0));
     final picked = await showTimePicker(context: context, initialTime: initialTime);
     if (picked == null || !mounted) return;
     setState(() {
       if (isStart) {
-        _bulkCustomStart = picked;
+        _shiftStart = picked;
       } else {
-        _bulkCustomEnd = picked;
+        _shiftEnd = picked;
       }
     });
-  }
-
-  void _applyBulkShiftToSelected() {
-    final selectedWorkers = _availableWorkers
-        .where(
-          (w) => _selectedWorkerIds.contains(w.workerId) && !w.isSelectionBlocked,
-        )
-        .toList();
-    if (selectedWorkers.isEmpty) return;
-
-    if (_bulkPreset == ShiftPreset.custom &&
-        !_isValidShift(_bulkCustomStart, _bulkCustomEnd)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Custom shift is invalid (start and end are the same).'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      for (final worker in selectedWorkers) {
-        if (_bulkPreset == ShiftPreset.custom) {
-          _workerShiftSelections[worker.workerId] = WorkerShiftSelection(
-            preset: ShiftPreset.custom,
-            start: _bulkCustomStart,
-            end: _bulkCustomEnd,
-          );
-        } else {
-          _setPresetForWorker(worker.workerId, _bulkPreset);
-        }
-        _appliedWorkerIds.add(worker.workerId);
-      }
-      _selectedWorkerIds.removeWhere(_appliedWorkerIds.contains);
-    });
-    _filterWorkers();
-  }
-
-  void _removeAppliedWorker(int workerId) {
-    setState(() {
-      _appliedWorkerIds.remove(workerId);
-      _selectedWorkerIds.remove(workerId);
-      _workerShiftSelections.remove(workerId);
-    });
-    _filterWorkers();
   }
 
   void _saveAssignments() async {
     if (_isSavingAssignments) return;
 
-    final workerIdsToSave = <int>{..._appliedWorkerIds, ..._selectedWorkerIds};
+    final workerIdsToSave = <int>{..._selectedWorkerIds};
     if (workerIdsToSave.isEmpty) {
       Navigator.pop(context);
+      return;
+    }
+    if (!_isValidShift(_shiftStart, _shiftEnd)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please set a valid shift schedule.'),
+          backgroundColor: Colors.red,
+        ),
+      );
       return;
     }
 
@@ -601,15 +434,11 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
 
       // Create assignments payload
       final assignments = workerIdsToSave.map((workerId) {
-        final shift = _workerShiftSelections[workerId];
-        if (shift == null || !_isValidShift(shift.start, shift.end)) {
-          throw Exception('Please set a valid shift for every selected worker.');
-        }
         return {
           'subtask': widget.subtask.subtaskId,
           'field_worker': workerId,
-          'shift_start': _formatTimeForApi(shift.start!),
-          'shift_end': _formatTimeForApi(shift.end!),
+          'shift_start': _formatApiTime(_shiftStart!),
+          'shift_end': _formatApiTime(_shiftEnd!),
         };
       }).toList();
 
@@ -695,208 +524,6 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
         setState(() => _isSavingAssignments = false);
       }
     }
-  }
-
-  Widget _buildSelectedShiftAssignmentTable() {
-    if (_appliedWorkerIds.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Selected Worker Shift Assignment',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF0C1935),
-          ),
-        ),
-        const SizedBox(height: 8),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 220),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.vertical,
-            child: Table(
-              columnWidths: const {
-                0: FlexColumnWidth(2.3),
-                1: FlexColumnWidth(2.1),
-                2: FlexColumnWidth(2.6),
-                3: FlexColumnWidth(1.2),
-              },
-              defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-              children: [
-                const TableRow(
-                  decoration: BoxDecoration(color: Color(0xFFF8FAFC)),
-                  children: [
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      child: Text(
-                        'Worker',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF334155),
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      child: Text(
-                        'Shift Type',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF334155),
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      child: Text(
-                        'Time / Schedule',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF334155),
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      child: Text(
-                        'Action',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF334155),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                ...(() {
-                  final selectedWorkers = _availableWorkers
-                      .where(
-                        (w) =>
-                            _appliedWorkerIds.contains(w.workerId) &&
-                            !w.isSelectionBlocked,
-                      )
-                      .toList();
-
-                  return selectedWorkers.asMap().entries.map((entry) {
-                    final idx = entry.key;
-                    final worker = entry.value;
-                    final shift = _workerShiftSelections[worker.workerId] ??
-                        _defaultShiftSelection();
-                    final isCustom = shift.preset == ShiftPreset.custom;
-                    final isValid = _isValidShift(shift.start, shift.end);
-                    final rowBg =
-                        idx.isEven ? const Color(0xFFFFFFFF) : const Color(0xFFFCFDFE);
-
-                    return TableRow(
-                      decoration: BoxDecoration(color: rowBg),
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 8,
-                          ),
-                          child: Text(
-                            worker.name,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF0F172A),
-                            ),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          child: Text(
-                            _presetLabel(shift.preset),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF334155),
-                            ),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _isOvernightShift(shift.start, shift.end)
-                                    ? '${_formatTime(shift.start!)} - ${_formatTime(shift.end!)} (next day)'
-                                    : '${_formatTime(shift.start!)} - ${_formatTime(shift.end!)}',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: Color(0xFF475569),
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              if (!isValid)
-                                const Padding(
-                                  padding: EdgeInsets.only(top: 2),
-                                  child: Text(
-                                    'Invalid start/end.',
-                                    style: TextStyle(
-                                      fontSize: 10.5,
-                                      color: Colors.red,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: TextButton.icon(
-                              onPressed: () => _removeAppliedWorker(worker.workerId),
-                              style: TextButton.styleFrom(
-                                foregroundColor: Colors.red[700],
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              ),
-                              icon: const Icon(Icons.remove_circle_outline, size: 16),
-                              label: const Text(
-                                'Remove',
-                                style: TextStyle(fontSize: 11.5),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  });
-                })(),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
   }
 
   @override
@@ -1015,6 +642,85 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
                           horizontal: 16,
                           vertical: 12,
                         ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Shift Schedule',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF0C1935),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _pickTime(true),
+                            icon: const Icon(Icons.schedule, size: 18),
+                            label: Text(
+                              _shiftStart == null
+                                  ? 'Shift Start'
+                                  : _formatTime(_shiftStart!),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              alignment: Alignment.centerLeft,
+                              foregroundColor: const Color(0xFF0C1935),
+                              side: const BorderSide(color: Color(0xFFE5E7EB)),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 12,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _pickTime(false),
+                            icon: const Icon(Icons.schedule, size: 18),
+                            label: Text(
+                              _shiftEnd == null
+                                  ? 'Shift End'
+                                  : _formatTime(_shiftEnd!),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              alignment: Alignment.centerLeft,
+                              foregroundColor: const Color(0xFF0C1935),
+                              side: const BorderSide(color: Color(0xFFE5E7EB)),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 12,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _shiftStart != null && _shiftEnd != null
+                          ? (_isValidShift(_shiftStart, _shiftEnd)
+                                ? (_isOvernightShift(_shiftStart, _shiftEnd)
+                                      ? 'Overnight shift: ${_formatTime(_shiftStart!)} - ${_formatTime(_shiftEnd!)} (next day)'
+                                      : 'Shift: ${_formatTime(_shiftStart!)} - ${_formatTime(_shiftEnd!)}')
+                                : 'Shift start and end cannot be the same.')
+                          : 'Set the shift time first (e.g., 8:00 AM - 4:00 PM).',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: _shiftStart != null && _shiftEnd != null
+                            ? (_isValidShift(_shiftStart, _shiftEnd)
+                                  ? const Color(0xFF10B981)
+                                  : Colors.red)
+                            : const Color(0xFF6B7280),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -1196,7 +902,7 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
                         }).toList(),
                       ),
                     const SizedBox(height: 16),
-                    if (_selectedWorkerIds.isNotEmpty || _appliedWorkerIds.isNotEmpty)
+                    if (_selectedWorkerIds.isNotEmpty)
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -1210,7 +916,7 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
                           ),
                         ),
                         child: Text(
-                          '${_appliedWorkerIds.length} applied • ${_selectedWorkerIds.length} selected',
+                          '${_selectedWorkerIds.length} worker${_selectedWorkerIds.length > 1 ? 's' : ''} selected',
                           style: const TextStyle(
                             fontSize: 13,
                             color: Color(0xFF10B981),
@@ -1218,110 +924,6 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
                           ),
                         ),
                       ),
-                    if (_selectedWorkerIds.isNotEmpty || _appliedWorkerIds.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Bulk Shift Assignment',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF334155),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: DropdownButtonFormField<ShiftPreset>(
-                                    value: _bulkPreset,
-                                    isExpanded: true,
-                                    isDense: true,
-                                    decoration: InputDecoration(
-                                      labelText: 'Shift Type',
-                                      isDense: true,
-                                      contentPadding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 9,
-                                      ),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
-                                    items: ShiftPreset.values
-                                        .map(
-                                          (preset) => DropdownMenuItem(
-                                            value: preset,
-                                            child: Text(
-                                              _presetLabel(preset),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        )
-                                        .toList(),
-                                    onChanged: (preset) {
-                                      if (preset == null) return;
-                                      setState(() {
-                                        _bulkPreset = preset;
-                                      });
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                ElevatedButton(
-                                  onPressed: _selectedWorkerIds.isNotEmpty
-                                      ? _applyBulkShiftToSelected
-                                      : null,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF0EA5E9),
-                                    foregroundColor: Colors.white,
-                                  ),
-                                  child: const Text('Apply to selected'),
-                                ),
-                              ],
-                            ),
-                            if (_bulkPreset == ShiftPreset.custom) ...[
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: OutlinedButton(
-                                      onPressed: () =>
-                                          _pickBulkCustomTime(isStart: true),
-                                      child: Text(
-                                        'Start: ${_formatTime(_bulkCustomStart)}',
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: OutlinedButton(
-                                      onPressed: () =>
-                                          _pickBulkCustomTime(isStart: false),
-                                      child: Text(
-                                        'End: ${_formatTime(_bulkCustomEnd)}',
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildSelectedShiftAssignmentTable(),
-                    ],
                   ],
                 ),
               ),
@@ -1353,9 +955,7 @@ class _ManageWorkersModalState extends State<ManageWorkersModal> {
                   const SizedBox(width: 12),
                   ElevatedButton(
                     onPressed:
-                        (!_isSavingAssignments &&
-                                (_selectedWorkerIds.isNotEmpty ||
-                                    _appliedWorkerIds.isNotEmpty))
+                        (!_isSavingAssignments && _selectedWorkerIds.isNotEmpty)
                         ? _saveAssignments
                         : null,
                     style: ElevatedButton.styleFrom(

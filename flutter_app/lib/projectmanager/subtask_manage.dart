@@ -1512,9 +1512,6 @@ class _ViewWorkForceModalState extends State<ViewWorkForceModal> {
 
   @override
   Widget build(BuildContext context) {
-    final morningWorkers = _assignedWorkers.where(_isMorningShift).toList();
-    final afternoonWorkers = _assignedWorkers.where(_isAfternoonShift).toList();
-
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Container(
@@ -1644,29 +1641,7 @@ class _ViewWorkForceModalState extends State<ViewWorkForceModal> {
                         ),
                       ),
                     )
-                  : DefaultTabController(
-                      length: 3,
-                      child: Column(
-                        children: [
-                          const TabBar(
-                            tabs: [
-                              Tab(text: 'All'),
-                              Tab(text: 'Morning'),
-                              Tab(text: 'Afternoon'),
-                            ],
-                          ),
-                          Expanded(
-                            child: TabBarView(
-                              children: [
-                                _buildAssignedWorkersList(_assignedWorkers),
-                                _buildAssignedWorkersList(morningWorkers),
-                                _buildAssignedWorkersList(afternoonWorkers),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                  : _buildAssignedWorkersList(_assignedWorkers),
             ),
             // Footer
             Container(

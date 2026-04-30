@@ -3766,9 +3766,10 @@ def pm_dashboard_summary(request):
                 'by_role': by_role,
             },
             'tasks_today': tasks_today,
+            # PM request: disable subtask-derived notification feed.
             'notifications': {
-                'count': int(open_subtasks_count),
-                'items': recent_open_items,
+                'count': 0,
+                'items': [],
             },
             'inbox': {
                 'unread_count': int(inbox_unread),

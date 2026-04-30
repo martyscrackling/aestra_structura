@@ -199,35 +199,7 @@ class _BudgetAlertsWidgetState extends State<BudgetAlertsWidget> {
 
     final alerts = _alerts;
     if (alerts.isEmpty) {
-      return _shell(
-        child: Row(
-          children: [
-            const Icon(
-              Icons.check_circle_outline,
-              color: Color(0xFF2E7D32),
-              size: 20,
-            ),
-            const SizedBox(width: 10),
-            const Expanded(
-              child: Text(
-                'All project budgets are healthy.',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF2E7D32),
-                ),
-              ),
-            ),
-            IconButton(
-              tooltip: 'Refresh',
-              onPressed: _load,
-              icon: const Icon(Icons.refresh, size: 18),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-            ),
-          ],
-        ),
-      );
+      return const SizedBox.shrink();
     }
 
     return _shell(

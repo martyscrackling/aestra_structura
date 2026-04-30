@@ -142,9 +142,23 @@ WSGI_APPLICATION = 'structura_backend.wsgi.application'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+example_database_url = dotenv_values(BASE_DIR / ".env.example").get("DATABASE_URL", "").strip()
 if not DATABASE_URL:
     # Local fallback for teams that keep a sample URL in .env.example.
-    DATABASE_URL = dotenv_values(BASE_DIR / ".env.example").get("DATABASE_URL", "").strip()
+    DATABASE_URL = example_database_url
+else:
+    parsed_db_url = urlparse(DATABASE_URL)
+    db_user = (parsed_db_url.username or "").strip().lower()
+    db_password = (parsed_db_url.password or "").strip().lower()
+    db_host = (parsed_db_url.hostname or "").strip().lower()
+    # Ignore obvious template values copied from examples; try .env.example first in dev.
+    has_placeholder_db_values = (
+        db_user in {"user", "username"}
+        or db_password in {"password", "pass", "your_password"}
+        or db_host in {"host", "hostname", "db", "database"}
+    )
+    if has_placeholder_db_values and DEBUG:
+        DATABASE_URL = example_database_url
 if DATABASE_URL:
     parsed_db_for_pooler = urlparse(DATABASE_URL)
     is_supabase_pooler = (

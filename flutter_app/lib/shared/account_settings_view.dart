@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import '../services/app_config.dart';
 import '../services/auth_service.dart';
+import '../projectmanager/modals/upgrade_plan_modal.dart';
 
 /// Account, preferences, security, and danger zone — shared by PM and Supervisor.
 class AccountSettingsView extends StatefulWidget {
@@ -33,6 +34,12 @@ class _AccountSettingsViewState extends State<AccountSettingsView> {
   String _initialLastName = '';
   String _initialEmail = '';
   String _initialPhone = '';
+  String _subscriptionStatus = '';
+  DateTime? _subscriptionStartDate;
+  DateTime? _subscriptionEndDate;
+  DateTime? _trialStartDate;
+  DateTime? _trialEndDate;
+  int _subscriptionYears = 0;
 
   @override
   void initState() {
@@ -102,6 +109,12 @@ class _AccountSettingsViewState extends State<AccountSettingsView> {
       return value.toString().trim();
     }
 
+    DateTime? readDate(String key) {
+      final raw = source?[key];
+      if (raw == null) return null;
+      return DateTime.tryParse(raw.toString());
+    }
+
     final email = readString('email');
     final firstName = readString('first_name');
     final middleName = readString('middle_name');
@@ -109,6 +122,11 @@ class _AccountSettingsViewState extends State<AccountSettingsView> {
     final phone = readString('phone').isNotEmpty
         ? readString('phone')
         : readString('phone_number');
+    final subscriptionStatus = readString('subscription_status').toLowerCase();
+    final subscriptionYearsRaw = source?['subscription_years'];
+    final subscriptionYears = subscriptionYearsRaw is int
+        ? subscriptionYearsRaw
+        : int.tryParse(subscriptionYearsRaw?.toString() ?? '') ?? 0;
 
     if (!mounted) {
       return;
@@ -120,6 +138,12 @@ class _AccountSettingsViewState extends State<AccountSettingsView> {
       _initialLastName = lastName;
       _initialEmail = email;
       _initialPhone = phone;
+      _subscriptionStatus = subscriptionStatus;
+      _subscriptionStartDate = readDate('subscription_start_date');
+      _subscriptionEndDate = readDate('subscription_end_date');
+      _trialStartDate = readDate('trial_start_date');
+      _trialEndDate = readDate('trial_end_date');
+      _subscriptionYears = subscriptionYears;
 
       _firstNameController.text = firstName;
       _middleNameController.text = middleName;
@@ -127,6 +151,104 @@ class _AccountSettingsViewState extends State<AccountSettingsView> {
       _emailController.text = email;
       _phoneNumberController.text = phone;
     });
+  }
+
+  bool get _hasSubscriptionData =>
+      _subscriptionStatus.isNotEmpty ||
+      _subscriptionStartDate != null ||
+      _subscriptionEndDate != null ||
+      _trialStartDate != null ||
+      _trialEndDate != null;
+
+  String _formatDate(DateTime? dt) {
+    if (dt == null) return 'N/A';
+    final local = dt.toLocal();
+    final y = local.year.toString();
+    final m = local.month.toString().padLeft(2, '0');
+    final d = local.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  String _durationText(DateTime? endDate) {
+    if (endDate == null) return 'N/A';
+    final now = DateTime.now();
+    final localNow = DateTime(now.year, now.month, now.day);
+    final localEnd = DateTime(
+      endDate.toLocal().year,
+      endDate.toLocal().month,
+      endDate.toLocal().day,
+    );
+    final remainingDays = localEnd.difference(localNow).inDays;
+    if (remainingDays < 0) return 'Expired';
+    if (remainingDays == 0) return 'Ends today';
+    return '$remainingDays day${remainingDays == 1 ? '' : 's'} remaining';
+  }
+
+  Widget _buildSubscriptionCard() {
+    final isTrial = _subscriptionStatus == 'trial';
+    final isActive = _subscriptionStatus == 'active';
+    final endDate = isTrial ? _trialEndDate : _subscriptionEndDate;
+    final startDate = isTrial ? _trialStartDate : _subscriptionStartDate;
+    final statusLabel = isTrial
+        ? 'Trial'
+        : (isActive ? 'Subscription' : (_subscriptionStatus.isEmpty ? 'Unknown' : _subscriptionStatus));
+    final actionLabel = isActive
+        ? 'Upgrade Subscription'
+        : 'Activate Subscription';
+
+    return SettingsCard(
+      title: 'Subscription',
+      description: 'Current plan duration and validity',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 24,
+            runSpacing: 12,
+            children: [
+              _SubscriptionInfoLine(label: 'Status', value: statusLabel),
+              _SubscriptionInfoLine(
+                label: 'Duration',
+                value: _durationText(endDate),
+              ),
+              _SubscriptionInfoLine(
+                label: 'Start date',
+                value: _formatDate(startDate),
+              ),
+              _SubscriptionInfoLine(
+                label: 'End date',
+                value: _formatDate(endDate),
+              ),
+              if (!isTrial && _subscriptionYears > 0)
+                _SubscriptionInfoLine(
+                  label: 'Plan length',
+                  value:
+                      '$_subscriptionYears year${_subscriptionYears == 1 ? '' : 's'}',
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 40,
+            child: ElevatedButton.icon(
+              onPressed: () => UpgradePlanModal.show(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF7A18),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              icon: const Icon(Icons.workspace_premium_outlined, size: 18),
+              label: Text(
+                actionLabel,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _resetAccountForm() {
@@ -423,6 +545,10 @@ class _AccountSettingsViewState extends State<AccountSettingsView> {
               isSaving: _isSavingAccount,
             ),
             const SizedBox(height: 24),
+            if (_hasSubscriptionData) ...[
+              _buildSubscriptionCard(),
+              const SizedBox(height: 20),
+            ],
             SettingsCard(
               title: 'Account',
               description: null,
@@ -931,6 +1057,42 @@ class _SwitchTile extends StatelessWidget {
         style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
       ),
       activeColor: const Color(0xFFFF7A18),
+    );
+  }
+}
+
+class _SubscriptionInfoLine extends StatelessWidget {
+  const _SubscriptionInfoLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 220,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF6B7280),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF0C1935),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
