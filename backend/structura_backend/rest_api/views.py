@@ -2753,12 +2753,6 @@ class PhaseViewSet(viewsets.ModelViewSet):
                         'leftovers': leftovers,
                     })
                     response.data = data
-            
-            # Refresh project overdue status respecting test time
-            as_of = _as_of_date_from_request(request)
-            if phase.project:
-                phase.project.refresh_overdue_status(as_of_date=as_of)
-
         return response
 
     @action(detail=True, methods=['post'], url_path='close-materials')
@@ -3040,7 +3034,7 @@ class SubtaskViewSet(viewsets.ModelViewSet):
         return queryset
 
     @staticmethod
-    def _sync_parent_project_status(subtask, as_of_date=None) -> None:
+    def _sync_parent_project_status(subtask) -> None:
         try:
             phase = subtask.phase
             project = phase.project
@@ -3053,12 +3047,10 @@ class SubtaskViewSet(viewsets.ModelViewSet):
         except models.Project.DoesNotExist:  # noqa: BLE001
             return
         proj.update_status_based_on_progress()
-        proj.refresh_overdue_status(as_of_date=as_of_date)
 
     def perform_create(self, serializer):
         super().perform_create(serializer)
-        as_of = _as_of_date_from_request(self.request)
-        self._sync_parent_project_status(serializer.instance, as_of_date=as_of)
+        self._sync_parent_project_status(serializer.instance)
 
     def perform_destroy(self, instance):
         try:
@@ -3075,8 +3067,6 @@ class SubtaskViewSet(viewsets.ModelViewSet):
             except models.Project.DoesNotExist:  # noqa: BLE001
                 return
             proj.update_status_based_on_progress()
-            as_of = _as_of_date_from_request(self.request)
-            proj.refresh_overdue_status(as_of_date=as_of)
 
     def perform_update(self, serializer):
         instance = serializer.instance
@@ -3201,8 +3191,7 @@ class SubtaskViewSet(viewsets.ModelViewSet):
         ):
             _create_pm_inbox_supervisor_completion(updated_subtask, request)
 
-        as_of = _as_of_date_from_request(request)
-        self._sync_parent_project_status(updated_subtask, as_of_date=as_of)
+        self._sync_parent_project_status(updated_subtask)
 
         return Response(serializer.data)
 
@@ -4435,10 +4424,13 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         pm_user_id = _get_request_pm_user_id(self.request)
         supervisor_id = self.request.query_params.get('supervisor_id')
-        filter_project_id = self.request.query_params.get('project_id')
-        filter_phase_id = self.request.query_params.get('phase_id')
 
-        # Supervisor accessing inventory.
+        # Supervisor accessing inventory. Two visibility rules:
+        #   - Tools / machines: project-scoped. A unit or the item itself
+        #     must be assigned to one of the supervisor's projects.
+        #   - Materials: shared "centralized inventory" owned by the PM who
+        #     runs the supervisor's project(s). Any material created by any
+        #     of those PMs is visible, regardless of per-item project link.
         if supervisor_id:
             try:
                 sv = models.Supervisors.objects.get(supervisor_id=int(supervisor_id))
@@ -4449,40 +4441,20 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
                 Q(supervisor_id=sv.supervisor_id)
                 | Q(supervisors__supervisor_id=sv.supervisor_id)
             ).distinct()
+            project_ids = list(
+                assigned_projects.values_list('project_id', flat=True)
+            )
+            pm_user_ids = list(
+                assigned_projects
+                .exclude(user_id__isnull=True)
+                .values_list('user_id', flat=True)
+                .distinct()
+            )
 
-            # If a specific phase is requested, narrow the scope to that phase's project.
-            if filter_phase_id:
-                try:
-                    phase = models.Phase.objects.get(phase_id=int(filter_phase_id))
-                    assigned_projects = assigned_projects.filter(project_id=phase.project_id)
-                except (models.Phase.DoesNotExist, ValueError, TypeError):
-                    return models.InventoryItem.objects.none()
-            # If only a specific project is requested, narrow the scope to that project only.
-            elif filter_project_id:
-                try:
-                    assigned_projects = assigned_projects.filter(project_id=int(filter_project_id))
-                except (ValueError, TypeError):
-                    return models.InventoryItem.objects.none()
-
-            project_ids = list(assigned_projects.values_list('project_id', flat=True))
-
-            # Material filtering logic:
-            # If phase_id is provided, only show materials explicitly planned for that phase.
-            # Otherwise, show materials planned for any of the supervisor's projects.
-            material_filter = Q(item_type='Material')
-            if filter_phase_id:
-                material_filter &= Q(phase_plans__phase_id=filter_phase_id)
-            else:
-                material_filter &= Q(phase_plans__phase__project_id__in=project_ids)
-
-            # Visibility rules for supervisors:
-            # 1. Tools / machines: visible if a specific unit is assigned to one of the projects.
-            # 2. Directly assigned: visible if the item itself has a project_id matching (Tools/Machines only).
-            # 3. Materials: visible ONLY if they are assigned to the project/phase via PhaseMaterialPlan.
             return models.InventoryItem.objects.filter(
                 Q(units__current_project_id__in=project_ids)
-                | (Q(project_id__in=project_ids) & ~Q(item_type='Material'))
-                | material_filter
+                | Q(project_id__in=project_ids)
+                | (Q(item_type='Material') & Q(created_by_id__in=pm_user_ids))
             ).distinct()
 
         # PM accessing inventory
