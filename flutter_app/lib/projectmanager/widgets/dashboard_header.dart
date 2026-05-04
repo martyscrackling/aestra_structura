@@ -481,6 +481,23 @@ class _NotificationMenuState extends State<_NotificationMenu> {
             }
             return;
           }
+          if (e.kind == 'pm_covers_request') {
+            unawaited(
+              showDialog(
+                context: context,
+                builder: (ctx) => _PmCoversApprovalDialog(
+                  item: e,
+                  onRefresh: () {
+                    if (mounted) {
+                      _invalidateCache();
+                      unawaited(_refresh());
+                    }
+                  },
+                ),
+              ),
+            );
+            return;
+          }
           final sid = e.subtaskId;
           if (sid == null) return;
           openPmInboxSubtask(
@@ -1120,6 +1137,105 @@ class _PmRevertRequestDialogState extends State<_PmRevertRequestDialog> {
                   ),
                 )
               : const Text('Approve uncheck'),
+        ),
+      ],
+    );
+  }
+}
+
+class _PmCoversApprovalDialog extends StatefulWidget {
+  const _PmCoversApprovalDialog({required this.item, required this.onRefresh});
+  final PmInboxItem item;
+  final VoidCallback onRefresh;
+
+  @override
+  State<_PmCoversApprovalDialog> createState() => _PmCoversApprovalDialogState();
+}
+
+class _PmCoversApprovalDialogState extends State<_PmCoversApprovalDialog> {
+  bool _busy = false;
+
+  Future<void> _respond(String action) async {
+    final damageId = widget.item.damageId;
+    final workerId = widget.item.workerId;
+    if (damageId == null || workerId == null) return;
+    
+    setState(() => _busy = true);
+    try {
+      final r = await http.post(
+        AppConfig.apiUri('field-workers/$workerId/respond-damage/'),
+        headers: const {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'damage_id': damageId,
+          'action': action,
+        }),
+      );
+      if (!mounted) return;
+      if (r.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(action == 'approve' ? 'Cost covered by PM.' : 'Request denied.'),
+            backgroundColor: action == 'approve' ? const Color(0xFF059669) : Colors.orange,
+          ),
+        );
+        widget.onRefresh();
+        Navigator.pop(context);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to $action request (${r.statusCode}).'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final workerName = widget.item.body.split('worker ').last.replaceAll('.', '');
+    final priceMatch = RegExp(r'₱([\d.]+)').firstMatch(widget.item.body);
+    final priceStr = priceMatch?.group(1) ?? 'Unknown';
+
+    return AlertDialog(
+      backgroundColor: Colors.white,
+      title: const Text('Shoulder Damage Cost?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Supervisor requested that the project covers the damage cost of ₱$priceStr for $workerName.'),
+          const SizedBox(height: 12),
+          const Text('If you approve, the worker will not be deducted for this damage.', style: TextStyle(color: Colors.grey, fontSize: 13)),
+          const SizedBox(height: 8),
+          const Text('If you deny, the cost will be assigned to the worker. You may need to ask the supervisor to set a per-salary deduction amount.', style: TextStyle(color: Colors.grey, fontSize: 13)),
+          if (_busy)
+            const Padding(
+              padding: EdgeInsets.only(top: 20),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.pop(context),
+          child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+        ),
+        TextButton(
+          onPressed: _busy ? null : () => _respond('deny'),
+          child: const Text('Deny', style: TextStyle(color: Colors.red)),
+        ),
+        ElevatedButton(
+          onPressed: _busy ? null : () => _respond('approve'),
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0C1935)),
+          child: const Text('Approve', style: TextStyle(color: Colors.white)),
         ),
       ],
     );

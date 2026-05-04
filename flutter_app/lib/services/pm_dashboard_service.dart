@@ -137,8 +137,11 @@ class PmInboxItem {
   final int? projectId;
   final int? phaseId;
   final String supervisorName;
+
   /// From payload, e.g. `inventory` for deep link to PM inventory.
   final String? target;
+  final int? damageId;
+  final int? workerId;
 
   const PmInboxItem({
     required this.notificationId,
@@ -152,6 +155,8 @@ class PmInboxItem {
     this.phaseId,
     this.supervisorName = '',
     this.target,
+    this.damageId,
+    this.workerId,
   });
 
   factory PmInboxItem.fromJson(Map<String, dynamic> json) {
@@ -161,9 +166,7 @@ class PmInboxItem {
       title: (json['title'] as String?) ?? '',
       body: (json['body'] as String?) ?? '',
       read: json['read'] as bool? ?? false,
-      createdAt: DateTime.tryParse(
-        (json['created_at'] as String?) ?? '',
-      ),
+      createdAt: DateTime.tryParse((json['created_at'] as String?) ?? ''),
       subtaskId: (json['subtask_id'] as num?)?.toInt(),
       projectId: (json['project_id'] as num?)?.toInt(),
       phaseId: (json['phase_id'] as num?)?.toInt(),
@@ -173,6 +176,8 @@ class PmInboxItem {
         if (t == null || t.isEmpty) return null;
         return t;
       }(),
+      damageId: (json['damage_id'] as num?)?.toInt(),
+      workerId: (json['worker_id'] as num?)?.toInt(),
     );
   }
 }
@@ -370,7 +375,8 @@ class PmDashboardService {
   }) async {
     if (preferCache) {
       final cached = _cacheByUser[userId];
-      if (cached != null && DateTime.now().difference(cached.cachedAt) <= _cacheTtl) {
+      if (cached != null &&
+          DateTime.now().difference(cached.cachedAt) <= _cacheTtl) {
         return cached.summary;
       }
     }
@@ -542,8 +548,5 @@ class _PmDashboardCacheEntry {
   final PmDashboardSummary summary;
   final DateTime cachedAt;
 
-  const _PmDashboardCacheEntry({
-    required this.summary,
-    required this.cachedAt,
-  });
+  const _PmDashboardCacheEntry({required this.summary, required this.cachedAt});
 }

@@ -2062,11 +2062,15 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
         ).strip()
         pm_in = data.get('damages_pm_covers', data.get('pm_covers', False))
         if isinstance(pm_in, str):
-            pm_covers = pm_in.lower() in ('true', '1', 'yes')
+            pm_covers_requested = pm_in.lower() in ('true', '1', 'yes')
         else:
-            pm_covers = bool(pm_in)
+            pm_covers_requested = bool(pm_in)
 
-        if pm_covers:
+        pm_covers = False
+        approval_status = models.FieldWorkerDamage.PM_COVERS_STATUS_NONE
+
+        if pm_covers_requested:
+            approval_status = models.FieldWorkerDamafe.PM_COVERS_STATUS_PENDING
             ded_for_row = Decimal('0')
         else:
             ded_for_row = _to_dec(
@@ -2075,7 +2079,7 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
             if ded_for_row is None:
                 ded_for_row = Decimal('0')
 
-        models.FieldWorkerDamage.objects.create(
+        damage_entry = models.FieldWorkerDamage.objects.create(
             field_worker=field_worker,
             category=category,
             item=item,
@@ -2083,7 +2087,25 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
             schedule=schedule,
             deduction_per_salary=ded_for_row,
             pm_covers=pm_covers,
+            pm_covers_approval_status=approval_status,
         )
+
+        if pm_covers_requested and field_woerker.project_id and field_worker.project_id.user:
+            #notification
+            worker_name = f"{field_worker.first_name} {field_worker.last_name}"
+            pm_user = field_worker.project_id.user
+            models.InAppNotification.objects.create(
+                recipient_kind=models.InAppNotification.KIND_PM,
+                recipient_user=pm_user,
+                kind="pm_coveers_request",
+                title="Cost Shoulder Approval Request",
+                body=f"Supervisor had requested that you shoulder the damage cost (P{price}) for worker {worker_name}.",
+                payload={
+                    'damage_id' : damage_entry.id,
+                    'worker_id' : field_worker.fieldworker_id,
+                    'project_id' : field_worker.project_id.project_id,
+                }
+            )
         field_worker.recompute_damages_aggregates()
         field_worker.save(
             update_fields=[
@@ -2100,6 +2122,52 @@ class FieldWorkerViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
+    @action(detail=True, methods=['post'], url_path='respond-damage')
+    def respond_damage(self, request, pk=None):
+        """PM responds to a damage cost shoulder request."""
+        field_worker = self.get_object()
+        damage_id = request.data.get('damage_id')
+        action_type = request.data.get('action') # 'approve' or 'deny'
+
+        if not damage_id or action_type not in ('approve', 'deny'):
+            return Response(
+                {'detail': 'Invalid payload. Need damage_id and action (approve/deny).'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            damage_entry = models.FieldWorkerDamage.objects.get(
+                id=damage_id, field_worker=field_worker
+            )
+        except models.FieldWorkerDamage.DoesNotExist:
+            return Response({'detail': 'Damage entry not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if action_type == 'approve':
+            damage_entry.pm_covers_approval_status = models.FieldWorkerDamage.PM_COVERS_STATUS_APPROVED
+            damage_entry.pm_covers = True
+        elif action_type == 'deny':
+            damage_entry.pm_covers_approval_status = models.FieldWorkerDamage.PM_COVERS_STATUS_DENIED
+            damage_entry.pm_covers = False
+
+        damage_entry.save(update_fields=['pm_covers_approval_status', 'pm_covers'])
+
+        field_worker.recompute_damages_aggregates()
+        field_worker.save(
+            update_fields=[
+                'damages_category',
+                'damages_item',
+                'damages_price',
+                'damages_schedule',
+                'damages_deduction_per_salary',
+                'damages_pm_covers',
+            ]
+        )
+
+        return Response(
+            self.get_serializer(field_worker).data,
+            status=status.HTTP_200_OK,
+        )
+    
     @action(detail=True, methods=['get'], url_path='debug-assignments')
     def debug_assignments(self, request, pk=None):
         """Debug endpoint to show all assignments for a field worker."""
@@ -3736,6 +3804,8 @@ def pm_dashboard_summary(request):
                 'phase_id': pl.get('phase_id'),
                 'supervisor_name': pl.get('supervisor_name') or '',
                 'target': pl.get('target'),
+                'damage_id' : pl.get('damage_id'),
+                'worker_id': pl.get('worker_id'),
             }
         )
 

@@ -241,6 +241,8 @@ class _NotificationPageState extends State<NotificationPage> {
                       phaseId: row.phaseId,
                       supervisorName: row.supervisorName,
                       target: row.target,
+                      damageId: row.damageId,
+                      workerId: row.workerId,
                     )
                   : row,
             )
@@ -273,6 +275,112 @@ class _NotificationPageState extends State<NotificationPage> {
         notificationId: e.notificationId,
         subtaskId: sid,
         phaseId: e.phaseId,
+      );
+      return;
+    }
+    if (e.kind == 'pm_covers_request') {
+      await _showPmCoversApprovalModal(e);
+      return;
+    }
+  }
+
+  Future<void> _showPmCoversApprovalModal(PmInboxItem item) async {
+    final damageId = item.damageId;
+    if (damageId == null) return;
+    
+    final workerName = item.body.split('worker ').last.replaceAll('.', '');
+    final priceMatch = RegExp(r'₱([\d.]+)').firstMatch(item.body);
+    final priceStr = priceMatch?.group(1) ?? 'Unknown';
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        bool busy = false;
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              title: const Text('Shoulder Damage Cost?'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Supervisor requested that the project covers the damage cost of ₱$priceStr for $workerName.'),
+                  const SizedBox(height: 12),
+                  const Text('If you approve, the worker will not be deducted for this damage.', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                  const SizedBox(height: 8),
+                  const Text('If you deny, the cost will be assigned to the worker. You may need to ask the supervisor to set a per-salary deduction amount.', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                  if (busy)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 20),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: busy ? null : () => Navigator.pop(context),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                ),
+                TextButton(
+                  onPressed: busy ? null : () async {
+                    setModalState(() => busy = true);
+                    await _respondToPmCovers(damageId, item.workerId, 'deny');
+                    if (!context.mounted) return;
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Deny', style: TextStyle(color: Colors.red)),
+                ),
+                ElevatedButton(
+                  onPressed: busy ? null : () async {
+                    setModalState(() => busy = true);
+                    await _respondToPmCovers(damageId, item.workerId, 'approve');
+                    if (!context.mounted) return;
+                    Navigator.pop(context);
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0C1935)),
+                  child: const Text('Approve', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _respondToPmCovers(int damageId, int? workerId, String action) async {
+    if (workerId == null) return;
+    try {
+      final r = await http.post(
+        AppConfig.apiUri('field-workers/$workerId/respond-damage/'),
+        headers: const {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'damage_id': damageId,
+          'action': action,
+        }),
+      );
+      if (!mounted) return;
+      if (r.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(action == 'approve' ? 'Cost covered by PM.' : 'Request denied.'),
+            backgroundColor: action == 'approve' ? const Color(0xFF059669) : Colors.orange,
+          ),
+        );
+        await _load();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to $action request (${r.statusCode}).'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
       );
     }
   }

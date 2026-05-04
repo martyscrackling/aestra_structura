@@ -576,6 +576,17 @@ class FieldWorker(models.Model):
 class FieldWorkerDamage(models.Model):
     """One reported damage line per field worker; multiple lines supported."""
 
+    PM_COVERS_STATUS_NONE = 'none'
+    PM_COVERS_STATUS_PENDING = 'pending'
+    PM_COVERS_STATUS_APPROVED = 'approved'
+    PM_COVERS_STATUS_DENIED = 'denied'
+    PM_COVERS_STATUS_CHOICES = [
+        (PM_COVERS_STATUS_NONE, 'None'),
+        (PM_COVERS_STATUS_PENDING, 'Pending'),
+        (PM_COVERS_STATUS_APPROVED, 'Approved'),
+        (PM_COVERS_STATUS_DENIED, 'Denied'),
+    ]
+
     id = models.AutoField(primary_key=True)
     field_worker = models.ForeignKey(
         'FieldWorker',
@@ -588,6 +599,11 @@ class FieldWorkerDamage(models.Model):
     schedule = models.CharField(max_length=50, null=True, blank=True)
     deduction_per_salary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     pm_covers = models.BooleanField(default=False)
+    pm_covers_approval_status = models.CharField(
+        max_length=20,
+        choices=PM_COVERS_STATUS_CHOICES,
+        default=PM_COVERS_STATUS_NONE,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
