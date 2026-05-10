@@ -491,7 +491,7 @@ class _NavbarState extends State<Navbar> {
                         ),
                         onPressed: () => context.go('/login'),
                         child: const Text(
-                          'Get Started',
+                          'Sign In',
                           style: TextStyle(color: Colors.white),
                         ),
                       ),
@@ -534,7 +534,7 @@ class _NavbarState extends State<Navbar> {
                     ),
                     onPressed: () => context.go('/login'),
                     child: const Text(
-                      'Get Started',
+                      'Sign In',
                       style: TextStyle(color: Colors.white),
                     ),
                   ),
@@ -742,7 +742,7 @@ class HeroSection extends StatelessWidget {
                 ),
               ),
               child: const Text(
-                'Get Started',
+                'Sign In',
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
@@ -796,7 +796,7 @@ class HeroSection extends StatelessWidget {
               ),
             ),
             child: const Text(
-              'Get Started',
+              'Sign In',
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
