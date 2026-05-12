@@ -478,6 +478,14 @@ class _NavbarState extends State<Navbar> {
                       _navItem('Projects'),
                       _navItem('Contact Us'),
                       const SizedBox(width: 30),
+                      TextButton(
+                        onPressed: () => context.go('/login'),
+                        child: const Text(
+                          'Login',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFFF5A1F),
@@ -489,9 +497,9 @@ class _NavbarState extends State<Navbar> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        onPressed: () => context.go('/login'),
+                        onPressed: () => context.go('/signup'),
                         child: const Text(
-                          'Get Started',
+                          'Sign Up',
                           style: TextStyle(color: Colors.white),
                         ),
                       ),
@@ -521,6 +529,14 @@ class _NavbarState extends State<Navbar> {
                   _navItem('Projects', center: true),
                   _navItem('Contact Us', center: true),
                   const SizedBox(height: 10),
+                  TextButton(
+                    onPressed: () => context.go('/login'),
+                    child: const Text(
+                      'Login',
+                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFFF5A1F),
@@ -532,9 +548,9 @@ class _NavbarState extends State<Navbar> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    onPressed: () => context.go('/login'),
+                    onPressed: () => context.go('/signup'),
                     child: const Text(
-                      'Get Started',
+                      'Sign Up',
                       style: TextStyle(color: Colors.white),
                     ),
                   ),
